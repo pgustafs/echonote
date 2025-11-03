@@ -1,0 +1,71 @@
+# Stage 1: Build dependencies
+# Use RHEL10 Python 3.12 minimal base image
+FROM ubi10/python-312-minimal:latest AS builder
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy requirements file
+COPY requirements.txt .
+
+# Install dependencies (no --user flag needed for venv-based images)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime image
+# Use RHEL10 Python 3.12 minimal base image
+FROM ubi10/python-312-minimal:latest
+
+# Add labels for metadata (Red Hat best practice)
+LABEL name="echonote-backend" \
+      vendor="EchoNote" \
+      version="1.0.0" \
+      summary="EchoNote Voice Transcription Backend" \
+      description="FastAPI backend for voice transcription using Whisper AI" \
+      maintainer="echonote@example.com" \
+      io.k8s.description="FastAPI backend for voice transcription" \
+      io.k8s.display-name="EchoNote Backend" \
+      io.openshift.tags="python,fastapi,whisper,transcription"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH="/opt/app-root/src"
+
+# Switch to root temporarily for system package installation (if needed)
+USER 0
+
+# Install any additional system packages if needed
+# RUN microdnf install -y <package> && microdnf clean all
+
+# Create directory for application and set ownership
+RUN mkdir -p /opt/app-root/src/backend && \
+    chown -R 1001:0 /opt/app-root/src && \
+    chmod -R g=u /opt/app-root/src
+
+# Switch back to non-root user (Red Hat best practice)
+USER 1001
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy Python dependencies from builder stage (entire venv)
+COPY --from=builder --chown=1001:0 /opt/app-root /opt/app-root
+
+# Copy backend application code
+COPY --chown=1001:0 backend/ ./backend/
+COPY --chown=1001:0 .env.example ./.env
+
+# Create directory for SQLite database with proper permissions
+RUN mkdir -p /opt/app-root/src/data && \
+    chmod -R g=u /opt/app-root/src/data
+
+# Expose port
+EXPOSE 8000
+
+# Health check (Red Hat best practice)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
+
+# Run the application
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

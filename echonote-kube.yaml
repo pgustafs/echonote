@@ -1,0 +1,115 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: echonote-config
+data:
+  MODEL_URL: "https://whisper-large-v3-turbo-quantizedw4a16-models.apps.ai3.pgustafs.com/v1"
+  MODEL_NAME: "whisper-large-v3-turbo-quantizedw4a16"
+  API_KEY: "not-needed"
+  CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+  MAX_UPLOAD_SIZE: "104857600"
+  SQLITE_DB: "/opt/app-root/src/data/echonote.db"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: echonote-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: echonote-backend
+  labels:
+    app: echonote
+    component: backend
+spec:
+  restartPolicy: Always
+  containers:
+  - name: backend
+    image: localhost/echonote-backend:latest
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 8000
+      hostPort: 8000
+      protocol: TCP
+    env:
+    - name: MODEL_URL
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: MODEL_URL
+    - name: MODEL_NAME
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: MODEL_NAME
+    - name: API_KEY
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: API_KEY
+    - name: CORS_ORIGINS
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: CORS_ORIGINS
+    - name: MAX_UPLOAD_SIZE
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: MAX_UPLOAD_SIZE
+    - name: SQLITE_DB
+      valueFrom:
+        configMapKeyRef:
+          name: echonote-config
+          key: SQLITE_DB
+    volumeMounts:
+    - name: echonote-data
+      mountPath: /opt/app-root/src/data
+    resources:
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 8000
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 8000
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  volumes:
+  - name: echonote-data
+    persistentVolumeClaim:
+      claimName: echonote-data

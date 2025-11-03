@@ -53,6 +53,10 @@ echonote/
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
 │   └── package.json
+├── Containerfile        # Container build (UBI 10)
+├── echonote-kube.yaml   # Kubernetes/Podman deployment
+├── .containerignore     # Container build exclusions
+├── CONTAINER.md         # Container deployment guide
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -293,6 +297,44 @@ curl -X POST "https://your-vllm-server.com/v1/audio/transcriptions" \
   -F "file=@test.wav" \
   -F "model=whisper-large-v3-turbo-quantizedw4a16"
 ```
+
+## Container Deployment
+
+EchoNote can be deployed using Podman with Red Hat Universal Base Image (UBI).
+
+### Quick Container Deployment
+
+```bash
+# Build the image
+podman build -t localhost/echonote-backend:latest -f Containerfile .
+
+# Edit configuration
+vi echonote-kube.yaml  # Update MODEL_URL and other settings
+
+# Deploy with Podman
+podman kube play echonote-kube.yaml
+
+# Check status
+podman pod ps
+podman logs -f echonote-backend-backend
+```
+
+### Container Files
+
+- **`Containerfile`** - Multi-stage build using UBI 10 Python 3.12 minimal
+- **`echonote-kube.yaml`** - Kubernetes YAML for `podman kube play`
+- **`CONTAINER.md`** - Comprehensive container deployment guide
+
+### Features
+
+✅ Red Hat UBI 10 base image
+✅ Multi-stage build for minimal size
+✅ Runs as non-root user (UID 1001)
+✅ Health checks and probes
+✅ Systemd integration support
+✅ Compatible with Kubernetes/OpenShift
+
+For detailed container deployment instructions, see [CONTAINER.md](CONTAINER.md).
 
 ## License
 
