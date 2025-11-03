@@ -34,30 +34,34 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 ```
 echonote/
 ├── backend/
+│   ├── Containerfile       # Backend container build (UBI 10 Python)
+│   ├── .containerignore    # Backend build exclusions
+│   ├── requirements.txt    # Python dependencies
 │   ├── __init__.py
-│   ├── main.py          # FastAPI application
-│   ├── models.py        # SQLModel database models
-│   ├── database.py      # Database configuration
-│   └── config.py        # Application settings
+│   ├── main.py             # FastAPI application
+│   ├── models.py           # SQLModel database models
+│   ├── database.py         # Database configuration
+│   └── config.py           # Application settings
 ├── frontend/
+│   ├── Containerfile       # Frontend container build (UBI 10 Node.js)
+│   ├── .containerignore    # Frontend build exclusions
+│   ├── .gitignore          # Frontend git ignores
+│   ├── package.json
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── AudioRecorder.tsx
 │   │   │   └── TranscriptionList.tsx
 │   │   ├── App.tsx
 │   │   ├── main.tsx
-│   │   ├── api.ts       # API client
-│   │   ├── types.ts     # TypeScript types
+│   │   ├── api.ts          # API client
+│   │   ├── types.ts        # TypeScript types
 │   │   └── index.css
 │   ├── index.html
 │   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   └── package.json
-├── Containerfile        # Container build (UBI 10)
-├── echonote-kube.yaml   # Kubernetes/Podman deployment
-├── .containerignore     # Container build exclusions
-├── CONTAINER.md         # Container deployment guide
-├── requirements.txt
+│   └── tailwind.config.js
+├── echonote-kube.yaml      # Kubernetes/Podman deployment
+├── .gitignore              # Project-level git ignores
+├── CONTAINER.md            # Container deployment guide
 ├── .env.example
 └── README.md
 ```
@@ -87,7 +91,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
 # Create environment file
 cp .env.example .env
@@ -305,8 +309,9 @@ EchoNote can be deployed using Podman with Red Hat Universal Base Image (UBI).
 ### Quick Container Deployment
 
 ```bash
-# Build the image
-podman build -t localhost/echonote-backend:latest -f Containerfile .
+# Build both images
+podman build -t localhost/echonote-backend:latest backend/
+podman build -t localhost/echonote-frontend:latest frontend/
 
 # Edit configuration
 vi echonote-kube.yaml  # Update MODEL_URL and other settings
@@ -316,21 +321,31 @@ podman kube play echonote-kube.yaml
 
 # Check status
 podman pod ps
-podman logs -f echonote-backend-backend
+podman ps
+
+# Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
 ```
 
 ### Container Files
 
-- **`Containerfile`** - Multi-stage build using UBI 10 Python 3.12 minimal
-- **`echonote-kube.yaml`** - Kubernetes YAML for `podman kube play`
+- **`backend/Containerfile`** - Backend multi-stage build using UBI 10 Python 3.12 minimal
+- **`backend/.containerignore`** - Backend container build exclusions
+- **`backend/requirements.txt`** - Python dependencies
+- **`frontend/Containerfile`** - Frontend build using UBI 10 Node.js 22 with `serve`
+- **`frontend/.containerignore`** - Frontend container build exclusions
+- **`frontend/.gitignore`** - Frontend git exclusions
+- **`echonote-kube.yaml`** - Kubernetes YAML for `podman kube play` (both frontend and backend)
 - **`CONTAINER.md`** - Comprehensive container deployment guide
 
 ### Features
 
-✅ Red Hat UBI 10 base image
-✅ Multi-stage build for minimal size
-✅ Runs as non-root user (UID 1001)
-✅ Health checks and probes
+✅ Red Hat UBI 10 base images
+✅ Backend uses multi-stage build for minimal size
+✅ Both containers run as non-root user (UID 1001)
+✅ Health checks and probes on both containers
+✅ Lightweight Node.js static file server for frontend
 ✅ Systemd integration support
 ✅ Compatible with Kubernetes/OpenShift
 

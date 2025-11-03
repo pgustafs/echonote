@@ -12,7 +12,7 @@ interface AudioRecorderProps {
 /**
  * Convert audio blob to WAV format using Web Audio API
  */
-async function convertToWav(blob: Blob, stream: MediaStream): Promise<Blob> {
+async function convertToWav(blob: Blob): Promise<Blob> {
   // Create audio context
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
 
@@ -136,7 +136,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
         // If we recorded in webm, convert to WAV in the browser
         if (blobType === 'audio/webm') {
           try {
-            const wavBlob = await convertToWav(audioBlob, stream)
+            const wavBlob = await convertToWav(audioBlob)
             onRecordingComplete(wavBlob)
           } catch (error) {
             console.error('WAV conversion failed, sending original:', error)

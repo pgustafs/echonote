@@ -1,0 +1,54 @@
+# Use single-stage build with Node.js
+FROM ubi10/nodejs-22:latest
+
+# Add labels for metadata (Red Hat best practice)
+LABEL name="echonote-frontend" \
+      vendor="EchoNote" \
+      version="1.0.0" \
+      summary="EchoNote Voice Transcription Frontend" \
+      description="React/Vite frontend for voice transcription application" \
+      maintainer="echonote@example.com" \
+      io.k8s.description="React/Vite frontend for voice transcription" \
+      io.k8s.display-name="EchoNote Frontend" \
+      io.openshift.tags="nodejs,react,vite"
+
+# Switch to root to set permissions
+USER 0
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy package files and set ownership
+COPY --chown=1001:0 package*.json ./
+
+# Switch to default user
+USER 1001
+
+# Install dependencies (including serve for production)
+RUN npm ci && \
+    npm install -g serve && \
+    npm cache clean --force
+
+# Copy source code with proper ownership
+COPY --chown=1001:0 . ./
+
+# Ensure write permissions for node_modules
+USER 0
+RUN chmod -R g+w /opt/app-root/src/node_modules
+USER 1001
+
+# Build the application
+RUN npm run build
+
+# Switch back to non-root user (Red Hat best practice)
+USER 1001
+
+# Expose port
+EXPOSE 8080
+
+# Health check (Red Hat best practice)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
+
+# Run serve to host the static files
+CMD ["npx", "serve", "-s", "dist", "-l", "8080"]

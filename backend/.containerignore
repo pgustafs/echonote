@@ -8,22 +8,21 @@ __pycache__/
 dist/
 build/
 *.egg
+
+# Virtual environments
 venv/
 env/
 ENV/
+.venv/
 
-# Database
+# Database files
 *.db
 *.sqlite
 *.sqlite3
 
 # Environment
 .env
-
-# Git
-.git/
-.gitignore
-.gitattributes
+.env.local
 
 # IDE
 .vscode/
@@ -31,19 +30,6 @@ ENV/
 *.swp
 *.swo
 *~
-
-# Frontend (not needed in backend container)
-frontend/
-node_modules/
-
-# Documentation
-README.md
-*.md
-docs/
-
-# CI/CD
-.github/
-.gitlab-ci.yml
 
 # Testing
 .pytest_cache/
@@ -54,3 +40,6 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Documentation
+*.md

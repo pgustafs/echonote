@@ -4,7 +4,7 @@
 
 import { Transcription, TranscriptionList } from './types'
 
-const API_BASE_URL = '/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 /**
  * Upload and transcribe an audio file

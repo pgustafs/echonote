@@ -5,8 +5,9 @@ This guide covers building and deploying the EchoNote backend using containers w
 ## Quick Start
 
 ```bash
-# 1. Build the image
-podman build -t localhost/echonote-backend:latest -f Containerfile .
+# 1. Build the images
+podman build -t localhost/echonote-backend:latest backend/
+podman build -t localhost/echonote-frontend:latest frontend/
 
 # 2. Edit configuration
 vi echonote-kube.yaml  # Update MODEL_URL and other settings
@@ -16,10 +17,11 @@ podman kube play echonote-kube.yaml
 
 # 4. Check status
 podman pod ps
-podman logs -f echonote-backend-backend
+podman ps
 
-# 5. Access the API
-curl http://localhost:8000/
+# 5. Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
 ```
 
 ## Prerequisites
@@ -27,14 +29,58 @@ curl http://localhost:8000/
 - Podman installed (version 4.0 or later recommended)
 - Access to Red Hat Container Registry (for UBI images)
 
-## Building the Container
+## Architecture
+
+EchoNote uses a two-container architecture with consistent build contexts:
+
+### Backend Container (`backend/Containerfile`)
+- **Base Image**: UBI 10 Python 3.12 minimal
+- **Build Context**: `backend/` directory
+- **Multi-stage Build**: Builder stage installs dependencies, runtime stage is minimal
+- **Port**: 8000
+- **Purpose**: FastAPI REST API for transcription services
+- **Storage**: Persistent volume for SQLite database and audio files
+- **Dependencies**: `backend/requirements.txt`
+- **Exclusions**: `backend/.containerignore`
+
+### Frontend Container (`frontend/Containerfile`)
+- **Base Image**: UBI 10 Node.js 22
+- **Build Context**: `frontend/` directory
+- **Single-stage Build**: Builds the Vite app and serves with `serve` package
+- **Port**: 8080 (mapped to host port 5173)
+- **Purpose**: React/Vite SPA served by Node.js static file server
+- **Dependencies**: `frontend/package.json`
+- **Exclusions**: `frontend/.containerignore`
+- **Note**: Uses `serve` for lightweight static file serving
+
+## Building the Containers
+
+### Backend Container
 
 ```bash
-# Build the container image
-podman build -t localhost/echonote-backend:latest -f Containerfile .
+# Build the backend container image
+podman build -t localhost/echonote-backend:latest backend/
 
 # Or with specific version tag
-podman build -t localhost/echonote-backend:1.0.0 -f Containerfile .
+podman build -t localhost/echonote-backend:1.0.0 backend/
+```
+
+### Frontend Container
+
+```bash
+# Build the frontend container image
+podman build -t localhost/echonote-frontend:latest frontend/
+
+# Or with specific version tag
+podman build -t localhost/echonote-frontend:1.0.0 frontend/
+```
+
+### Build Both
+
+```bash
+# Build both images at once
+podman build -t localhost/echonote-backend:latest backend/ && \
+podman build -t localhost/echonote-frontend:latest frontend/
 ```
 
 ## Running the Container
@@ -44,18 +90,23 @@ podman build -t localhost/echonote-backend:1.0.0 -f Containerfile .
 This is the recommended approach as it uses standard Kubernetes YAML and works seamlessly with OpenShift and Kubernetes.
 
 ```bash
-# 1. Edit the configuration in echonote-kube.yaml
+# 1. Build both images
+podman build -t localhost/echonote-backend:latest backend/
+podman build -t localhost/echonote-frontend:latest frontend/
+
+# 2. Edit the configuration in echonote-kube.yaml
 # Update the ConfigMap section with your vLLM server URL and other settings
 
-# 2. Deploy the application
+# 3. Deploy the application
 podman kube play echonote-kube.yaml
 
-# 3. Verify the pod is running
+# 4. Verify pods are running
 podman pod ps
 podman ps
 
-# 4. View logs
-podman logs echonote-backend-backend
+# 5. View logs
+podman logs echonote-backend     # Backend logs
+podman logs echonote-frontend    # Frontend logs
 ```
 
 To customize configuration before deploying, edit the ConfigMap in `echonote-kube.yaml`:
@@ -304,14 +355,18 @@ Look for the `STATUS` column showing `healthy` or `Up` status.
 ## Logs
 
 ```bash
-# View logs (podman kube play)
-podman logs -f echonote-backend-backend
+# View backend logs
+podman logs -f echonote-backend
 
-# View pod logs
-podman pod logs echonote-backend
+# View frontend logs
+podman logs -f echonote-frontend
+
+# View pod logs (all containers)
+podman pod logs echonote
 
 # For podman run deployments
 podman logs -f echonote-backend
+podman logs -f echonote-frontend
 ```
 
 ## Security Best Practices
@@ -434,16 +489,26 @@ sudo systemctl start pod-echonote-backend.service
 ## Building for Different Architectures
 
 ```bash
-# Build for AMD64
-podman build --platform linux/amd64 -t localhost/echonote-backend:amd64 -f Containerfile .
+# Build backend for AMD64
+podman build --platform linux/amd64 -t localhost/echonote-backend:amd64 backend/
 
-# Build for ARM64
-podman build --platform linux/arm64 -t localhost/echonote-backend:arm64 -f Containerfile .
+# Build backend for ARM64
+podman build --platform linux/arm64 -t localhost/echonote-backend:arm64 backend/
 
-# Create manifest for multi-arch
+# Build frontend for AMD64
+podman build --platform linux/amd64 -t localhost/echonote-frontend:amd64 frontend/
+
+# Build frontend for ARM64
+podman build --platform linux/arm64 -t localhost/echonote-frontend:arm64 frontend/
+
+# Create manifests for multi-arch
 podman manifest create localhost/echonote-backend:latest
 podman manifest add localhost/echonote-backend:latest localhost/echonote-backend:amd64
 podman manifest add localhost/echonote-backend:latest localhost/echonote-backend:arm64
+
+podman manifest create localhost/echonote-frontend:latest
+podman manifest add localhost/echonote-frontend:latest localhost/echonote-frontend:amd64
+podman manifest add localhost/echonote-frontend:latest localhost/echonote-frontend:arm64
 ```
 
 ## Production Deployment Checklist

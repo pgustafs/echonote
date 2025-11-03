@@ -27,10 +27,9 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: echonote-backend
+  name: echonote
   labels:
     app: echonote
-    component: backend
 spec:
   restartPolicy: Always
   containers:
@@ -95,6 +94,47 @@ spec:
       httpGet:
         path: /
         port: 8000
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  - name: frontend
+    image: localhost/echonote-frontend:latest
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 8080
+      hostPort: 5173
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 8080
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 8080
         scheme: HTTP
       initialDelaySeconds: 5
       periodSeconds: 10
