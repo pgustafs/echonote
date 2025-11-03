@@ -5,6 +5,7 @@ A modern voice transcription API that stores audio recordings and their
 transcriptions using Whisper (via vLLM) and SQLModel.
 """
 
+import json
 import logging
 from io import BytesIO
 from typing import Annotated
@@ -48,6 +49,57 @@ client = AsyncOpenAI(
     api_key=settings.API_KEY,
 )
 logger.info(f"Initialized OpenAI client with URL: {settings.MODEL_URL}")
+
+
+def extract_transcription_text(response) -> str:
+    """
+    Extract transcription text from various response formats.
+
+    Handles different formats returned by OpenAI-compatible Whisper endpoints:
+    - Direct string responses
+    - JSON strings containing text
+    - Objects with .text attribute
+    - Dicts with 'text' key
+    - Dicts with 'choices' array (chat-completion style)
+
+    Args:
+        response: The response from the transcription API
+
+    Returns:
+        str: The extracted transcription text
+    """
+    # If it's a string, check if it's JSON
+    if isinstance(response, str):
+        # Try to parse as JSON
+        try:
+            parsed = json.loads(response)
+            if isinstance(parsed, dict) and "text" in parsed:
+                return parsed["text"]
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON, return as-is
+            pass
+        return response
+
+    # Check for .text attribute (OpenAI style)
+    text = getattr(response, "text", None)
+    if text is not None:
+        return text
+
+    # Handle dict responses
+    if isinstance(response, dict):
+        # Direct text key
+        if "text" in response:
+            return response["text"]
+
+        # Chat completion style with choices
+        if "choices" in response and response["choices"]:
+            choice = response["choices"][0]
+            if isinstance(choice, dict) and "text" in choice:
+                return choice["text"]
+
+    # Fallback: convert to string and log warning
+    logger.warning(f"Unexpected response format: {type(response)}, converting to string")
+    return str(response)
 
 
 @app.on_event("startup")
@@ -115,11 +167,8 @@ async def transcribe_audio(
             response_format="text"
         )
 
-        # Extract text from response
-        if isinstance(transcription_response, str):
-            transcription_text = transcription_response
-        else:
-            transcription_text = str(transcription_response)
+        # Extract text from response (handle different response formats)
+        transcription_text = extract_transcription_text(transcription_response)
 
         logger.info(f"Transcription completed: {len(transcription_text)} characters")
 
