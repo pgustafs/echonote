@@ -68,7 +68,13 @@ function App() {
         {/* Header */}
         <header className="text-center mb-16">
           <div className="flex items-center justify-center space-x-4 mb-6 animate-float">
-            <div className="w-16 h-16 bg-gradient-to-br from-vite-500 via-electric-500 to-vite-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-vite-500/50 transform rotate-3">
+            <div
+              className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-2xl transform rotate-3"
+              style={{
+                background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
+                boxShadow: '0 20px 40px rgba(107, 159, 237, 0.4)'
+              }}
+            >
               <svg
                 className="w-9 h-9 text-white transform -rotate-3"
                 fill="none"
@@ -129,9 +135,13 @@ function App() {
                   onClick={() => setPriorityFilter(null)}
                   className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
                     priorityFilter === null
-                      ? 'bg-gradient-to-r from-vite-600 to-electric-600 text-white shadow-lg shadow-vite-500/30 scale-105'
+                      ? 'text-white shadow-lg scale-105'
                       : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white'
                   }`}
+                  style={priorityFilter === null ? {
+                    background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
+                    boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
+                  } : undefined}
                 >
                   All
                 </button>
@@ -174,8 +184,8 @@ function App() {
         {isLoading ? (
           <div className="glass-card-solid p-16 text-center">
             <div className="relative w-16 h-16 mx-auto mb-6">
-              <div className="absolute inset-0 rounded-full border-4 border-vite-500/20"></div>
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-vite-400 animate-spin"></div>
+              <div className="absolute inset-0 rounded-full border-4" style={{ borderColor: 'rgba(107, 159, 237, 0.2)' }}></div>
+              <div className="absolute inset-0 rounded-full border-4 border-transparent animate-spin" style={{ borderTopColor: '#6B9FED' }}></div>
             </div>
             <p className="text-white font-medium">Loading transcriptions...</p>
           </div>
@@ -192,7 +202,16 @@ function App() {
                 href="https://fastapi.tiangolo.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white hover:text-vite-300 transition-colors underline decoration-vite-400/50 hover:decoration-vite-300"
+                className="text-white transition-colors underline"
+                style={{ textDecorationColor: 'rgba(107, 159, 237, 0.5)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#6B9FED'
+                  e.currentTarget.style.textDecorationColor = '#6B9FED'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'white'
+                  e.currentTarget.style.textDecorationColor = 'rgba(107, 159, 237, 0.5)'
+                }}
               >
                 FastAPI
               </a>
@@ -201,7 +220,16 @@ function App() {
                 href="https://vitejs.dev/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white hover:text-electric-300 transition-colors underline decoration-electric-400/50 hover:decoration-electric-300"
+                className="text-white transition-colors underline"
+                style={{ textDecorationColor: 'rgba(107, 159, 237, 0.5)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#6B9FED'
+                  e.currentTarget.style.textDecorationColor = '#6B9FED'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'white'
+                  e.currentTarget.style.textDecorationColor = 'rgba(107, 159, 237, 0.5)'
+                }}
               >
                 Vite
               </a>

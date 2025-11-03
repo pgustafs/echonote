@@ -5,29 +5,34 @@
 @layer base {
   body {
     @apply min-h-screen;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-    background-size: 200% 200%;
-    animation: gradient 15s ease infinite;
-  }
-
-  body.dark {
-    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
-    background-size: 200% 200%;
+    background: #1a1a1a;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl;
-    box-shadow: 0 8px 32px 0 rgba(139, 92, 246, 0.2);
+    @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
+    background: rgba(42, 42, 42, 0.6);
+    border-color: rgba(107, 159, 237, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.15);
   }
 
   .glass-card-solid {
-    @apply bg-slate-800/80 backdrop-blur-xl border border-vite-400/30 rounded-3xl shadow-2xl;
+    @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
+    background: rgba(38, 38, 38, 0.95);
+    border-color: rgba(107, 159, 237, 0.25);
+    box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.2);
   }
 
   .btn-vite {
-    @apply relative overflow-hidden bg-gradient-to-r from-vite-600 to-electric-600 hover:from-vite-700 hover:to-electric-700 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-vite-500/50 hover:shadow-vite-500/70 hover:scale-105;
+    @apply relative overflow-hidden text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105;
+    background: linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%);
+    box-shadow: 0 4px 20px rgba(107, 159, 237, 0.3);
+  }
+
+  .btn-vite:hover {
+    background: linear-gradient(90deg, #5A8FDD 0%, #8B5FDD 100%);
+    box-shadow: 0 6px 24px rgba(107, 159, 237, 0.4);
   }
 
   .btn-ghost {

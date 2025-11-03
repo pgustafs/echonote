@@ -242,9 +242,14 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
           <div
             className={`relative w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 ${
               isRecording
-                ? 'bg-gradient-to-br from-red-500 to-pink-500 shadow-2xl shadow-red-500/50 scale-110'
-                : 'bg-gradient-to-br from-vite-600 to-electric-600 shadow-2xl shadow-vite-500/50 hover:scale-105'
+                ? 'shadow-2xl shadow-red-500/50 scale-110'
+                : 'shadow-2xl hover:scale-105'
             }`}
+            style={{
+              background: isRecording
+                ? 'linear-gradient(135deg, #ef4444 0%, #ec4899 100%)'
+                : 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)'
+            }}
           >
             <svg
               className="w-20 h-20 text-white drop-shadow-lg"
@@ -270,7 +275,11 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
                 type="checkbox"
                 checked={includeUrl}
                 onChange={(e) => setIncludeUrl(e.target.checked)}
-                className="w-5 h-5 rounded border-2 border-vite-500 text-vite-600 focus:ring-2 focus:ring-vite-500/50 bg-slate-700"
+                className="w-5 h-5 rounded border-2 focus:ring-2 bg-slate-700"
+                style={{
+                  borderColor: '#6B9FED',
+                  '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
+                } as React.CSSProperties}
               />
               <span className="text-white font-medium">Add URL to voice note</span>
             </label>
@@ -281,7 +290,13 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com"
-                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 border-vite-500/30 focus:outline-none focus:ring-2 focus:ring-vite-500/50 focus:border-vite-500 placeholder-slate-400"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 placeholder-slate-400"
+                style={{
+                  borderColor: 'rgba(107, 159, 237, 0.3)',
+                  '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
+                } as React.CSSProperties}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#6B9FED'}
+                onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(107, 159, 237, 0.3)'}
               />
             )}
           </div>

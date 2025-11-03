@@ -84,12 +84,18 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
   if (transcriptions.length === 0) {
     return (
       <div className="glass-card-solid p-16 text-center">
-        <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-vite-500/20 to-electric-500/20 rounded-full flex items-center justify-center">
+        <div
+          className="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(90deg, rgba(107, 159, 237, 0.2) 0%, rgba(155, 111, 237, 0.2) 100%)'
+          }}
+        >
           <svg
-            className="w-16 h-16 text-vite-300"
+            className="w-16 h-16"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            style={{ color: '#6B9FED' }}
           >
             <path
               strokeLinecap="round"
@@ -129,9 +135,8 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
           return (
             <div
               key={transcription.id}
-              className={`glass-card-solid p-6 transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] ${
-                isExpanded ? 'ring-2 ring-vite-500/50' : ''
-              }`}
+              className="glass-card-solid p-6 transition-all duration-300 hover:shadow-2xl hover:scale-[1.01]"
+              style={isExpanded ? { boxShadow: '0 0 0 2px rgba(107, 159, 237, 0.5), 0 8px 32px 0 rgba(107, 159, 237, 0.2)' } : undefined}
             >
               {/* Header */}
               <div
@@ -140,7 +145,13 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center flex-wrap gap-3 mb-3">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-vite-500 to-electric-500 text-white shadow-lg shadow-vite-500/30">
+                    <span
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg"
+                      style={{
+                        background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
+                        boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
+                      }}
+                    >
                       #{transcription.id}
                     </span>
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 ${getPriorityColor(transcription.priority)} shadow-md uppercase tracking-wide`}>
@@ -157,14 +168,22 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
 
                 {/* Expand Icon */}
                 <div className="ml-4 flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-vite-500/20 flex items-center justify-center group-hover:bg-vite-500/30 transition-colors">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{
+                      backgroundColor: 'rgba(107, 159, 237, 0.2)'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(107, 159, 237, 0.3)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(107, 159, 237, 0.2)'}
+                  >
                     <svg
-                      className={`w-5 h-5 text-vite-300 transition-transform duration-300 ${
+                      className={`w-5 h-5 transition-transform duration-300 ${
                         isExpanded ? 'rotate-180' : ''
                       }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
+                      style={{ color: '#6B9FED' }}
                     >
                       <path
                         strokeLinecap="round"
@@ -179,7 +198,7 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
 
               {/* Expanded Content */}
               {isExpanded && (
-                <div className="mt-8 pt-6 border-t border-vite-500/20">
+                <div className="mt-8 pt-6 border-t" style={{ borderColor: 'rgba(107, 159, 237, 0.2)' }}>
                   <div className="space-y-6">
                     {/* Audio Player */}
                     <div className="flex items-center space-x-4">
@@ -199,7 +218,11 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
                             }
                           }
                         }}
-                        className="w-14 h-14 rounded-2xl bg-gradient-to-br from-vite-600 to-electric-600 hover:from-vite-700 hover:to-electric-700 text-white flex items-center justify-center transition-all duration-300 shadow-lg shadow-vite-500/30 hover:scale-105"
+                        className="w-14 h-14 rounded-2xl text-white flex items-center justify-center transition-all duration-300 shadow-lg hover:scale-105"
+                        style={{
+                          background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
+                          boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
+                        }}
                       >
                         {isPlaying ? (
                           <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 20 20">
@@ -235,14 +258,23 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
                     {transcription.url && (
                       <div className="glass-card p-4 rounded-2xl">
                         <div className="flex items-center space-x-3">
-                          <svg className="w-5 h-5 text-vite-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#6B9FED' }}>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                           </svg>
                           <a
                             href={transcription.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-white hover:text-vite-300 transition-colors underline decoration-vite-400/50 hover:decoration-vite-300 break-all"
+                            className="text-white transition-colors underline break-all"
+                            style={{ textDecorationColor: 'rgba(107, 159, 237, 0.5)' }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#6B9FED'
+                              e.currentTarget.style.textDecorationColor = '#6B9FED'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'white'
+                              e.currentTarget.style.textDecorationColor = 'rgba(107, 159, 237, 0.5)'
+                            }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             {transcription.url}
@@ -251,47 +283,53 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
                       </div>
                     )}
 
-                    {/* Priority & File Info & Actions */}
-                    <div className="flex items-center justify-between glass-card p-4 rounded-2xl flex-wrap gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">
-                          <span className="font-semibold text-white">
-                            {transcription.audio_filename}
+                    {/* File Info */}
+                    <div className="glass-card p-4 rounded-2xl">
+                      <div className="text-sm">
+                        <span className="font-semibold text-white">
+                          {transcription.audio_filename}
+                        </span>
+                        {transcription.duration_seconds && (
+                          <span className="ml-3 text-slate-300">
+                            {transcription.duration_seconds.toFixed(1)}s
                           </span>
-                          {transcription.duration_seconds && (
-                            <span className="ml-3 text-slate-300">
-                              {transcription.duration_seconds.toFixed(1)}s
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </div>
+                    </div>
 
-                      {/* Priority Selector */}
+                    {/* Priority Selector */}
+                    <div className="glass-card p-4 rounded-2xl">
                       <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-white">Priority:</label>
                         <select
                           value={transcription.priority}
                           onChange={(e) => handlePriorityChange(transcription.id, e.target.value as Priority)}
                           disabled={updatingId === transcription.id}
-                          className="px-3 py-1.5 rounded-lg bg-slate-700/50 text-white border border-vite-500/30 focus:outline-none focus:ring-2 focus:ring-vite-500/50 disabled:opacity-50 font-medium text-sm"
+                          className="px-3 py-1.5 rounded-lg bg-slate-700/50 text-white border focus:outline-none focus:ring-2 disabled:opacity-50 font-medium text-sm"
+                          style={{
+                            borderColor: 'rgba(107, 159, 237, 0.3)',
+                            '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
+                          } as React.CSSProperties}
                         >
                           <option value="low" className="bg-slate-800">Low</option>
                           <option value="medium" className="bg-slate-800">Medium</option>
                           <option value="high" className="bg-slate-800">High</option>
                         </select>
                         {updatingId === transcription.id && (
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-vite-500 border-t-transparent" />
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-transparent" style={{ borderTopColor: '#6B9FED', borderRightColor: '#6B9FED' }} />
                         )}
                       </div>
+                    </div>
 
-                      {/* Delete Button */}
+                    {/* Delete Button - Bottom Left */}
+                    <div className="flex justify-start">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDelete(transcription.id)
                         }}
                         disabled={isDeleting}
-                        className="ml-4 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium hover:scale-105"
+                        className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium hover:scale-105"
                       >
                         {isDeleting ? (
                           <div className="flex items-center space-x-2">
