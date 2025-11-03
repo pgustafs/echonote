@@ -6,24 +6,25 @@ import { useEffect, useState } from 'react'
 import { getTranscriptions, transcribeAudio } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
-import { Transcription } from './types'
+import { Priority, Transcription } from './types'
 
 function App() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
 
-  // Load transcriptions on mount
+  // Load transcriptions on mount and when filter changes
   useEffect(() => {
     loadTranscriptions()
-  }, [])
+  }, [priorityFilter])
 
   const loadTranscriptions = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      const data = await getTranscriptions()
+      const data = await getTranscriptions(0, 50, priorityFilter)
       setTranscriptions(data.transcriptions)
     } catch (err) {
       console.error('Error loading transcriptions:', err)
@@ -55,6 +56,10 @@ function App() {
 
   const handleDelete = (id: number) => {
     setTranscriptions(transcriptions.filter((t) => t.id !== id))
+  }
+
+  const handleUpdate = (id: number, updated: Transcription) => {
+    setTranscriptions(transcriptions.map((t) => t.id === id ? updated : t))
   }
 
   return (
@@ -114,6 +119,57 @@ function App() {
           />
         </div>
 
+        {/* Priority Filter */}
+        <div className="mb-8">
+          <div className="glass-card-solid p-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <label className="text-white font-semibold text-lg">Filter by Priority:</label>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => setPriorityFilter(null)}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                    priorityFilter === null
+                      ? 'bg-gradient-to-r from-vite-600 to-electric-600 text-white shadow-lg shadow-vite-500/30 scale-105'
+                      : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('high')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                    priorityFilter === 'high'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 scale-105'
+                      : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:text-red-200 border border-red-500/30'
+                  }`}
+                >
+                  High
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('medium')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                    priorityFilter === 'medium'
+                      ? 'bg-yellow-500 text-white shadow-lg shadow-yellow-500/30 scale-105'
+                      : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30 hover:text-yellow-200 border border-yellow-500/30'
+                  }`}
+                >
+                  Medium
+                </button>
+                <button
+                  onClick={() => setPriorityFilter('low')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+                    priorityFilter === 'low'
+                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/30 scale-105'
+                      : 'bg-green-500/20 text-green-300 hover:bg-green-500/30 hover:text-green-200 border border-green-500/30'
+                  }`}
+                >
+                  Low
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Transcription List */}
         {isLoading ? (
           <div className="glass-card-solid p-16 text-center">
@@ -124,7 +180,7 @@ function App() {
             <p className="text-white font-medium">Loading transcriptions...</p>
           </div>
         ) : (
-          <TranscriptionList transcriptions={transcriptions} onDelete={handleDelete} />
+          <TranscriptionList transcriptions={transcriptions} onDelete={handleDelete} onUpdate={handleUpdate} />
         )}
 
         {/* Footer */}

@@ -55,6 +55,12 @@ COPY --from=builder --chown=1001:0 /opt/app-root /opt/app-root
 # Copy backend application code (build context is backend/)
 COPY --chown=1001:0 . ./backend/
 
+# Copy and make entrypoint script executable
+COPY --chown=1001:0 entrypoint.sh ./
+USER 0
+RUN chmod +x /opt/app-root/src/entrypoint.sh
+USER 1001
+
 # Create directory for SQLite database with proper permissions
 RUN mkdir -p /opt/app-root/src/data && \
     chmod -R g=u /opt/app-root/src/data
@@ -66,5 +72,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()" || exit 1
 
-# Run the application
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application with migrations
+CMD ["/opt/app-root/src/entrypoint.sh"]

@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 
 from backend.config import settings
 from backend.database import create_db_and_tables, get_session
-from backend.models import Transcription, TranscriptionList, TranscriptionPublic
+from backend.models import Priority, Transcription, TranscriptionList, TranscriptionPublic
 
 # Configure logging
 logging.basicConfig(
@@ -194,6 +194,7 @@ async def transcribe_audio(
             audio_content_type=db_transcription.audio_content_type,
             created_at=db_transcription.created_at,
             duration_seconds=db_transcription.duration_seconds,
+            priority=db_transcription.priority,
         )
 
     except HTTPException:
@@ -210,26 +211,34 @@ async def transcribe_audio(
 def list_transcriptions(
     skip: int = 0,
     limit: int = 50,
+    priority: str | None = None,
     session: Session = Depends(get_session)
 ):
     """
-    List all transcriptions with pagination.
+    List all transcriptions with pagination and optional priority filtering.
 
     Args:
         skip: Number of records to skip (offset)
         limit: Maximum number of records to return
+        priority: Optional priority filter (low, medium, high)
         session: Database session dependency
 
     Returns:
         TranscriptionList: Paginated list of transcriptions
     """
-    # Get total count
-    count_statement = select(Transcription)
-    total = len(session.exec(count_statement).all())
+    # Build base query
+    statement = select(Transcription)
+
+    # Add priority filter if provided
+    if priority:
+        statement = statement.where(Transcription.priority == priority)
+
+    # Get total count with filter
+    total = len(session.exec(statement).all())
 
     # Get paginated results
     statement = (
-        select(Transcription)
+        statement
         .order_by(Transcription.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -245,6 +254,7 @@ def list_transcriptions(
             audio_content_type=t.audio_content_type,
             created_at=t.created_at,
             duration_seconds=t.duration_seconds,
+            priority=t.priority,
         )
         for t in transcriptions
     ]
@@ -283,6 +293,7 @@ def get_transcription(
         audio_content_type=transcription.audio_content_type,
         created_at=transcription.created_at,
         duration_seconds=transcription.duration_seconds,
+        priority=transcription.priority,
     )
 
 
@@ -311,6 +322,53 @@ def get_audio(
         headers={
             "Content-Disposition": f'inline; filename="{transcription.audio_filename}"'
         }
+    )
+
+
+@app.patch("/api/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
+def update_transcription_priority(
+    transcription_id: int,
+    priority: str,
+    session: Session = Depends(get_session)
+):
+    """
+    Update the priority of a transcription.
+
+    Args:
+        transcription_id: ID of the transcription to update
+        priority: New priority value (low, medium, high)
+        session: Database session dependency
+
+    Returns:
+        TranscriptionPublic: Updated transcription
+    """
+    # Validate priority value
+    valid_priorities = [p.value for p in Priority]
+    if priority not in valid_priorities:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid priority. Must be one of: {', '.join(valid_priorities)}"
+        )
+
+    transcription = session.get(Transcription, transcription_id)
+    if not transcription:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+
+    transcription.priority = priority
+    session.add(transcription)
+    session.commit()
+    session.refresh(transcription)
+
+    logger.info(f"Updated transcription ID {transcription_id} priority to: {priority}")
+
+    return TranscriptionPublic(
+        id=transcription.id,
+        text=transcription.text,
+        audio_filename=transcription.audio_filename,
+        audio_content_type=transcription.audio_content_type,
+        created_at=transcription.created_at,
+        duration_seconds=transcription.duration_seconds,
+        priority=transcription.priority,
     )
 
 

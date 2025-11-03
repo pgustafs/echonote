@@ -2,6 +2,8 @@
  * TypeScript types for EchoNote frontend
  */
 
+export type Priority = 'low' | 'medium' | 'high'
+
 export interface Transcription {
   id: number
   text: string
@@ -9,6 +11,7 @@ export interface Transcription {
   audio_content_type: string
   created_at: string
   duration_seconds: number | null
+  priority: Priority
 }
 
 export interface TranscriptionList {

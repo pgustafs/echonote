@@ -2,7 +2,7 @@
  * API client functions for EchoNote backend
  */
 
-import { Transcription, TranscriptionList } from './types'
+import { Priority, Transcription, TranscriptionList } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -27,10 +27,19 @@ export async function transcribeAudio(audioBlob: Blob, filename: string): Promis
 }
 
 /**
- * Get list of transcriptions with pagination
+ * Get list of transcriptions with pagination and optional priority filter
  */
-export async function getTranscriptions(skip: number = 0, limit: number = 50): Promise<TranscriptionList> {
-  const response = await fetch(`${API_BASE_URL}/transcriptions?skip=${skip}&limit=${limit}`)
+export async function getTranscriptions(skip: number = 0, limit: number = 50, priority?: Priority | null): Promise<TranscriptionList> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
+
+  if (priority) {
+    params.append('priority', priority)
+  }
+
+  const response = await fetch(`${API_BASE_URL}/transcriptions?${params}`)
 
   if (!response.ok) {
     throw new Error('Failed to fetch transcriptions')
@@ -57,6 +66,26 @@ export async function getTranscription(id: number): Promise<Transcription> {
  */
 export function getAudioUrl(id: number): string {
   return `${API_BASE_URL}/transcriptions/${id}/audio`
+}
+
+/**
+ * Update transcription priority
+ */
+export async function updateTranscriptionPriority(id: number, priority: Priority): Promise<Transcription> {
+  const params = new URLSearchParams({
+    priority: priority,
+  })
+
+  const response = await fetch(`${API_BASE_URL}/transcriptions/${id}?${params}`, {
+    method: 'PATCH',
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to update priority')
+  }
+
+  return response.json()
 }
 
 /**

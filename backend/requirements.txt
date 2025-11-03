@@ -6,6 +6,7 @@ python-multipart==0.0.18
 # Database
 sqlmodel==0.0.22
 psycopg2-binary==2.9.10  # PostgreSQL driver for production
+alembic==1.13.1  # Database migrations
 
 # OpenAI client for Whisper API
 openai==1.55.3

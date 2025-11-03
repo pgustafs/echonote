@@ -6,9 +6,17 @@ with their associated audio files.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
+
+
+class Priority(str, Enum):
+    """Priority levels for voice notes"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class Transcription(SQLModel, table=True):
@@ -36,6 +44,10 @@ class Transcription(SQLModel, table=True):
         default=None,
         description="Duration of audio in seconds"
     )
+    priority: str = Field(
+        default=Priority.MEDIUM.value,
+        description="Priority level of the voice note"
+    )
 
 
 class TranscriptionCreate(SQLModel):
@@ -45,6 +57,7 @@ class TranscriptionCreate(SQLModel):
     audio_filename: str
     audio_content_type: str = "audio/wav"
     duration_seconds: Optional[float] = None
+    priority: str = Priority.MEDIUM.value
 
 
 class TranscriptionPublic(SQLModel):
@@ -55,6 +68,7 @@ class TranscriptionPublic(SQLModel):
     audio_content_type: str
     created_at: datetime
     duration_seconds: Optional[float]
+    priority: str
 
 
 class TranscriptionList(SQLModel):

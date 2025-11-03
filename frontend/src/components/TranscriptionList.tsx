@@ -3,18 +3,20 @@
  */
 
 import { useState } from 'react'
-import { deleteTranscription, getAudioUrl } from '../api'
-import { Transcription } from '../types'
+import { deleteTranscription, getAudioUrl, updateTranscriptionPriority } from '../api'
+import { Priority, Transcription } from '../types'
 
 interface TranscriptionListProps {
   transcriptions: Transcription[]
   onDelete: (id: number) => void
+  onUpdate: (id: number, updated: Transcription) => void
 }
 
-export default function TranscriptionList({ transcriptions, onDelete }: TranscriptionListProps) {
+export default function TranscriptionList({ transcriptions, onDelete, onUpdate }: TranscriptionListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
 
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id)
@@ -37,6 +39,19 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
     }
   }
 
+  const handlePriorityChange = async (id: number, newPriority: Priority) => {
+    setUpdatingId(id)
+    try {
+      const updated = await updateTranscriptionPriority(id, newPriority)
+      onUpdate(id, updated)
+    } catch (error) {
+      console.error('Error updating priority:', error)
+      alert('Failed to update priority')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString)
     return new Intl.DateTimeFormat('en-US', {
@@ -51,6 +66,19 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
   const truncateText = (text: string, maxLength: number = 100): string => {
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + '...'
+  }
+
+  const getPriorityColor = (priority: Priority): string => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-500/80 text-white border-red-400'
+      case 'medium':
+        return 'bg-yellow-500/80 text-white border-yellow-400'
+      case 'low':
+        return 'bg-green-500/80 text-white border-green-400'
+      default:
+        return 'bg-slate-500/80 text-white border-slate-400'
+    }
   }
 
   if (transcriptions.length === 0) {
@@ -114,6 +142,9 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                   <div className="flex items-center flex-wrap gap-3 mb-3">
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-vite-500 to-electric-500 text-white shadow-lg shadow-vite-500/30">
                       #{transcription.id}
+                    </span>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 ${getPriorityColor(transcription.priority)} shadow-md uppercase tracking-wide`}>
+                      {transcription.priority}
                     </span>
                     <span className="text-sm font-medium text-slate-300">
                       {formatDate(transcription.created_at)}
@@ -200,9 +231,9 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                       />
                     </div>
 
-                    {/* File Info & Actions */}
-                    <div className="flex items-center justify-between glass-card p-4 rounded-2xl">
-                      <div className="flex-1">
+                    {/* Priority & File Info & Actions */}
+                    <div className="flex items-center justify-between glass-card p-4 rounded-2xl flex-wrap gap-4">
+                      <div className="flex-1 min-w-0">
                         <div className="text-sm">
                           <span className="font-semibold text-white">
                             {transcription.audio_filename}
@@ -213,6 +244,24 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                             </span>
                           )}
                         </div>
+                      </div>
+
+                      {/* Priority Selector */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-white">Priority:</label>
+                        <select
+                          value={transcription.priority}
+                          onChange={(e) => handlePriorityChange(transcription.id, e.target.value as Priority)}
+                          disabled={updatingId === transcription.id}
+                          className="px-3 py-1.5 rounded-lg bg-slate-700/50 text-white border border-vite-500/30 focus:outline-none focus:ring-2 focus:ring-vite-500/50 disabled:opacity-50 font-medium text-sm"
+                        >
+                          <option value="low" className="bg-slate-800">Low</option>
+                          <option value="medium" className="bg-slate-800">Medium</option>
+                          <option value="high" className="bg-slate-800">High</option>
+                        </select>
+                        {updatingId === transcription.id && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-vite-500 border-t-transparent" />
+                        )}
                       </div>
 
                       {/* Delete Button */}
