@@ -12,6 +12,7 @@ export interface Transcription {
   created_at: string
   duration_seconds: number | null
   priority: Priority
+  url: string | null
 }
 
 export interface TranscriptionList {

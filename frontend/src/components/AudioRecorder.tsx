@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 interface AudioRecorderProps {
-  onRecordingComplete: (audioBlob: Blob) => void
+  onRecordingComplete: (audioBlob: Blob, url?: string) => void
   isTranscribing: boolean
 }
 
@@ -91,6 +91,8 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
+  const [includeUrl, setIncludeUrl] = useState(false)
+  const [url, setUrl] = useState('')
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -133,17 +135,20 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: blobType })
 
+        // Get the URL if checkbox is checked
+        const finalUrl = includeUrl && url.trim() ? url.trim() : undefined
+
         // If we recorded in webm, convert to WAV in the browser
         if (blobType === 'audio/webm') {
           try {
             const wavBlob = await convertToWav(audioBlob)
-            onRecordingComplete(wavBlob)
+            onRecordingComplete(wavBlob, finalUrl)
           } catch (error) {
             console.error('WAV conversion failed, sending original:', error)
-            onRecordingComplete(audioBlob)
+            onRecordingComplete(audioBlob, finalUrl)
           }
         } else {
-          onRecordingComplete(audioBlob)
+          onRecordingComplete(audioBlob, finalUrl)
         }
 
         // Stop all tracks
@@ -256,6 +261,31 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
             </svg>
           </div>
         </div>
+
+        {/* URL Input Section */}
+        {!isRecording && !isTranscribing && (
+          <div className="w-full max-w-md space-y-3">
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeUrl}
+                onChange={(e) => setIncludeUrl(e.target.checked)}
+                className="w-5 h-5 rounded border-2 border-vite-500 text-vite-600 focus:ring-2 focus:ring-vite-500/50 bg-slate-700"
+              />
+              <span className="text-white font-medium">Add URL to voice note</span>
+            </label>
+
+            {includeUrl && (
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 border-vite-500/30 focus:outline-none focus:ring-2 focus:ring-vite-500/50 focus:border-vite-500 placeholder-slate-400"
+              />
+            )}
+          </div>
+        )}
 
         {/* Control Buttons */}
         <div className="flex flex-wrap gap-4 justify-center">

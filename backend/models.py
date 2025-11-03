@@ -48,6 +48,10 @@ class Transcription(SQLModel, table=True):
         default=Priority.MEDIUM.value,
         description="Priority level of the voice note"
     )
+    url: Optional[str] = Field(
+        default=None,
+        description="Optional URL associated with the voice note"
+    )
 
 
 class TranscriptionCreate(SQLModel):
@@ -58,6 +62,7 @@ class TranscriptionCreate(SQLModel):
     audio_content_type: str = "audio/wav"
     duration_seconds: Optional[float] = None
     priority: str = Priority.MEDIUM.value
+    url: Optional[str] = None
 
 
 class TranscriptionPublic(SQLModel):
@@ -69,6 +74,7 @@ class TranscriptionPublic(SQLModel):
     created_at: datetime
     duration_seconds: Optional[float]
     priority: str
+    url: Optional[str]
 
 
 class TranscriptionList(SQLModel):

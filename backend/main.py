@@ -10,7 +10,7 @@ import logging
 from io import BytesIO
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from openai import AsyncOpenAI
@@ -123,13 +123,15 @@ def read_root():
 @app.post("/api/transcribe", response_model=TranscriptionPublic)
 async def transcribe_audio(
     file: Annotated[UploadFile, File(description="Audio file to transcribe")],
-    session: Annotated[Session, Depends(get_session)]
+    url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
+    session: Session = Depends(get_session)
 ):
     """
     Transcribe an audio file and store it in the database.
 
     Args:
         file: Audio file uploaded via multipart/form-data
+        url: Optional URL associated with the voice note
         session: Database session dependency
 
     Returns:
@@ -178,6 +180,7 @@ async def transcribe_audio(
             audio_data=audio_bytes,
             audio_filename=file.filename or "audio.wav",
             audio_content_type=file.content_type or "audio/wav",
+            url=url if url and url.strip() else None,
         )
 
         session.add(db_transcription)
@@ -195,6 +198,7 @@ async def transcribe_audio(
             created_at=db_transcription.created_at,
             duration_seconds=db_transcription.duration_seconds,
             priority=db_transcription.priority,
+            url=db_transcription.url,
         )
 
     except HTTPException:
@@ -255,6 +259,7 @@ def list_transcriptions(
             created_at=t.created_at,
             duration_seconds=t.duration_seconds,
             priority=t.priority,
+            url=t.url,
         )
         for t in transcriptions
     ]
@@ -294,6 +299,7 @@ def get_transcription(
         created_at=transcription.created_at,
         duration_seconds=transcription.duration_seconds,
         priority=transcription.priority,
+        url=transcription.url,
     )
 
 
@@ -369,6 +375,7 @@ def update_transcription_priority(
         created_at=transcription.created_at,
         duration_seconds=transcription.duration_seconds,
         priority=transcription.priority,
+        url=transcription.url,
     )
 
 

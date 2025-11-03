@@ -9,9 +9,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 /**
  * Upload and transcribe an audio file
  */
-export async function transcribeAudio(audioBlob: Blob, filename: string): Promise<Transcription> {
+export async function transcribeAudio(audioBlob: Blob, filename: string, url?: string): Promise<Transcription> {
   const formData = new FormData()
   formData.append('file', audioBlob, filename)
+
+  if (url) {
+    formData.append('url', url)
+  }
 
   const response = await fetch(`${API_BASE_URL}/transcribe`, {
     method: 'POST',

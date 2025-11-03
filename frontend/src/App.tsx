@@ -34,7 +34,7 @@ function App() {
     }
   }
 
-  const handleRecordingComplete = async (audioBlob: Blob) => {
+  const handleRecordingComplete = async (audioBlob: Blob, url?: string) => {
     setIsTranscribing(true)
     setError(null)
 
@@ -42,7 +42,7 @@ function App() {
       // Use .wav extension for WAV format
       const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
       const filename = `recording-${Date.now()}.${extension}`
-      const transcription = await transcribeAudio(audioBlob, filename)
+      const transcription = await transcribeAudio(audioBlob, filename, url)
 
       // Add new transcription to the top of the list
       setTranscriptions([transcription, ...transcriptions])

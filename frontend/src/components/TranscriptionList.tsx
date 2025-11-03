@@ -231,6 +231,26 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
                       />
                     </div>
 
+                    {/* URL Display */}
+                    {transcription.url && (
+                      <div className="glass-card p-4 rounded-2xl">
+                        <div className="flex items-center space-x-3">
+                          <svg className="w-5 h-5 text-vite-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          <a
+                            href={transcription.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-white hover:text-vite-300 transition-colors underline decoration-vite-400/50 hover:decoration-vite-300 break-all"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {transcription.url}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Priority & File Info & Actions */}
                     <div className="flex items-center justify-between glass-card p-4 rounded-2xl flex-wrap gap-4">
                       <div className="flex-1 min-w-0">
