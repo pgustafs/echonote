@@ -55,24 +55,26 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
 
   if (transcriptions.length === 0) {
     return (
-      <div className="card p-12 text-center">
-        <svg
-          className="w-24 h-24 mx-auto mb-4 text-slate-300 dark:text-slate-600"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-          />
-        </svg>
-        <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
+      <div className="glass-card-solid p-16 text-center">
+        <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-vite-500/20 to-electric-500/20 rounded-full flex items-center justify-center">
+          <svg
+            className="w-16 h-16 text-vite-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+            />
+          </svg>
+        </div>
+        <h3 className="text-2xl font-bold text-white mb-3">
           No transcriptions yet
         </h3>
-        <p className="text-slate-500 dark:text-slate-500">
+        <p className="text-slate-300 text-lg">
           Record your first voice message to get started
         </p>
       </div>
@@ -80,12 +82,17 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-        Transcriptions ({transcriptions.length})
-      </h2>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold text-white drop-shadow-lg">
+          Your Transcriptions
+        </h2>
+        <span className="glass-card px-4 py-2 rounded-full text-white font-semibold">
+          {transcriptions.length} {transcriptions.length === 1 ? 'Recording' : 'Recordings'}
+        </span>
+      </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {transcriptions.map((transcription) => {
           const isExpanded = expandedId === transcription.id
           const isPlaying = playingId === transcription.id
@@ -94,51 +101,57 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
           return (
             <div
               key={transcription.id}
-              className="card p-6 hover:shadow-2xl transition-all duration-200"
+              className={`glass-card-solid p-6 transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] ${
+                isExpanded ? 'ring-2 ring-vite-500/50' : ''
+              }`}
             >
               {/* Header */}
               <div
-                className="flex items-start justify-between cursor-pointer"
+                className="flex items-start justify-between cursor-pointer group"
                 onClick={() => toggleExpand(transcription.id)}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200">
+                  <div className="flex items-center flex-wrap gap-3 mb-3">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-vite-500 to-electric-500 text-white shadow-lg shadow-vite-500/30">
                       #{transcription.id}
                     </span>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                    <span className="text-sm font-medium text-slate-300">
                       {formatDate(transcription.created_at)}
                     </span>
                   </div>
-                  <p className="text-slate-700 dark:text-slate-300">
+                  <p className="text-white text-lg leading-relaxed">
                     {isExpanded ? transcription.text : truncateText(transcription.text)}
                   </p>
                 </div>
 
                 {/* Expand Icon */}
-                <svg
-                  className={`w-5 h-5 text-slate-400 transition-transform duration-200 flex-shrink-0 ml-4 ${
-                    isExpanded ? 'rotate-180' : ''
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
+                <div className="ml-4 flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-vite-500/20 flex items-center justify-center group-hover:bg-vite-500/30 transition-colors">
+                    <svg
+                      className={`w-5 h-5 text-vite-300 transition-transform duration-300 ${
+                        isExpanded ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
               </div>
 
               {/* Expanded Content */}
               {isExpanded && (
-                <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center justify-between">
+                <div className="mt-8 pt-6 border-t border-vite-500/20">
+                  <div className="space-y-6">
                     {/* Audio Player */}
-                    <div className="flex items-center space-x-4 flex-1">
+                    <div className="flex items-center space-x-4">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -155,10 +168,10 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                             }
                           }
                         }}
-                        className="w-12 h-12 rounded-full bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors duration-200 shadow-lg shadow-primary-500/30"
+                        className="w-14 h-14 rounded-2xl bg-gradient-to-br from-vite-600 to-electric-600 hover:from-vite-700 hover:to-electric-700 text-white flex items-center justify-center transition-all duration-300 shadow-lg shadow-vite-500/30 hover:scale-105"
                       >
                         {isPlaying ? (
-                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 20 20">
                             <path
                               fillRule="evenodd"
                               d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
@@ -166,7 +179,7 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                             />
                           </svg>
                         ) : (
-                          <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-7 h-7 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
                             <path
                               fillRule="evenodd"
                               d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
@@ -182,45 +195,55 @@ export default function TranscriptionList({ transcriptions, onDelete }: Transcri
                         onEnded={() => setPlayingId(null)}
                         onPause={() => setPlayingId(null)}
                         onPlay={() => setPlayingId(transcription.id)}
-                        className="flex-1"
+                        className="flex-1 h-12"
                         controls
                       />
                     </div>
 
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(transcription.id)
-                      }}
-                      disabled={isDeleting}
-                      className="ml-4 p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors duration-200 disabled:opacity-50"
-                    >
-                      {isDeleting ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600" />
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
+                    {/* File Info & Actions */}
+                    <div className="flex items-center justify-between glass-card p-4 rounded-2xl">
+                      <div className="flex-1">
+                        <div className="text-sm">
+                          <span className="font-semibold text-white">
+                            {transcription.audio_filename}
+                          </span>
+                          {transcription.duration_seconds && (
+                            <span className="ml-3 text-slate-300">
+                              {transcription.duration_seconds.toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                  {/* File Info */}
-                  <div className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-                    <span className="font-medium">File:</span> {transcription.audio_filename}
-                    {transcription.duration_seconds && (
-                      <>
-                        {' • '}
-                        <span className="font-medium">Duration:</span>{' '}
-                        {transcription.duration_seconds.toFixed(1)}s
-                      </>
-                    )}
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(transcription.id)
+                        }}
+                        disabled={isDeleting}
+                        className="ml-4 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium hover:scale-105"
+                      >
+                        {isDeleting ? (
+                          <div className="flex items-center space-x-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent" />
+                            <span>Deleting...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                            <span>Delete</span>
+                          </div>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

@@ -202,33 +202,47 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
   }
 
   return (
-    <div className="card p-8">
-      <div className="flex flex-col items-center space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Record Voice Message
-        </h2>
+    <div className="glass-card-solid p-10">
+      <div className="flex flex-col items-center space-y-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-white mb-2">
+            Record Voice Message
+          </h2>
+          <p className="text-slate-300">
+            Click the button below to start recording
+          </p>
+        </div>
 
         {/* Recording Indicator */}
         {isRecording && (
-          <div className="flex items-center space-x-3">
-            <div className={`w-4 h-4 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`} />
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-              {formatTime(recordingTime)}
-            </span>
+          <div className="glass-card px-6 py-3 rounded-full">
+            <div className="flex items-center space-x-4">
+              <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
+              <span className="text-3xl font-mono font-bold text-white tabular-nums">
+                {formatTime(recordingTime)}
+              </span>
+            </div>
           </div>
         )}
 
         {/* Microphone Icon / Animation */}
         <div className="relative">
+          {/* Pulse rings */}
+          {isRecording && !isPaused && (
+            <>
+              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
+              <div className="absolute inset-0 rounded-full bg-red-500/10 animate-pulse" />
+            </>
+          )}
           <div
-            className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 ${
+            className={`relative w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 ${
               isRecording
-                ? 'bg-red-500 shadow-2xl shadow-red-500/50 animate-pulse-slow'
-                : 'bg-primary-600 shadow-xl shadow-primary-500/30'
+                ? 'bg-gradient-to-br from-red-500 to-pink-500 shadow-2xl shadow-red-500/50 scale-110'
+                : 'bg-gradient-to-br from-vite-600 to-electric-600 shadow-2xl shadow-vite-500/50 hover:scale-105'
             }`}
           >
             <svg
-              className="w-16 h-16 text-white"
+              className="w-20 h-20 text-white drop-shadow-lg"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -236,7 +250,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
               />
             </svg>
@@ -244,15 +258,15 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
         </div>
 
         {/* Control Buttons */}
-        <div className="flex space-x-4">
+        <div className="flex flex-wrap gap-4 justify-center">
           {!isRecording ? (
             <button
               onClick={startRecording}
               disabled={isTranscribing}
-              className="btn-primary px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-vite px-10 py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              <span className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <span className="flex items-center space-x-3">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                   <path
                     fillRule="evenodd"
                     d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
@@ -266,7 +280,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
             <>
               <button
                 onClick={togglePause}
-                className="btn-secondary px-6 py-3"
+                className="btn-ghost"
               >
                 {isPaused ? (
                   <span className="flex items-center space-x-2">
@@ -294,7 +308,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
               </button>
               <button
                 onClick={stopRecording}
-                className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200 shadow-lg shadow-red-500/30"
+                className="btn-danger"
               >
                 <span className="flex items-center space-x-2">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -312,9 +326,14 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
         </div>
 
         {isTranscribing && (
-          <div className="flex items-center space-x-3 text-primary-600 dark:text-primary-400">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current" />
-            <span className="font-medium">Transcribing...</span>
+          <div className="glass-card px-8 py-4 rounded-full">
+            <div className="flex items-center space-x-4">
+              <div className="relative w-6 h-6">
+                <div className="absolute inset-0 rounded-full border-2 border-white/20"></div>
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white animate-spin"></div>
+              </div>
+              <span className="font-semibold text-white">Transcribing your voice...</span>
+            </div>
           </div>
         )}
       </div>
