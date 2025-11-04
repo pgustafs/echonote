@@ -5,8 +5,10 @@
 import { useEffect, useRef, useState } from 'react'
 
 interface AudioRecorderProps {
-  onRecordingComplete: (audioBlob: Blob, url?: string) => void
+  onRecordingComplete: (audioBlob: Blob, url?: string, model?: string) => void
   isTranscribing: boolean
+  availableModels: string[]
+  defaultModel: string
 }
 
 /**
@@ -87,16 +89,24 @@ function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   return arrayBuffer
 }
 
-export default function AudioRecorder({ onRecordingComplete, isTranscribing }: AudioRecorderProps) {
+export default function AudioRecorder({ onRecordingComplete, isTranscribing, availableModels, defaultModel }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const [includeUrl, setIncludeUrl] = useState(false)
   const [url, setUrl] = useState('')
+  const [selectedModel, setSelectedModel] = useState(defaultModel)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
+
+  // Update selected model when default changes
+  useEffect(() => {
+    if (defaultModel && !selectedModel) {
+      setSelectedModel(defaultModel)
+    }
+  }, [defaultModel, selectedModel])
 
   useEffect(() => {
     return () => {
@@ -142,13 +152,13 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
         if (blobType === 'audio/webm') {
           try {
             const wavBlob = await convertToWav(audioBlob)
-            onRecordingComplete(wavBlob, finalUrl)
+            onRecordingComplete(wavBlob, finalUrl, selectedModel)
           } catch (error) {
             console.error('WAV conversion failed, sending original:', error)
-            onRecordingComplete(audioBlob, finalUrl)
+            onRecordingComplete(audioBlob, finalUrl, selectedModel)
           }
         } else {
-          onRecordingComplete(audioBlob, finalUrl)
+          onRecordingComplete(audioBlob, finalUrl, selectedModel)
         }
 
         // Stop all tracks
@@ -267,9 +277,34 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
           </div>
         </div>
 
-        {/* URL Input Section */}
+        {/* Model Selector & URL Input Section */}
         {!isRecording && !isTranscribing && (
-          <div className="w-full max-w-md space-y-3">
+          <div className="w-full max-w-md space-y-4">
+            {/* Model Selector */}
+            {availableModels.length > 0 && (
+              <div className="space-y-2">
+                <label className="block text-white font-semibold text-sm">
+                  Transcription Model
+                </label>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 font-medium"
+                  style={{
+                    borderColor: 'rgba(107, 159, 237, 0.3)',
+                    '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
+                  } as React.CSSProperties}
+                >
+                  {availableModels.map((model) => (
+                    <option key={model} value={model} className="bg-slate-800">
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* URL Checkbox */}
             <label className="flex items-center space-x-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -284,6 +319,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing }: A
               <span className="text-white font-medium">Add URL to voice note</span>
             </label>
 
+            {/* URL Input */}
             {includeUrl && (
               <input
                 type="url"

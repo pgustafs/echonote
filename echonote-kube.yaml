@@ -4,12 +4,18 @@ kind: ConfigMap
 metadata:
   name: echonote-config
 data:
-  MODEL_URL: "https://whisper-large-v3-turbo-quantizedw4a16-models.apps.ai3.pgustafs.com/v1"
-  MODEL_NAME: "whisper-large-v3-turbo-quantizedw4a16"
+  #MODEL_URL: "https://whisper-large-v3-turbo-quantizedw4a16-models.apps.ai3.pgustafs.com/v1"
+  #MODEL_NAME: "whisper-large-v3-turbo-quantizedw4a16"
   API_KEY: "not-needed"
   CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
   MAX_UPLOAD_SIZE: "104857600"
   SQLITE_DB: "/opt/app-root/src/data/echonote.db"
+  models: |
+    {
+      "whisper-large-v3-turbo-quantizedw4a16": "https://whisper-large-v3-turbo-quantizedw4a16-models.apps.ai3.pgustafs.com/v1",
+      "kb-whisper-large": "https://kb-whisper-large-models.apps.ai3.pgustafs.com/v1"
+    }
+  default-model: "whisper-large-v3-turbo-quantizedw4a16"
 
 ---
 apiVersion: v1
@@ -41,16 +47,26 @@ spec:
       hostPort: 8000
       protocol: TCP
     env:
-    - name: MODEL_URL
+    - name: MODELS
       valueFrom:
         configMapKeyRef:
           name: echonote-config
-          key: MODEL_URL
-    - name: MODEL_NAME
+          key: models
+    - name: DEFAULT_MODEL
       valueFrom:
         configMapKeyRef:
           name: echonote-config
-          key: MODEL_NAME
+          key: default-model
+    #- name: MODEL_URL
+    #  valueFrom:
+    #    configMapKeyRef:
+    #      name: echonote-config
+    #      key: MODEL_URL
+    #- name: MODEL_NAME
+    #  valueFrom:
+    #    configMapKeyRef:
+    #      name: echonote-config
+    #      key: MODEL_NAME
     - name: API_KEY
       valueFrom:
         configMapKeyRef:

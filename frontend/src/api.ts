@@ -6,15 +6,37 @@ import { Priority, Transcription, TranscriptionList } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
+export interface ModelsResponse {
+  models: string[]
+  default: string
+}
+
+/**
+ * Get available transcription models
+ */
+export async function getModels(): Promise<ModelsResponse> {
+  const response = await fetch(`${API_BASE_URL}/models`)
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch models')
+  }
+
+  return response.json()
+}
+
 /**
  * Upload and transcribe an audio file
  */
-export async function transcribeAudio(audioBlob: Blob, filename: string, url?: string): Promise<Transcription> {
+export async function transcribeAudio(audioBlob: Blob, filename: string, url?: string, model?: string): Promise<Transcription> {
   const formData = new FormData()
   formData.append('file', audioBlob, filename)
 
   if (url) {
     formData.append('url', url)
+  }
+
+  if (model) {
+    formData.append('model', model)
   }
 
   const response = await fetch(`${API_BASE_URL}/transcribe`, {

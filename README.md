@@ -170,11 +170,43 @@ Once the backend is running, visit:
 
 ### Main Endpoints
 
+#### Health & Configuration
+- `GET /` - Health check endpoint
+  - Returns app status and version info
+- `GET /api/models` - Get available transcription models
+  - Returns list of available models and default model
+
+#### Transcription
 - `POST /api/transcribe` - Upload and transcribe audio file
+  - **Body** (multipart/form-data):
+    - `file`: Audio file (required)
+    - `url`: Optional URL associated with the voice note
+    - `model`: Model to use for transcription (defaults to DEFAULT_MODEL)
+  - **Returns**: Transcription object with ID, text, metadata
+  - **Supported audio types**: audio/wav, audio/webm, audio/mp3, audio/mpeg
+
+#### Listing & Retrieval
 - `GET /api/transcriptions` - List all transcriptions (paginated)
+  - **Query params**:
+    - `skip`: Number of records to skip (default: 0)
+    - `limit`: Maximum records to return (default: 50)
+    - `priority`: Filter by priority (low, medium, high)
+  - **Returns**: List of transcriptions with total count
+
 - `GET /api/transcriptions/{id}` - Get specific transcription
+  - **Returns**: Transcription details without audio data
+
 - `GET /api/transcriptions/{id}/audio` - Download audio file
+  - **Returns**: Binary audio file
+
+#### Updates & Deletion
+- `PATCH /api/transcriptions/{id}` - Update transcription priority
+  - **Query params**:
+    - `priority`: New priority value (low, medium, high)
+  - **Returns**: Updated transcription object
+
 - `DELETE /api/transcriptions/{id}` - Delete transcription
+  - **Returns**: Success message
 
 ## Development
 

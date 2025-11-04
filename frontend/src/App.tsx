@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { getTranscriptions, transcribeAudio } from './api'
+import { getModels, getTranscriptions, transcribeAudio } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
 import { Priority, Transcription } from './types'
@@ -14,11 +14,29 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [defaultModel, setDefaultModel] = useState<string>('')
+
+  // Load models on mount
+  useEffect(() => {
+    loadModels()
+  }, [])
 
   // Load transcriptions on mount and when filter changes
   useEffect(() => {
     loadTranscriptions()
   }, [priorityFilter])
+
+  const loadModels = async () => {
+    try {
+      const data = await getModels()
+      setAvailableModels(data.models)
+      setDefaultModel(data.default)
+    } catch (err) {
+      console.error('Error loading models:', err)
+      setError('Failed to load available models')
+    }
+  }
 
   const loadTranscriptions = async () => {
     try {
@@ -34,7 +52,7 @@ function App() {
     }
   }
 
-  const handleRecordingComplete = async (audioBlob: Blob, url?: string) => {
+  const handleRecordingComplete = async (audioBlob: Blob, url?: string, model?: string) => {
     setIsTranscribing(true)
     setError(null)
 
@@ -42,7 +60,7 @@ function App() {
       // Use .wav extension for WAV format
       const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
       const filename = `recording-${Date.now()}.${extension}`
-      const transcription = await transcribeAudio(audioBlob, filename, url)
+      const transcription = await transcribeAudio(audioBlob, filename, url, model)
 
       // Add new transcription to the top of the list
       setTranscriptions([transcription, ...transcriptions])
@@ -122,6 +140,8 @@ function App() {
           <AudioRecorder
             onRecordingComplete={handleRecordingComplete}
             isTranscribing={isTranscribing}
+            availableModels={availableModels}
+            defaultModel={defaultModel}
           />
         </div>
 

@@ -43,12 +43,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client for Whisper API
-client = AsyncOpenAI(
-    base_url=settings.MODEL_URL,
-    api_key=settings.API_KEY,
-)
-logger.info(f"Initialized OpenAI client with URL: {settings.MODEL_URL}")
+# OpenAI clients will be created dynamically per request based on selected model
+logger.info(f"Available models: {list(settings.MODELS.keys())}")
+logger.info(f"Default model: {settings.DEFAULT_MODEL}")
 
 
 def extract_transcription_text(response) -> str:
@@ -120,10 +117,25 @@ def read_root():
     }
 
 
+@app.get("/api/models")
+def get_models():
+    """
+    Get list of available transcription models.
+
+    Returns:
+        dict: Available models and default model
+    """
+    return {
+        "models": list(settings.MODELS.keys()),
+        "default": settings.DEFAULT_MODEL
+    }
+
+
 @app.post("/api/transcribe", response_model=TranscriptionPublic)
 async def transcribe_audio(
     file: Annotated[UploadFile, File(description="Audio file to transcribe")],
     url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
+    model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
     session: Session = Depends(get_session)
 ):
     """
@@ -132,11 +144,21 @@ async def transcribe_audio(
     Args:
         file: Audio file uploaded via multipart/form-data
         url: Optional URL associated with the voice note
+        model: Model name to use for transcription (defaults to DEFAULT_MODEL)
         session: Database session dependency
 
     Returns:
         TranscriptionPublic: Created transcription without binary data
     """
+    # Determine which model to use
+    selected_model = model if model else settings.DEFAULT_MODEL
+
+    # Validate model exists
+    if selected_model not in settings.MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model: {selected_model}. Available models: {list(settings.MODELS.keys())}"
+        )
     # Validate file type
     if file.content_type not in settings.ALLOWED_AUDIO_TYPES:
         raise HTTPException(
@@ -156,6 +178,16 @@ async def transcribe_audio(
             )
 
         logger.info(f"Processing audio file: {file.filename} ({len(audio_bytes)} bytes)")
+        logger.info(f"Using model: {selected_model}")
+
+        # Get the base URL for the selected model
+        model_base_url = settings.get_model_url(selected_model)
+
+        # Create OpenAI client for this specific model
+        client = AsyncOpenAI(
+            base_url=model_base_url,
+            api_key=settings.API_KEY,
+        )
 
         # Prepare audio file for Whisper API
         # Frontend converts to WAV format, so we can send directly
@@ -164,7 +196,7 @@ async def transcribe_audio(
 
         # Transcribe using Whisper via OpenAI API
         transcription_response = await client.audio.transcriptions.create(
-            model=settings.MODEL_NAME,
+            model=selected_model,
             file=audio_file,
             response_format="text"
         )
