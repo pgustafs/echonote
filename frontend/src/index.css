@@ -3,61 +3,111 @@
 @tailwind utilities;
 
 @layer base {
-  body {
+  html {
     @apply min-h-screen;
-    background: #1a1a1a;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    background-attachment: fixed;
+  }
+
+  body {
+    @apply min-h-screen font-sans antialiased;
+    background: transparent;
+  }
+
+  /* Better text rendering */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @layer components {
-  .glass-card {
-    @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
-    background: rgba(42, 42, 42, 0.6);
-    border-color: rgba(107, 159, 237, 0.2);
-    box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.15);
+  /* Enterprise Card Styles */
+  .enterprise-card {
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm;
   }
 
-  .glass-card-solid {
-    @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
-    background: rgba(38, 38, 38, 0.95);
-    border-color: rgba(107, 159, 237, 0.25);
-    box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.2);
+  .enterprise-card-dark {
+    @apply bg-slate-800/90 backdrop-blur-sm border border-slate-700/50 rounded-lg shadow-lg;
   }
 
-  .btn-vite {
-    @apply relative overflow-hidden text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105;
-    background: linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%);
-    box-shadow: 0 4px 20px rgba(107, 159, 237, 0.3);
+  .enterprise-card-primary {
+    @apply bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-md;
   }
 
-  .btn-vite:hover {
-    background: linear-gradient(90deg, #5A8FDD 0%, #8B5FDD 100%);
-    box-shadow: 0 6px 24px rgba(107, 159, 237, 0.4);
+  /* Button Styles - Touch Friendly (min 44px height) */
+  .btn-primary {
+    @apply inline-flex items-center justify-center min-h-[44px] px-6 py-3 text-base font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation;
   }
 
-  .btn-ghost {
-    @apply bg-white/20 hover:bg-white/30 backdrop-blur-md border-2 border-white/50 hover:border-white/70 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 hover:scale-105 shadow-lg;
+  .btn-secondary {
+    @apply inline-flex items-center justify-center min-h-[44px] px-6 py-3 text-base font-semibold text-gray-700 bg-white hover:bg-gray-50 active:bg-gray-100 border border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation;
   }
 
   .btn-danger {
-    @apply relative overflow-hidden bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-red-500/50 hover:shadow-red-500/70 hover:scale-105;
+    @apply inline-flex items-center justify-center min-h-[44px] px-6 py-3 text-base font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation;
   }
 
-  .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-vite-400 to-electric-400;
+  .btn-success {
+    @apply inline-flex items-center justify-center min-h-[44px] px-6 py-3 text-base font-semibold text-white bg-green-600 hover:bg-green-700 active:bg-green-800 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation;
   }
 
-  .gradient-border {
-    @apply relative;
+  .btn-ghost {
+    @apply inline-flex items-center justify-center min-h-[44px] px-6 py-3 text-base font-semibold text-slate-300 hover:text-white hover:bg-slate-700/50 active:bg-slate-700 border border-slate-600 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation;
   }
 
-  .gradient-border::before {
-    content: '';
-    @apply absolute inset-0 rounded-3xl;
-    padding: 2px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+  /* Form Input Styles - Mobile Optimized */
+  .input-field {
+    @apply w-full min-h-[44px] px-4 py-3 text-base bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+
+  .input-field-dark {
+    @apply w-full min-h-[44px] px-4 py-3 text-base text-white bg-slate-700/50 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:bg-slate-800 disabled:cursor-not-allowed;
+  }
+
+  /* Badge Styles */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 text-sm font-medium rounded-full;
+  }
+
+  .badge-high {
+    @apply bg-red-100 text-red-800 border border-red-200;
+  }
+
+  .badge-medium {
+    @apply bg-yellow-100 text-yellow-800 border border-yellow-200;
+  }
+
+  .badge-low {
+    @apply bg-green-100 text-green-800 border border-green-200;
+  }
+
+  /* Loading Spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-4 border-gray-200;
+    border-top-color: #3b82f6;
+  }
+
+  /* Mobile-friendly touch targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Professional gradient background */
+  .gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  /* Subtle elevation */
+  .elevation-1 {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .elevation-2 {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .elevation-3 {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
 }

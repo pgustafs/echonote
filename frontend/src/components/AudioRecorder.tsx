@@ -397,31 +397,42 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   }
 
   return (
-    <div className="glass-card-solid p-10">
-      <div className="flex flex-col items-center space-y-8">
+    <div className="enterprise-card-dark p-6 sm:p-8 lg:p-10">
+      <div className="flex flex-col items-center space-y-6 sm:space-y-8">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-2">
-            Record Voice Message
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center justify-center space-x-3">
+            <svg className="w-7 h-7 sm:w-8 sm:h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <span>Record Voice Message</span>
           </h2>
-          <p className="text-slate-300">
-            Click the button below to start recording
+          <p className="text-slate-300 text-sm sm:text-base">
+            Click the microphone to start recording your message
           </p>
         </div>
 
         {/* Recording Indicator */}
         {isRecording && (
-          <div className="glass-card px-6 py-3 rounded-full">
-            <div className="flex items-center space-x-4">
-              <div className={`w-3 h-3 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
-              <span className="text-3xl font-mono font-bold text-white tabular-nums">
+          <div className="bg-slate-700/50 backdrop-blur-sm px-6 sm:px-8 py-3 sm:py-4 rounded-lg border border-slate-600">
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
+              <span className="text-2xl sm:text-3xl font-mono font-bold text-white tabular-nums">
                 {formatTime(recordingTime)}
+              </span>
+              <span className="text-sm text-slate-400 hidden sm:inline">
+                {isPaused ? 'Paused' : 'Recording'}
               </span>
             </div>
           </div>
         )}
 
         {/* Microphone Icon / Animation */}
-        <div className="relative">
+        <button
+          onClick={isRecording ? undefined : startRecording}
+          disabled={isTranscribing || isRecording}
+          className="relative group"
+          aria-label={isRecording ? 'Recording in progress' : 'Start recording'}
+        >
           {/* Pulse rings */}
           {isRecording && !isPaused && (
             <>
@@ -430,19 +441,16 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             </>
           )}
           <div
-            className={`relative w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 ${
+            className={`relative w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center transition-all duration-300 ${
               isRecording
-                ? 'shadow-2xl shadow-red-500/50 scale-110'
-                : 'shadow-2xl hover:scale-105'
+                ? 'bg-red-600 shadow-lg shadow-red-500/50 scale-105'
+                : isTranscribing
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 shadow-lg hover:shadow-xl hover:scale-105 cursor-pointer active:scale-95'
             }`}
-            style={{
-              background: isRecording
-                ? 'linear-gradient(135deg, #ef4444 0%, #ec4899 100%)'
-                : 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)'
-            }}
           >
             <svg
-              className="w-20 h-20 text-white drop-shadow-lg"
+              className="w-16 h-16 sm:w-20 sm:h-20 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -450,30 +458,29 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2.5}
+                strokeWidth={2}
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
               />
             </svg>
           </div>
-        </div>
+        </button>
 
         {/* Model Selector & URL Input Section */}
         {!isRecording && !isTranscribing && (
-          <div className="w-full max-w-md space-y-4">
+          <div className="w-full max-w-2xl space-y-4 sm:space-y-5">
             {/* Model Selector */}
             {availableModels.length > 0 && (
               <div className="space-y-2">
-                <label className="block text-white font-semibold text-sm">
-                  Transcription Model
+                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                  <span>Transcription Model</span>
                 </label>
                 <select
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 font-medium"
-                  style={{
-                    borderColor: 'rgba(107, 159, 237, 0.3)',
-                    '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
-                  } as React.CSSProperties}
+                  className="input-field-dark"
                 >
                   {availableModels.map((model) => (
                     <option key={model} value={model} className="bg-slate-800">
@@ -485,39 +492,37 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             )}
 
             {/* URL Checkbox */}
-            <label className="flex items-center space-x-3 cursor-pointer">
+            <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
               <input
                 type="checkbox"
                 checked={includeUrl}
                 onChange={(e) => setIncludeUrl(e.target.checked)}
-                className="w-5 h-5 rounded border-2 focus:ring-2 bg-slate-700"
-                style={{
-                  borderColor: '#6B9FED',
-                  '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
-                } as React.CSSProperties}
+                className="w-5 h-5 rounded border-2 border-blue-500 text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-700 cursor-pointer"
               />
-              <span className="text-white font-medium">Add URL to voice note</span>
+              <span className="text-white font-medium text-sm sm:text-base group-hover:text-blue-300 transition-colors">Add URL to voice note</span>
             </label>
 
             {/* URL Input */}
             {includeUrl && (
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 placeholder-slate-400"
-                style={{
-                  borderColor: 'rgba(107, 159, 237, 0.3)',
-                  '--tw-ring-color': 'rgba(107, 159, 237, 0.5)'
-                } as React.CSSProperties}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#6B9FED'}
-                onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(107, 159, 237, 0.3)'}
-              />
+              <div className="space-y-2">
+                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span>URL</span>
+                </label>
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="input-field-dark"
+                />
+              </div>
             )}
 
             {/* Diarization Checkbox */}
-            <label className="flex items-center space-x-3 cursor-pointer">
+            <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
               <input
                 type="checkbox"
                 checked={enableDiarization}
@@ -527,20 +532,24 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     setNumSpeakers(undefined)
                   }
                 }}
-                className="w-5 h-5 rounded border-2 focus:ring-2 bg-slate-700"
-                style={{
-                  borderColor: '#9B6FED',
-                  '--tw-ring-color': 'rgba(155, 111, 237, 0.5)'
-                } as React.CSSProperties}
+                className="w-5 h-5 rounded border-2 border-purple-500 text-purple-600 focus:ring-2 focus:ring-purple-500 bg-slate-700 cursor-pointer"
               />
-              <span className="text-white font-medium">Enable speaker diarization</span>
+              <div className="flex-1">
+                <span className="text-white font-medium text-sm sm:text-base group-hover:text-purple-300 transition-colors block">
+                  Enable speaker diarization
+                </span>
+                <span className="text-xs text-slate-400">Detect and label different speakers</span>
+              </div>
             </label>
 
             {/* Number of Speakers Input */}
             {enableDiarization && (
-              <div className="space-y-2">
-                <label className="block text-white font-semibold text-sm">
-                  Number of Speakers (optional)
+              <div className="space-y-2 pl-8 border-l-2 border-purple-500/30">
+                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span>Number of Speakers (optional)</span>
                 </label>
                 <input
                   type="number"
@@ -552,16 +561,13 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     setNumSpeakers(value ? parseInt(value) : undefined)
                   }}
                   placeholder="Auto-detect"
-                  className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 placeholder-slate-400"
-                  style={{
-                    borderColor: 'rgba(155, 111, 237, 0.3)',
-                    '--tw-ring-color': 'rgba(155, 111, 237, 0.5)'
-                  } as React.CSSProperties}
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#9B6FED'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(155, 111, 237, 0.3)'}
+                  className="input-field-dark"
                 />
-                <p className="text-sm text-slate-400">
-                  Leave empty to automatically detect the number of speakers
+                <p className="text-xs sm:text-sm text-slate-400 flex items-start space-x-2">
+                  <svg className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span>Leave empty to automatically detect (2-10 speakers)</span>
                 </p>
               </div>
             )}
@@ -569,33 +575,31 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
         )}
 
         {/* Control Buttons */}
-        <div className="flex flex-wrap gap-4 justify-center">
+        <div className="flex flex-wrap gap-3 sm:gap-4 justify-center w-full sm:w-auto">
           {!isRecording ? (
             <button
               onClick={startRecording}
               disabled={isTranscribing}
-              className="btn-vite px-10 py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="btn-primary px-8 sm:px-10 text-base sm:text-lg flex-1 sm:flex-none"
             >
-              <span className="flex items-center space-x-3">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Start Recording</span>
-              </span>
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span>Start Recording</span>
             </button>
           ) : (
             <>
               <button
                 onClick={togglePause}
-                className="btn-ghost"
+                className="btn-secondary flex-1 sm:flex-none"
               >
                 {isPaused ? (
-                  <span className="flex items-center space-x-2">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
                         d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
@@ -603,10 +607,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                       />
                     </svg>
                     <span>Resume</span>
-                  </span>
+                  </>
                 ) : (
-                  <span className="flex items-center space-x-2">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
                         d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
@@ -614,36 +618,31 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                       />
                     </svg>
                     <span>Pause</span>
-                  </span>
+                  </>
                 )}
               </button>
               <button
                 onClick={stopRecording}
-                className="btn-danger"
+                className="btn-danger flex-1 sm:flex-none"
               >
-                <span className="flex items-center space-x-2">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <span>Stop & Transcribe</span>
-                </span>
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Stop & Transcribe</span>
               </button>
             </>
           )}
         </div>
 
         {isTranscribing && (
-          <div className="glass-card px-8 py-4 rounded-full">
-            <div className="flex items-center space-x-4">
-              <div className="relative w-6 h-6">
-                <div className="absolute inset-0 rounded-full border-2 border-white/20"></div>
-                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-white animate-spin"></div>
-              </div>
-              <span className="font-semibold text-white">Transcribing your voice...</span>
+          <div className="bg-blue-50 border border-blue-200 px-6 sm:px-8 py-4 rounded-lg shadow-sm w-full sm:w-auto">
+            <div className="flex items-center justify-center space-x-3 sm:space-x-4">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 spinner"></div>
+              <span className="font-semibold text-blue-900 text-sm sm:text-base">Transcribing your voice...</span>
             </div>
           </div>
         )}
