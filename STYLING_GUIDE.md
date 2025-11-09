@@ -1,514 +1,580 @@
 # EchoNote Styling Guide
 
-This guide explains how to customize the visual appearance of your EchoNote application.
+**Version:** 2.0 - Neo-Minimal Dark Mode  
+**Last Updated:** November 2025  
+**Design Language:** Modern Glass Morphism
+
+---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [File Structure](#file-structure)
-3. [Quick Start](#quick-start)
-4. [Common Customizations](#common-customizations)
-5. [Color Palette Reference](#color-palette-reference)
-6. [Component Breakdown](#component-breakdown)
-7. [Rebuilding After Changes](#rebuilding-after-changes)
+2. [Color Palette](#color-palette)
+3. [Typography](#typography)
+4. [Components](#components)
+5. [Interactions & Animations](#interactions--animations)
+6. [Spacing & Layout](#spacing--layout)
+7. [Mobile Responsiveness](#mobile-responsiveness)
+8. [Best Practices](#best-practices)
+9. [Quick Reference](#quick-reference)
 
 ---
 
 ## Overview
 
-EchoNote uses three styling approaches:
+EchoNote uses a **neo-minimal dark mode** design language inspired by modern applications like macOS Sonoma, Arc Browser, and other 2025-era interfaces. The design emphasizes:
 
-1. **Global CSS Classes** (`frontend/src/index.css`) - Reusable utility classes
-2. **Inline Styles** (Component files) - Component-specific styling with `style={{}}` props
-3. **Tailwind CSS** (Component files) - Utility-first CSS framework classes
-
----
-
-## File Structure
-
-```
-frontend/src/
-├── index.css                           # Global styles & utility classes
-├── App.tsx                             # Main app layout, header, footer, filters
-├── components/
-│   ├── AudioRecorder.tsx               # Recording interface styles
-│   └── TranscriptionList.tsx           # Transcription cards & list styles
-└── tailwind.config.js                  # Tailwind configuration (optional customization)
-```
+- ✨ **Glass morphism** for depth and elegance
+- 🎨 **Subtle gradients** for visual interest
+- 🌑 **Muted, sophisticated colors** over saturated tones
+- 💫 **Smooth animations** for premium feel
+- 📱 **Touch-friendly interactions** for mobile support
 
 ---
 
-## Quick Start
+## Color Palette
 
-### Change the Main Background Color
+### Background Colors
 
-**File:** `frontend/src/index.css` (Line 8)
+#### Primary Background
+```css
+/* Charcoal gradient - smooth and rich */
+background: linear-gradient(180deg, #0E1117 0%, #161B22 100%);
+background-attachment: fixed;
+```
+
+#### Glass Cards
+```css
+/* Frosted glass effect */
+background: rgba(255, 255, 255, 0.04);
+backdrop-filter: blur(8px);
+-webkit-backdrop-filter: blur(8px);
+border: 1px solid rgba(255, 255, 255, 0.08);
+border-radius: 1rem;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+```
+
+### Text Colors
+
+| Usage | Color | Hex | Notes |
+|-------|-------|-----|-------|
+| Primary Text | Soft White | `#E6E8EB` | Easier on eyes than pure white |
+| Secondary Text | Muted Gray | `#9BA4B5` | Labels, timestamps, meta info |
+| Disabled Text | Very Muted | `rgba(255, 255, 255, 0.3)` | Disabled states |
+
+### Accent Colors
+
+#### Primary Accent (Electric Iris → Purple)
+```css
+/* Main brand color */
+color: #5C7CFA;
+
+/* Gradient version for CTAs */
+background: linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%);
+box-shadow: 0 4px 12px rgba(92, 124, 250, 0.25);
+```
+
+#### Secondary Accent (Cyan Glow)
+```css
+/* Hover states, highlights */
+color: #4ADEDE;
+```
+
+### Semantic Colors
+
+#### High Priority
+```css
+/* Soft coral - modern, not bright red */
+color: #FF6B6B;
+background: rgba(255, 107, 107, 0.15);
+border: 1px solid rgba(255, 107, 107, 0.3);
+```
+
+#### Medium Priority
+```css
+/* Warm amber */
+color: #F9A826;
+background: rgba(249, 168, 38, 0.15);
+border: 1px solid rgba(249, 168, 38, 0.3);
+```
+
+#### Low Priority
+```css
+/* Mint green */
+color: #4ADE80;
+background: rgba(74, 222, 128, 0.15);
+border: 1px solid rgba(74, 222, 128, 0.3);
+```
+
+#### Error/Delete
+```css
+/* Modern crimson */
+color: #E44C65;
+background: #E44C65;
+box-shadow: 0 4px 12px rgba(228, 76, 101, 0.25);
+```
+
+---
+
+## Typography
+
+### Font Stack
+```css
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+```
+
+### Font Smoothing
+```css
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+```
+
+### Font Weights
+
+- **Regular (400)**: Body text, descriptions
+- **Medium (500)**: Badges, capsules, form labels
+- **Semibold (600)**: Button text, important labels
+- **Bold (700)**: Headings, emphasis
+
+### Responsive Text Sizing
 
 ```css
-@layer base {
-  body {
-    @apply min-h-screen;
-    background: #1a1a1a;  /* ← Change this color */
+/* Mobile-first approach */
+.heading {
+  font-size: 1.5rem;  /* 24px on mobile */
+}
+
+@media (min-width: 640px) {
+  .heading {
+    font-size: 1.875rem;  /* 30px on tablet */
+  }
+}
+
+@media (min-width: 1024px) {
+  .heading {
+    font-size: 2.25rem;  /* 36px on desktop */
   }
 }
 ```
 
-**Example:** For a darker background
-```css
-background: #0a0a0a;
-```
-
 ---
 
-### Change the Button Gradient
+## Components
 
-**File:** `frontend/src/index.css` (Lines 24-30)
+### Buttons
 
+#### Primary Button (Main CTA)
 ```css
-.btn-vite {
-  @apply relative overflow-hidden text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg hover:scale-105;
-  background: linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%);  /* ← Change this */
-  box-shadow: 0 4px 20px rgba(107, 159, 237, 0.3);
+.btn-primary {
+  background: linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%);
+  border-radius: 1.5rem;  /* 24px - smooth 2025 feel */
+  box-shadow: 0 4px 12px rgba(92, 124, 250, 0.25);
+  color: white;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.2s;
 }
 
-.btn-vite:hover {
-  background: linear-gradient(90deg, #5A8FDD 0%, #8B5FDD 100%);  /* ← And this */
-  box-shadow: 0 6px 24px rgba(107, 159, 237, 0.4);
+.btn-primary:hover {
+  box-shadow: 0 0 16px rgba(92, 124, 250, 0.5);
+  transform: translateY(-1px);
 }
 ```
 
-**Example:** Green to teal gradient
+**File:** `frontend/src/index.css` (Lines 45-55)
+
+#### Danger Button (Delete)
 ```css
-background: linear-gradient(90deg, #10b981 0%, #14b8a6 100%);
-```
-
----
-
-### Change Card Background Colors
-
-**File:** `frontend/src/index.css` (Lines 13-25)
-
-```css
-.glass-card {
-  @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
-  background: rgba(42, 42, 42, 0.6);              /* ← Semi-transparent cards */
-  border-color: rgba(107, 159, 237, 0.2);         /* ← Border color */
-  box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.15);
+.btn-danger {
+  background: #E44C65;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 12px rgba(228, 76, 101, 0.25);
+  color: white;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.2s;
 }
 
-.glass-card-solid {
-  @apply backdrop-blur-xl border rounded-3xl shadow-2xl;
-  background: rgba(38, 38, 38, 0.95);             /* ← Solid cards */
-  border-color: rgba(107, 159, 237, 0.25);        /* ← Border color */
-  box-shadow: 0 8px 32px 0 rgba(107, 159, 237, 0.2);
+.btn-danger:hover {
+  background: #d43d56;  /* Darker on hover */
+  box-shadow: 0 0 16px rgba(228, 76, 101, 0.4);
 }
 ```
 
-**Example:** Lighter cards with purple borders
+**File:** `frontend/src/index.css` (Lines 69-79)
+
+### Cards
+
+#### Glass Card
 ```css
-.glass-card-solid {
-  background: rgba(60, 60, 70, 0.95);
-  border-color: rgba(168, 85, 247, 0.25);
-  box-shadow: 0 8px 32px 0 rgba(168, 85, 247, 0.2);
+.enterprise-card-dark {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 ```
 
----
+**File:** `frontend/src/index.css` (Lines 31-38)
 
-## Common Customizations
+### Form Inputs
 
-### 1. Change Microphone Circle Color
+#### Input Field (Dark)
+```css
+.input-field-dark {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  color: #E6E8EB;
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s;
+}
 
-**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 248-252)
+.input-field-dark:focus {
+  outline: none;
+  border-color: #5C7CFA;
+  box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.2);
+}
+```
 
+**File:** `frontend/src/index.css` (Lines 111-128)
+
+### Badges
+
+#### Priority Badge (Modern Capsule)
+```css
+.badge {
+  border-radius: 9999px;  /* Fully rounded capsule */
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.2rem 0.7rem;
+}
+
+.badge-high {
+  background: rgba(255, 107, 107, 0.15);
+  color: #FF6B6B;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
+```
+
+**File:** `frontend/src/index.css` (Lines 131-154)
+
+### Microphone Button (Recording CTA)
+
+#### Idle State (Gradient)
 ```tsx
 style={{
-  background: isRecording
-    ? 'linear-gradient(135deg, #ef4444 0%, #ec4899 100%)'  // Recording (red)
-    : 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)'   // Idle (blue)
+  background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
+  boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4)',
+  borderRadius: '50%',
+  width: '10rem',  /* 160px */
+  height: '10rem',
+  transition: 'all 0.3s',
+  cursor: 'pointer'
 }}
 ```
 
-**Example:** Change idle state to green gradient
+#### Hover State
 ```tsx
-: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)'
+onMouseEnter={(e) => {
+  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
+  e.currentTarget.style.transform = 'scale(1.05)'
+}}
 ```
+
+#### Recording State
+```tsx
+style={{
+  background: '#E44C65',
+  boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)',
+  transform: 'scale(1.05)'
+}}
+```
+
+**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 443-474)
 
 ---
 
-### 2. Change Priority Badge Colors
+## Interactions & Animations
 
-**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 71-82)
+### Animated Gradient Header
 
-```tsx
-const getPriorityColor = (priority: Priority): string => {
-  switch (priority) {
-    case 'high':
-      return 'bg-red-500/80 text-white border-red-400'
-    case 'medium':
-      return 'bg-yellow-500/80 text-white border-yellow-400'
-    case 'low':
-      return 'bg-green-500/80 text-white border-green-400'
-    default:
-      return 'bg-slate-500/80 text-white border-slate-400'
+```css
+.gradient-header {
+  background: linear-gradient(90deg, #5C7CFA, #4ADEDE, #9775FA, #5C7CFA);
+  background-size: 300% 100%;
+  animation: gradientShift 10s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
   }
 }
 ```
 
-**Example:** Change high priority to orange
-```tsx
-case 'high':
-  return 'bg-orange-500/80 text-white border-orange-400'
-```
+**File:** `frontend/src/index.css` (Lines 169-182)
 
----
-
-### 3. Change Header Logo Gradient
-
-**File:** `frontend/src/App.tsx` (Lines 73-75)
-
-```tsx
-style={{
-  background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
-  boxShadow: '0 20px 40px rgba(107, 159, 237, 0.4)'
-}}
-```
-
----
-
-### 4. Change Play Button Gradient
-
-**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 203-206)
-
-```tsx
-style={{
-  background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
-  boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
-}}
-```
-
----
-
-### 5. Change ID Badge Gradient
-
-**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 145-148)
-
-```tsx
-style={{
-  background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
-  boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
-}}
-```
-
----
-
-### 6. Change Filter Button Colors
-
-**File:** `frontend/src/App.tsx` (Lines 135-165)
-
-**"All" button (active):**
-```tsx
-style={priorityFilter === null ? {
-  background: 'linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)',
-  boxShadow: '0 4px 20px rgba(107, 159, 237, 0.3)'
-} : undefined}
-```
-
-**High priority button:**
-```tsx
-className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
-  priorityFilter === 'high'
-    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 scale-105'       // Active
-    : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:text-red-200' // Inactive
-}`}
-```
-
----
-
-### 7. Change Delete Button Color
-
-**File:** `frontend/src/components/TranscriptionList.tsx` (Line 320)
-
-```tsx
-className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium hover:scale-105"
-```
-
-**Example:** Change to orange delete button
-```tsx
-className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-xl transition-all duration-200 disabled:opacity-50 font-medium hover:scale-105"
-```
-
----
-
-### 8. Change Pause/Resume Button Style
-
-**File:** `frontend/src/index.css` (Lines 38-40)
+### Loading Spinner
 
 ```css
-.btn-ghost {
-  @apply bg-white/20 hover:bg-white/30 backdrop-blur-md border-2 border-white/50 hover:border-white/70 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 hover:scale-105 shadow-lg;
+.spinner {
+  animation: spin 1s linear infinite;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #5C7CFA;
+  border-radius: 50%;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 ```
 
----
+**File:** `frontend/src/index.css` (Lines 157-161)
 
-### 9. Change Stop & Transcribe Button
-
-**File:** `frontend/src/index.css` (Lines 42-44)
+### Hover Glow Effect
 
 ```css
-.btn-danger {
-  @apply relative overflow-hidden bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-red-500/50 hover:shadow-red-500/70 hover:scale-105;
-}
-```
+/* Default state */
+box-shadow: 0 4px 12px rgba(92, 124, 250, 0.25);
+transition: all 0.2s;
 
-**Example:** Change to orange gradient
-```css
-.btn-danger {
-  @apply relative overflow-hidden bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-orange-500/50 hover:shadow-orange-500/70 hover:scale-105;
-}
+/* On hover */
+box-shadow: 0 0 16px rgba(92, 124, 250, 0.5);
 ```
 
 ---
 
-### 10. Change Loading Spinner Color
+## Spacing & Layout
 
-**File:** `frontend/src/App.tsx` (Lines 187-188)
+### Touch Targets (Mobile)
+
+**Minimum Height:** 44px (iOS/Android guideline)
+
+```css
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+```
+
+### Breakpoints
+
+| Breakpoint | Size | Usage |
+|------------|------|-------|
+| `sm:` | 640px | Tablets and up |
+| `md:` | 768px | Small desktops |
+| `lg:` | 1024px | Large desktops |
+
+### Mobile-First Grid (Filters)
+
+```css
+/* 2-column grid on mobile */
+display: grid;
+grid-template-columns: repeat(2, 1fr);
+gap: 0.5rem;
+
+/* Flex on desktop */
+@media (min-width: 640px) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+```
+
+**File:** `frontend/src/App.tsx` (Line 192)
+
+---
+
+## Mobile Responsiveness
+
+### Responsive Sizing Example
 
 ```tsx
-<div className="absolute inset-0 rounded-full border-4" style={{ borderColor: 'rgba(107, 159, 237, 0.2)' }}></div>
-<div className="absolute inset-0 rounded-full border-4 border-transparent animate-spin" style={{ borderTopColor: '#6B9FED' }}></div>
+{/* Icon with responsive sizing */}
+<svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }}>
+  {/* ... */}
+</svg>
+
+{/* Text with responsive sizing */}
+<h2 className="text-2xl sm:text-3xl lg:text-4xl" style={{ color: '#E6E8EB' }}>
+  EchoNote
+</h2>
 ```
+
+### Audio Player (Mobile Fix)
+
+```tsx
+{/* Add min-w-0 to allow flex-shrink */}
+<audio className="flex-1 min-w-0 h-10 sm:h-12" controls />
+```
+
+**File:** `frontend/src/components/TranscriptionList.tsx` (Line 238)
 
 ---
 
-## Color Palette Reference
+## Best Practices
 
-### Current Default Colors
+### DO ✅
 
-| Color | Hex Code | RGBA | Usage |
-|-------|----------|------|-------|
-| **Primary Blue** | `#6B9FED` | `rgba(107, 159, 237, 1)` | Main gradient start, icons, borders |
-| **Primary Purple** | `#9B6FED` | `rgba(155, 111, 237, 1)` | Main gradient end |
-| **Background Dark** | `#1a1a1a` | `rgba(26, 26, 26, 1)` | Page background |
-| **Card Dark** | - | `rgba(38, 38, 38, 0.95)` | Solid cards |
-| **Card Semi** | - | `rgba(42, 42, 42, 0.6)` | Semi-transparent cards |
-| **Red (High)** | `#ef4444` | - | High priority, recording state |
-| **Pink** | `#ec4899` | - | Recording gradient, stop button |
-| **Yellow (Medium)** | `#eab308` | - | Medium priority |
-| **Green (Low)** | `#22c55e` | - | Low priority |
-| **White** | `#ffffff` | - | Text, icons |
-| **Slate 300** | `#cbd5e1` | - | Secondary text |
+1. **Use glass morphism** for cards
+   - `rgba(255, 255, 255, 0.04)` + `backdrop-filter: blur(8px)`
 
-### Gradient Formulas
+2. **Round corners generously**
+   - Buttons: `1.5rem` (24px)
+   - Cards: `1rem` (16px)
+   - Badges: `9999px` (fully rounded)
+
+3. **Add subtle shadows** for elevation
+   - Cards: `0 4px 12px rgba(0, 0, 0, 0.4)`
+   - Buttons: `0 4px 12px rgba(92, 124, 250, 0.25)`
+
+4. **Use gradients sparingly**
+   - Primary CTA buttons
+   - Header
+   - Major interactive elements only
+
+5. **Ensure 44px minimum** for touch targets
+
+6. **Use soft colors** over saturated
+   - `#FF6B6B` not `#FF0000`
+   - `#5C7CFA` not `#0000FF`
+
+7. **Add hover glows** for premium feel
+   - `box-shadow: 0 0 16px rgba(92, 124, 250, 0.5)`
+
+### DON'T ❌
+
+1. Don't use pure white (`#FFFFFF`) for text → Use `#E6E8EB`
+2. Don't use harsh borders → Use `rgba(255, 255, 255, 0.08)`
+3. Don't use flat colors everywhere → Mix gradients and glass
+4. Don't forget mobile → Always test on small screens
+5. Don't overuse animations → Keep them subtle
+6. Don't use small touch targets → 44px minimum
+7. Don't use saturated colors → Muted tones feel premium
+8. Don't ignore accessibility → Maintain contrast ratios
+
+---
+
+## Quick Reference
+
+### File Locations
+
+| Component | File | Lines |
+|-----------|------|-------|
+| **Base Styles** | `frontend/src/index.css` | 1-200 |
+| **Header** | `frontend/src/App.tsx` | 99-138 |
+| **Filter Buttons** | `frontend/src/App.tsx` | 183-306 |
+| **Microphone Button** | `frontend/src/components/AudioRecorder.tsx` | 430-490 |
+| **Transcription Cards** | `frontend/src/components/TranscriptionList.tsx` | 138-360 |
+
+### Common Color Changes
+
+#### Change Main Accent Color
+
+**From:** `#5C7CFA` (Electric Iris)  
+**To:** Your color
+
+Files to update:
+1. `frontend/src/index.css` - Lines 47, 122, 160, 170
+2. `frontend/src/App.tsx` - Lines 104, 187, 197, 339, 351
+3. `frontend/src/components/AudioRecorder.tsx` - Lines 404, 450
+4. `frontend/src/components/TranscriptionList.tsx` - Various
+
+#### Change Priority Colors
+
+**File:** `frontend/src/index.css` (Lines 138-154)
 
 ```css
-/* Main gradient (blue to purple) */
-linear-gradient(90deg, #6B9FED 0%, #9B6FED 100%)
-
-/* Recording gradient (red to pink) */
-linear-gradient(135deg, #ef4444 0%, #ec4899 100%)
-
-/* Stop button gradient (red to pink) */
-linear-gradient(to right, #ef4444, #ec4899)
+/* High Priority */
+.badge-high {
+  background: rgba(255, 107, 107, 0.15);
+  color: #FF6B6B;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
 ```
 
----
+### Rebuild After Changes
 
-## Component Breakdown
-
-### AudioRecorder Component (`frontend/src/components/AudioRecorder.tsx`)
-
-| UI Element | Lines | What to Change |
-|------------|-------|----------------|
-| Main card background | 210 | `.glass-card-solid` class |
-| Microphone circle (idle) | 248-252 | Blue-purple gradient |
-| Microphone circle (recording) | 248-252 | Red-pink gradient |
-| Recording time indicator | 223 | `.glass-card` class |
-| URL checkbox border | 279-282 | `borderColor: '#6B9FED'` |
-| URL input border | 294-299 | `borderColor: 'rgba(107, 159, 237, 0.3)'` |
-| Start Recording button | Uses `.btn-vite` | Edit in `index.css` |
-| Pause/Resume buttons | Uses `.btn-ghost` | Edit in `index.css` |
-| Stop button | Uses `.btn-danger` | Edit in `index.css` |
-| Transcribing spinner | 359-367 | `.glass-card` class |
-
----
-
-### TranscriptionList Component (`frontend/src/components/TranscriptionList.tsx`)
-
-| UI Element | Lines | What to Change |
-|------------|-------|----------------|
-| Empty state icon circle | 89-91 | Blue-purple gradient |
-| Transcription card | 138 | `.glass-card-solid` class |
-| Expanded card ring | 139 | Box shadow with blue color |
-| ID badge | 145-148 | Blue-purple gradient |
-| Priority badges | 71-82 | `getPriorityColor()` function |
-| Expand arrow background | 174-176 | `backgroundColor: 'rgba(107, 159, 237, 0.2)'` |
-| Border separator | 201 | `borderColor: 'rgba(107, 159, 237, 0.2)'` |
-| Play button | 203-206 | Blue-purple gradient |
-| URL icon | 261 | `color: '#6B9FED'` |
-| URL link | 268-277 | Text decoration color |
-| File info section | 287 | `.glass-card` class |
-| Priority dropdown | 309-312 | Border color |
-| Priority spinner | 319 | Border color |
-| Delete button | 320 | Red background/text |
-
----
-
-### App Component (`frontend/src/App.tsx`)
-
-| UI Element | Lines | What to Change |
-|------------|-------|----------------|
-| Header logo icon | 73-75 | Blue-purple gradient |
-| Error message card | 100 | `.glass-card-solid` + red border |
-| Filter section card | 124 | `.glass-card-solid` class |
-| "All" filter button | 135-138 | Blue-purple gradient when active |
-| High priority filter | 142-147 | Red colors |
-| Medium priority filter | 148-156 | Yellow colors |
-| Low priority filter | 159-167 | Green colors |
-| Loading spinner | 187-188 | Blue border colors |
-| Footer card | 198 | `.glass-card` class |
-| Footer links | 205-232 | Blue underline colors |
-
----
-
-## Rebuilding After Changes
-
-After making any styling changes, you need to rebuild the frontend container:
-
-### Step 1: Rebuild Frontend Container
 ```bash
+# Rebuild frontend
 podman build -t localhost/echonote-frontend:latest frontend/
-```
 
-### Step 2: Redeploy the Pod
-```bash
+# Redeploy
 podman kube down echonote-kube.yaml
 podman kube play echonote-kube.yaml
-```
 
-### Step 3: Wait for Containers to Start
-```bash
-# Wait about 15 seconds, then check status
-podman ps | grep echonote
-```
-
-You should see both containers with `(healthy)` status.
-
-### Step 4: View Changes
-Open your browser and navigate to:
-```
-http://localhost:5173
-```
-
-Hard refresh to clear cache: `Ctrl + Shift + R` (Linux/Windows) or `Cmd + Shift + R` (Mac)
-
----
-
-## Tips & Best Practices
-
-### 1. **Use Consistent Colors**
-Keep a consistent color palette throughout the app. If you change the main blue gradient, update it in all locations for a cohesive look.
-
-### 2. **Test with Different States**
-After changing colors, test:
-- Hover states
-- Active/selected states
-- Disabled states
-- Loading states
-- Empty states
-
-### 3. **Maintain Contrast**
-Ensure text remains readable on colored backgrounds. Use tools like [WebAIM Contrast Checker](https://webaim.org/resources/contrastchecker/).
-
-### 4. **Keep Backups**
-Before making major changes, copy the original files:
-```bash
-cp frontend/src/index.css frontend/src/index.css.backup
-```
-
-### 5. **Use RGBA for Transparency**
-When you need semi-transparent colors, use RGBA:
-```css
-background: rgba(107, 159, 237, 0.2);  /* 20% opacity */
-```
-
-### 6. **Browser DevTools**
-Use browser developer tools (F12) to test color changes live before editing files.
-
-### 7. **Gradients Direction**
-- `90deg` = Left to right
-- `180deg` = Top to bottom
-- `135deg` = Diagonal top-left to bottom-right
-
----
-
-## Tailwind Color Reference
-
-EchoNote uses Tailwind CSS. You can use these color utilities in `className` props:
-
-```
-bg-{color}-{shade}    → Background color
-text-{color}-{shade}  → Text color
-border-{color}-{shade}→ Border color
-
-Colors: slate, gray, red, orange, yellow, green, blue, purple, pink
-Shades: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900
-
-Opacity: /10, /20, /30, /40, /50, /60, /70, /80, /90
-
-Example: bg-blue-500/80 = Blue 500 with 80% opacity
+# Wait 10 seconds, then test
+curl http://localhost:5173
 ```
 
 ---
 
-## Example: Complete Theme Change (Blue → Green)
+## Component Examples
 
-Here's how to change the entire theme from blue-purple to green-teal:
+### Complete Button with Gradient
 
-### 1. Update `index.css`
-```css
-.btn-vite {
-  background: linear-gradient(90deg, #10b981 0%, #14b8a6 100%);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
-}
-```
-
-### 2. Update `AudioRecorder.tsx` (Line 251)
 ```tsx
-: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)'
+<button
+  className="px-6 py-3 font-semibold transition-all duration-200 min-h-[44px]"
+  style={{
+    background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
+    borderRadius: '1.5rem',
+    boxShadow: '0 4px 12px rgba(92, 124, 250, 0.25)',
+    color: 'white'
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.boxShadow = '0 0 16px rgba(92, 124, 250, 0.5)'
+    e.currentTarget.style.transform = 'translateY(-1px)'
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.boxShadow = '0 4px 12px rgba(92, 124, 250, 0.25)'
+    e.currentTarget.style.transform = 'translateY(0)'
+  }}
+>
+  Primary Action
+</button>
 ```
 
-### 3. Update `App.tsx` (Line 74)
+### Complete Glass Card
+
 ```tsx
-background: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)',
-```
-
-### 4. Update `TranscriptionList.tsx` (Line 146)
-```tsx
-background: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)',
-```
-
-### 5. Update all RGBA references
-Replace `rgba(107, 159, 237, ...)` with `rgba(16, 185, 129, ...)` throughout all files.
-
-### 6. Rebuild
-```bash
-podman build -t localhost/echonote-frontend:latest frontend/
-podman kube down echonote-kube.yaml && podman kube play echonote-kube.yaml
+<div
+  className="p-6 sm:p-8"
+  style={{
+    background: 'rgba(255, 255, 255, 0.04)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '1rem',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)'
+  }}
+>
+  <h3 style={{ color: '#E6E8EB' }}>Card Title</h3>
+  <p style={{ color: '#9BA4B5' }}>Card description</p>
+</div>
 ```
 
 ---
 
-## Need Help?
+## Version History
 
-If you encounter issues:
-1. Check browser console (F12) for errors
-2. Verify container logs: `podman logs echonote-frontend`
-3. Ensure syntax is correct (missing commas, brackets, etc.)
-4. Clear browser cache and hard refresh
+- **v2.0** (November 2025) - Neo-minimal dark mode redesign
+- **v1.0** (2024) - Initial blue gradient design
 
 ---
 
-**Last Updated:** 2025-11-03
-**Version:** 1.0.0
+**Questions or suggestions?** Update this guide as the design evolves!
