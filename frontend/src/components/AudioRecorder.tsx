@@ -4,90 +4,22 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+// Logging utility for debugging audio recording issues
+const log = {
+  info: (...args: any[]) => console.log('[AudioRecorder]', ...args),
+  warn: (...args: any[]) => console.warn('[AudioRecorder]', ...args),
+  error: (...args: any[]) => console.error('[AudioRecorder]', ...args),
+}
+
 interface AudioRecorderProps {
-  onRecordingComplete: (audioBlob: Blob, url?: string, model?: string) => void
+  onRecordingComplete: (audioBlob: Blob, url?: string, model?: string, enableDiarization?: boolean, numSpeakers?: number) => void
   isTranscribing: boolean
   availableModels: string[]
   defaultModel: string
 }
 
-/**
- * Convert audio blob to WAV format using Web Audio API
- */
-async function convertToWav(blob: Blob): Promise<Blob> {
-  // Create audio context
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-
-  // Read the blob as array buffer
-  const arrayBuffer = await blob.arrayBuffer()
-
-  // Decode audio data
-  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-
-  // Convert to WAV format
-  const wavBuffer = audioBufferToWav(audioBuffer)
-
-  return new Blob([wavBuffer], { type: 'audio/wav' })
-}
-
-/**
- * Convert AudioBuffer to WAV format
- */
-function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
-  const length = buffer.length * buffer.numberOfChannels * 2 + 44
-  const arrayBuffer = new ArrayBuffer(length)
-  const view = new DataView(arrayBuffer)
-  const channels: Float32Array[] = []
-  let offset = 0
-  let pos = 0
-
-  // Write WAV header
-  const setUint16 = (data: number) => {
-    view.setUint16(pos, data, true)
-    pos += 2
-  }
-  const setUint32 = (data: number) => {
-    view.setUint32(pos, data, true)
-    pos += 4
-  }
-
-  // RIFF identifier
-  setUint32(0x46464952) // "RIFF"
-  setUint32(length - 8) // file length - 8
-  setUint32(0x45564157) // "WAVE"
-
-  // fmt chunk
-  setUint32(0x20746d66) // "fmt "
-  setUint32(16) // chunk length
-  setUint16(1) // PCM
-  setUint16(buffer.numberOfChannels)
-  setUint32(buffer.sampleRate)
-  setUint32(buffer.sampleRate * 2 * buffer.numberOfChannels) // avg bytes/sec
-  setUint16(buffer.numberOfChannels * 2) // block align
-  setUint16(16) // 16-bit
-
-  // data chunk
-  setUint32(0x61746164) // "data"
-  setUint32(length - pos - 4) // chunk length
-
-  // Get channel data
-  for (let i = 0; i < buffer.numberOfChannels; i++) {
-    channels.push(buffer.getChannelData(i))
-  }
-
-  // Interleave channels and convert to 16-bit PCM
-  while (pos < length) {
-    for (let i = 0; i < buffer.numberOfChannels; i++) {
-      let sample = Math.max(-1, Math.min(1, channels[i][offset]))
-      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff
-      view.setInt16(pos, sample, true)
-      pos += 2
-    }
-    offset++
-  }
-
-  return arrayBuffer
-}
+// WAV conversion functions removed - we send WebM directly like production apps
+// This avoids conversion overhead and potential quality issues
 
 export default function AudioRecorder({ onRecordingComplete, isTranscribing, availableModels, defaultModel }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false)
@@ -96,10 +28,19 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   const [includeUrl, setIncludeUrl] = useState(false)
   const [url, setUrl] = useState('')
   const [selectedModel, setSelectedModel] = useState(defaultModel)
+  const [enableDiarization, setEnableDiarization] = useState(false)
+  const [numSpeakers, setNumSpeakers] = useState<number | undefined>(undefined)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const stopPromiseRef = useRef<{
+    resolve: (blob: Blob) => void
+    reject: (error: Error) => void
+  } | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
 
   // Update selected model when default changes
   useEffect(() => {
@@ -110,63 +51,251 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
 
   useEffect(() => {
     return () => {
+      log.info('Component unmounting, cleaning up...')
+
+      // Clean up timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
+      }
+
+      // Stop recorder if still recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        log.warn('Stopping active recorder on unmount')
+        mediaRecorderRef.current.stop()
+      }
+
+      // Stop all tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          log.info('Stopping track on unmount:', track.kind)
+          track.stop()
+        })
       }
     }
   }, [])
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      log.info('Starting recording...')
 
-      // Try to use WAV format if supported, otherwise fall back to webm
-      let mimeType = 'audio/webm;codecs=opus'
-      let blobType = 'audio/webm'
+      // Reuse existing stream if available (prevents intermittent silence bug)
+      // Only request new stream on first recording or if stream was lost
+      let stream = streamRef.current
 
-      if (MediaRecorder.isTypeSupported('audio/wav')) {
-        mimeType = 'audio/wav'
-        blobType = 'audio/wav'
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        mimeType = 'audio/webm;codecs=opus'
-        blobType = 'audio/webm'
+      if (!stream || !stream.active || stream.getTracks().length === 0 || stream.getTracks()[0].readyState !== 'live') {
+        log.info('Requesting new microphone stream (first recording or stream lost)')
+
+        // Based on production app research (RecordRTC, react-mic, opus-media-recorder):
+        // - echoCancellation: reduces feedback, safe to enable
+        // - noiseSuppression: reduces background noise, safe to enable
+        // - autoGainControl: disabled to prevent volume fluctuations
+        // - channelCount: 1 (mono) for voice notes - smaller file size
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: false,
+            channelCount: 1
+          }
+        })
+        streamRef.current = stream
+      } else {
+        log.info('Reusing existing microphone stream (prevents intermittent silence)')
       }
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType })
+      log.info('MediaStream obtained', {
+        tracks: stream.getTracks().length,
+        audioTracks: stream.getAudioTracks().map(t => ({
+          kind: t.kind,
+          label: t.label,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState
+        }))
+      })
 
-      chunksRef.current = []
+      // Store stream reference for cleanup
+      streamRef.current = stream
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
+      // Check track health
+      const audioTrack = stream.getAudioTracks()[0]
+      if (!audioTrack) {
+        throw new Error('No audio track available')
+      }
+
+      if (audioTrack.readyState !== 'live') {
+        log.error('Audio track is not live!', audioTrack.readyState)
+        throw new Error(`Audio track state is ${audioTrack.readyState}`)
+      }
+
+      // Create audio analyzer for real-time monitoring
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const analyser = audioContext.createAnalyser()
+        const microphone = audioContext.createMediaStreamSource(stream)
+
+        analyser.fftSize = 256
+        analyser.smoothingTimeConstant = 0.8
+        microphone.connect(analyser)
+
+        audioContextRef.current = audioContext
+        analyserRef.current = analyser
+
+        // Start monitoring audio levels
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        let maxLevelSeen = 0
+        let samplesChecked = 0
+
+        const checkAudioLevel = () => {
+          if (!analyserRef.current || !isRecording) return
+
+          analyser.getByteFrequencyData(dataArray)
+          const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
+          const normalized = average / 255
+
+          maxLevelSeen = Math.max(maxLevelSeen, normalized)
+          samplesChecked++
+
+          // Log every 2 seconds
+          if (samplesChecked % 60 === 0) {
+            log.info('Audio level check', {
+              current: normalized.toFixed(3),
+              max: maxLevelSeen.toFixed(3),
+              samples: samplesChecked
+            })
+
+            if (maxLevelSeen < 0.01 && samplesChecked > 120) {
+              log.warn('Very low audio levels detected - microphone may not be working!')
+            }
+          }
+
+          requestAnimationFrame(checkAudioLevel)
+        }
+
+        checkAudioLevel()
+        log.info('Audio level monitoring started')
+      } catch (error) {
+        log.warn('Could not create audio analyzer:', error)
+        // Continue anyway - monitoring is optional
+      }
+
+      // Detect supported MIME types
+      const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4'
+      ]
+
+      let mimeType = 'audio/webm;codecs=opus' // default
+      for (const type of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type
+          log.info('Selected MIME type:', type)
+          break
         }
       }
 
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 128000 // Good quality for speech
+      })
+
+      log.info('MediaRecorder created', {
+        mimeType: mediaRecorder.mimeType,
+        state: mediaRecorder.state,
+        audioBitsPerSecond: 128000
+      })
+
+      // Reset chunks
+      chunksRef.current = []
+
+      // Handle data available with logging
+      mediaRecorder.ondataavailable = (event) => {
+        log.info('dataavailable event', {
+          size: event.data.size,
+          type: event.data.type,
+          timestamp: event.timeStamp
+        })
+
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data)
+          log.info('Chunk added, total chunks:', chunksRef.current.length)
+        } else {
+          log.warn('Received empty chunk (size: 0)')
+        }
+      }
+
+      // Handle errors
+      mediaRecorder.onerror = (event: any) => {
+        log.error('MediaRecorder error:', event.error)
+        if (stopPromiseRef.current) {
+          stopPromiseRef.current.reject(event.error)
+          stopPromiseRef.current = null
+        }
+      }
+
+      // Handle stop event
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: blobType })
+        log.info('MediaRecorder stopped', {
+          totalChunks: chunksRef.current.length,
+          chunkSizes: chunksRef.current.map(c => c.size)
+        })
+
+        // Normalize MIME type for backend (remove codecs parameter)
+        // Backend expects "audio/webm" not "audio/webm;codecs=opus"
+        const normalizedMimeType = mimeType.split(';')[0]
+
+        const audioBlob = new Blob(chunksRef.current, { type: normalizedMimeType })
+        log.info('Created blob from chunks', {
+          size: audioBlob.size,
+          type: audioBlob.type,
+          originalMimeType: mimeType
+        })
+
+        // Resolve the promise if waiting
+        if (stopPromiseRef.current) {
+          stopPromiseRef.current.resolve(audioBlob)
+          stopPromiseRef.current = null
+        }
 
         // Get the URL if checkbox is checked
         const finalUrl = includeUrl && url.trim() ? url.trim() : undefined
 
-        // If we recorded in webm, convert to WAV in the browser
-        if (blobType === 'audio/webm') {
-          try {
-            const wavBlob = await convertToWav(audioBlob)
-            onRecordingComplete(wavBlob, finalUrl, selectedModel)
-          } catch (error) {
-            console.error('WAV conversion failed, sending original:', error)
-            onRecordingComplete(audioBlob, finalUrl, selectedModel)
-          }
-        } else {
-          onRecordingComplete(audioBlob, finalUrl, selectedModel)
+        // Check if blob has data
+        if (audioBlob.size === 0) {
+          log.error('CRITICAL: Final blob is empty! No audio was recorded.')
+          alert('Recording failed: No audio data captured. Please try again.')
+          return
         }
 
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop())
+        // Send WebM directly - like all modern production apps
+        // No conversion needed - backend supports audio/webm natively
+        log.info('Sending WebM blob directly to backend', {
+          size: audioBlob.size,
+          type: audioBlob.type
+        })
+        onRecordingComplete(audioBlob, finalUrl, selectedModel, enableDiarization, numSpeakers)
+
+        // IMPORTANT: Keep stream alive for next recording (prevents intermittent silence bug)
+        // Stream will be cleaned up only on component unmount
+        log.info('Keeping microphone stream alive for next recording')
+
+        // Close audio context (will be recreated on next recording)
+        if (audioContextRef.current) {
+          audioContextRef.current.close()
+          audioContextRef.current = null
+          analyserRef.current = null
+        }
       }
 
       mediaRecorderRef.current = mediaRecorder
-      mediaRecorder.start()
+
+      // Start recording with a timeslice to ensure regular data events
+      // This helps avoid the "no data" issue on quick stop
+      mediaRecorder.start(250) // Fire dataavailable every 250ms
+      log.info('MediaRecorder.start(250) called')
+
       setIsRecording(true)
       setRecordingTime(0)
 
@@ -174,40 +303,91 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
       timerRef.current = window.setInterval(() => {
         setRecordingTime((prev) => prev + 1)
       }, 1000)
+
+      log.info('Recording started successfully')
     } catch (error) {
-      console.error('Error accessing microphone:', error)
+      log.error('Error starting recording:', error)
       alert('Could not access microphone. Please check your permissions.')
     }
   }
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop()
-      setIsRecording(false)
-      setIsPaused(false)
+  const stopRecording = async () => {
+    if (!mediaRecorderRef.current || !isRecording) {
+      log.warn('stopRecording called but not recording')
+      return
+    }
 
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
+    log.info('Stopping recording...', {
+      state: mediaRecorderRef.current.state,
+      chunksCollected: chunksRef.current.length
+    })
+
+    // Create a promise to wait for the final dataavailable + onstop
+    const waitForStop = new Promise<Blob>((resolve, reject) => {
+      stopPromiseRef.current = { resolve, reject }
+
+      // Timeout after 5 seconds to prevent hanging
+      setTimeout(() => {
+        if (stopPromiseRef.current) {
+          log.error('Stop timeout - forcing resolution')
+          const audioBlob = new Blob(chunksRef.current, {
+            type: mediaRecorderRef.current?.mimeType || 'audio/webm'
+          })
+          stopPromiseRef.current.resolve(audioBlob)
+          stopPromiseRef.current = null
+        }
+      }, 5000)
+    })
+
+    try {
+      // Request final data and stop
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        // Request any buffered data before stopping
+        if (mediaRecorderRef.current.state === 'paused') {
+          log.info('Resuming before stop to capture final data')
+          mediaRecorderRef.current.resume()
+        }
+
+        mediaRecorderRef.current.stop()
+        log.info('MediaRecorder.stop() called, waiting for onstop event...')
+
+        // Wait for the onstop event to fire and process the blob
+        await waitForStop
+        log.info('Stop completed successfully')
       }
+    } catch (error) {
+      log.error('Error during stop:', error)
+    }
+
+    setIsRecording(false)
+    setIsPaused(false)
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
     }
   }
 
   const togglePause = () => {
-    if (mediaRecorderRef.current) {
-      if (isPaused) {
-        mediaRecorderRef.current.resume()
-        timerRef.current = window.setInterval(() => {
-          setRecordingTime((prev) => prev + 1)
-        }, 1000)
-      } else {
-        mediaRecorderRef.current.pause()
-        if (timerRef.current) {
-          clearInterval(timerRef.current)
-        }
-      }
-      setIsPaused(!isPaused)
+    if (!mediaRecorderRef.current) {
+      log.warn('togglePause called but no mediaRecorder')
+      return
     }
+
+    if (isPaused) {
+      log.info('Resuming recording')
+      mediaRecorderRef.current.resume()
+      timerRef.current = window.setInterval(() => {
+        setRecordingTime((prev) => prev + 1)
+      }, 1000)
+    } else {
+      log.info('Pausing recording')
+      mediaRecorderRef.current.pause()
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+    setIsPaused(!isPaused)
   }
 
   const formatTime = (seconds: number): string => {
@@ -334,6 +514,56 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                 onFocus={(e) => e.currentTarget.style.borderColor = '#6B9FED'}
                 onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(107, 159, 237, 0.3)'}
               />
+            )}
+
+            {/* Diarization Checkbox */}
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enableDiarization}
+                onChange={(e) => {
+                  setEnableDiarization(e.target.checked)
+                  if (!e.target.checked) {
+                    setNumSpeakers(undefined)
+                  }
+                }}
+                className="w-5 h-5 rounded border-2 focus:ring-2 bg-slate-700"
+                style={{
+                  borderColor: '#9B6FED',
+                  '--tw-ring-color': 'rgba(155, 111, 237, 0.5)'
+                } as React.CSSProperties}
+              />
+              <span className="text-white font-medium">Enable speaker diarization</span>
+            </label>
+
+            {/* Number of Speakers Input */}
+            {enableDiarization && (
+              <div className="space-y-2">
+                <label className="block text-white font-semibold text-sm">
+                  Number of Speakers (optional)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={numSpeakers ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setNumSpeakers(value ? parseInt(value) : undefined)
+                  }}
+                  placeholder="Auto-detect"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-700/50 text-white border-2 focus:outline-none focus:ring-2 placeholder-slate-400"
+                  style={{
+                    borderColor: 'rgba(155, 111, 237, 0.3)',
+                    '--tw-ring-color': 'rgba(155, 111, 237, 0.5)'
+                  } as React.CSSProperties}
+                  onFocus={(e) => e.currentTarget.style.borderColor = '#9B6FED'}
+                  onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(155, 111, 237, 0.3)'}
+                />
+                <p className="text-sm text-slate-400">
+                  Leave empty to automatically detect the number of speakers
+                </p>
+              </div>
             )}
           </div>
         )}

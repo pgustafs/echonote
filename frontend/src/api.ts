@@ -27,7 +27,14 @@ export async function getModels(): Promise<ModelsResponse> {
 /**
  * Upload and transcribe an audio file
  */
-export async function transcribeAudio(audioBlob: Blob, filename: string, url?: string, model?: string): Promise<Transcription> {
+export async function transcribeAudio(
+  audioBlob: Blob,
+  filename: string,
+  url?: string,
+  model?: string,
+  enableDiarization?: boolean,
+  numSpeakers?: number
+): Promise<Transcription> {
   const formData = new FormData()
   formData.append('file', audioBlob, filename)
 
@@ -37,6 +44,14 @@ export async function transcribeAudio(audioBlob: Blob, filename: string, url?: s
 
   if (model) {
     formData.append('model', model)
+  }
+
+  if (enableDiarization !== undefined) {
+    formData.append('enable_diarization', enableDiarization.toString())
+  }
+
+  if (numSpeakers !== undefined) {
+    formData.append('num_speakers', numSpeakers.toString())
   }
 
   const response = await fetch(`${API_BASE_URL}/transcribe`, {

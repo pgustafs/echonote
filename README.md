@@ -7,11 +7,12 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 ✨ **Modern UI** - Beautiful, responsive interface built with React and Tailwind CSS
 🎙️ **Audio Recording** - Record directly in the browser with pause/resume support
 🤖 **AI Transcription** - Powered by Whisper (large-v3-turbo) via vLLM
+👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
 💾 **Persistent Storage** - Audio files and transcriptions stored in database
 🎵 **Audio Playback** - Listen to your recordings with built-in player
 📱 **Responsive Design** - Works seamlessly on desktop and mobile
 🌓 **Dark Mode Ready** - Beautiful UI in both light and dark themes
-🎨 **Browser-Side Conversion** - WebM to WAV conversion happens in the browser (no FFmpeg needed!)
+🎨 **Format Conversion** - Server-side WebM to WAV conversion with FFmpeg (isolated subprocess)
 
 ## Tech Stack
 
@@ -21,13 +22,14 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 - **SQLite** - Development database (auto-created)
 - **PostgreSQL** - Production database support
 - **OpenAI SDK** - For Whisper API calls to vLLM server
+- **pyannote.audio** - Speaker diarization (CPU-only PyTorch)
 
 ### Frontend
 - **Vite** - Next generation frontend tooling
 - **React 18** - UI library with hooks
 - **TypeScript** - Type-safe JavaScript
 - **Tailwind CSS** - Utility-first CSS framework
-- **Web Audio API** - Browser-native audio processing for format conversion
+- **MediaRecorder API** - Browser-native audio recording
 
 ## Project Structure
 
@@ -74,7 +76,7 @@ echonote/
 - Node.js 20 or higher
 - Access to a vLLM server running Whisper (or use the default endpoint)
 
-**Note:** Audio format conversion (WebM to WAV) is handled in the browser using the Web Audio API, so no additional dependencies like FFmpeg are needed!
+**Note:** Audio is recorded in WebM format in the browser and sent directly to the backend. The server handles WebM to WAV conversion using FFmpeg in an isolated subprocess to ensure compatibility with the Whisper API and PyTorch/pyannote diarization pipeline.
 
 ### 1. Clone and Setup
 
@@ -147,6 +149,13 @@ BACKEND_HOST=0.0.0.0
 
 # CORS Configuration
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Speaker Diarization (Optional)
+# Get your token at: https://huggingface.co/settings/tokens
+# Accept license at: https://huggingface.co/pyannote/speaker-diarization-3.1
+# See SPEAKER_DIARIZATION.md for setup guide and troubleshooting
+HF_TOKEN=your_huggingface_token_here
+DIARIZATION_MODEL=pyannote/speaker-diarization-3.1
 ```
 
 ### Database Configuration
@@ -182,7 +191,9 @@ Once the backend is running, visit:
     - `file`: Audio file (required)
     - `url`: Optional URL associated with the voice note
     - `model`: Model to use for transcription (defaults to DEFAULT_MODEL)
-  - **Returns**: Transcription object with ID, text, metadata
+    - `enable_diarization`: Enable speaker diarization (default: false)
+    - `num_speakers`: Number of speakers (optional, auto-detect if not specified)
+  - **Returns**: Transcription object with ID, text, metadata (includes speaker timeline if diarization enabled)
   - **Supported audio types**: audio/wav, audio/webm, audio/mp3, audio/mpeg
 
 #### Listing & Retrieval
@@ -285,22 +296,31 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Use "Pause" if needed
    - Click "Stop & Transcribe"
 
-2. **View transcriptions**:
+2. **Enable speaker diarization** (optional):
+   - Check the "Enable speaker diarization" checkbox before recording
+   - Optionally specify the number of speakers (leave empty for auto-detection)
+   - The transcription will include a speaker timeline showing who spoke when
+
+3. **View transcriptions**:
    - All transcriptions appear in the list below
    - Click on any transcription to expand it
    - View full text and play audio
+   - If diarization was enabled, see the speaker timeline
    - Delete unwanted transcriptions
 
-3. **Play audio**:
+4. **Play audio**:
    - Expand a transcription
    - Click the play button or use the audio controls
 
 ## Troubleshooting
 
 ### Audio Format Conversion
-Audio is converted from WebM to WAV format **in the browser** using the Web Audio API before being sent to the backend. If you see conversion errors in the browser console:
-- Check that your browser supports the Web Audio API (all modern browsers do)
-- Ensure the recording completed successfully
+Audio is recorded in WebM format in the browser and sent directly to the backend. The server converts WebM to WAV using FFmpeg/pydub in an isolated subprocess.
+
+If you see conversion errors:
+- Ensure the recording completed successfully (check browser console for errors)
+- Verify FFmpeg is installed on the server (required for conversion)
+- Check server logs for conversion errors
 - Try recording a shorter clip to test
 
 ### Microphone Access
@@ -332,6 +352,32 @@ curl -X POST "https://your-vllm-server.com/v1/audio/transcriptions" \
   -H "Authorization: Bearer EMPTY" \
   -F "file=@test.wav" \
   -F "model=whisper-large-v3-turbo-quantizedw4a16"
+```
+
+### Speaker Diarization Issues
+
+For detailed speaker diarization setup, troubleshooting, and version compatibility information, see **[SPEAKER_DIARIZATION.md](SPEAKER_DIARIZATION.md)**.
+
+**Common issues:**
+
+```bash
+# Missing Hugging Face token
+# Error: "pyannote models require a Hugging Face token"
+# Solution: Set HF_TOKEN in your .env file
+
+# License not accepted
+# Error: "Cannot access gated model"
+# Solution: Visit https://huggingface.co/pyannote/speaker-diarization-3.1 and accept the license
+
+# std::bad_alloc crash
+# Error: Application crashes with "std::bad_alloc" after matplotlib log
+# Solution: Wrong pyannote.audio version installed (4.x instead of 3.3.2)
+pip uninstall pyannote.audio matplotlib -y
+pip install -r backend/requirements.txt
+
+# First-time model download
+# The first diarization will take longer (~300MB model download)
+# Subsequent requests will be faster
 ```
 
 ## Container Deployment
@@ -398,3 +444,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [Vite](https://vitejs.dev/) - Next generation frontend tooling
 - [OpenAI Whisper](https://openai.com/research/whisper) - Speech recognition model
 - [vLLM](https://github.com/vllm-project/vllm) - Fast LLM inference engine
+- [pyannote.audio](https://github.com/pyannote/pyannote-audio) - Speaker diarization toolkit

@@ -5,6 +5,13 @@ A modern voice transcription API that stores audio recordings and their
 transcriptions using Whisper (via vLLM) and SQLModel.
 """
 
+# Configure matplotlib before any imports (defensive measure for diarization)
+# This is also set in diarization.py, but setting it here ensures it's
+# configured even if matplotlib gets imported indirectly
+import os
+os.environ['MPLBACKEND'] = 'Agg'
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+
 import json
 import logging
 from io import BytesIO
@@ -18,6 +25,7 @@ from sqlmodel import Session, select
 
 from backend.config import settings
 from backend.database import create_db_and_tables, get_session
+from backend.diarization import get_diarization_service
 from backend.models import Priority, Transcription, TranscriptionList, TranscriptionPublic
 
 # Configure logging
@@ -99,6 +107,8 @@ def extract_transcription_text(response) -> str:
     return str(response)
 
 
+
+
 @app.on_event("startup")
 def on_startup():
     """Initialize database on application startup."""
@@ -136,6 +146,8 @@ async def transcribe_audio(
     file: Annotated[UploadFile, File(description="Audio file to transcribe")],
     url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
     model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
+    enable_diarization: Annotated[bool, Form(description="Enable speaker diarization")] = False,
+    num_speakers: Annotated[int | None, Form(description="Number of speakers (optional)")] = None,
     session: Session = Depends(get_session)
 ):
     """
@@ -145,6 +157,8 @@ async def transcribe_audio(
         file: Audio file uploaded via multipart/form-data
         url: Optional URL associated with the voice note
         model: Model name to use for transcription (defaults to DEFAULT_MODEL)
+        enable_diarization: Enable speaker diarization (default: False)
+        num_speakers: Number of speakers to detect (optional, auto-detect if not specified)
         session: Database session dependency
 
     Returns:
@@ -178,7 +192,9 @@ async def transcribe_audio(
             )
 
         logger.info(f"Processing audio file: {file.filename} ({len(audio_bytes)} bytes)")
+        logger.info(f"Content type: {file.content_type}")
         logger.info(f"Using model: {selected_model}")
+        logger.info(f"Diarization enabled: {enable_diarization}")
 
         # Get the base URL for the selected model
         model_base_url = settings.get_model_url(selected_model)
@@ -189,20 +205,191 @@ async def transcribe_audio(
             api_key=settings.API_KEY,
         )
 
-        # Prepare audio file for Whisper API
-        # Frontend converts to WAV format, so we can send directly
-        audio_file = BytesIO(audio_bytes)
-        audio_file.name = file.filename or "audio.wav"
+        # Convert WebM to WAV if needed (vLLM Whisper has issues with WebM)
+        # WebM conversion runs in isolated subprocess to prevent memory conflicts
+        if file.content_type == "audio/webm":
+            try:
+                from backend.audio_converter import convert_webm_to_wav
+                import gc
+                import sys
+
+                # Convert in isolated subprocess (see audio_converter.py)
+                wav_bytes = convert_webm_to_wav(audio_bytes)
+
+                # Clean up converter module from memory
+                modules_to_remove = [m for m in sys.modules.keys() if 'pydub' in m.lower()]
+                for module_name in modules_to_remove:
+                    del sys.modules[module_name]
+                del convert_webm_to_wav
+
+                # Force garbage collection to free memory
+                gc.collect()
+                gc.collect()
+                gc.collect()
+
+                logger.info("WebM converted to WAV, pydub modules cleaned up")
+
+                # Use WAV for transcription
+                audio_file = BytesIO(wav_bytes)
+                audio_file.name = file.filename.replace('.webm', '.wav') if file.filename else "audio.wav"
+
+                # Replace original WebM bytes with WAV bytes for diarization
+                audio_bytes = wav_bytes
+            except Exception as e:
+                logger.error(f"WebM to WAV conversion failed: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to convert WebM to WAV: {str(e)}"
+                )
+        else:
+            # Send other formats directly
+            audio_file = BytesIO(audio_bytes)
+            audio_file.name = file.filename or "audio.wav"
+
+        # Determine response format based on diarization
+        # Try verbose_json first (OpenAI standard), fallback to json if not supported
+        response_format = "verbose_json" if enable_diarization else "text"
 
         # Transcribe using Whisper via OpenAI API
-        transcription_response = await client.audio.transcriptions.create(
-            model=selected_model,
-            file=audio_file,
-            response_format="text"
-        )
+        try:
+            transcription_response = await client.audio.transcriptions.create(
+                model=selected_model,
+                file=audio_file,
+                response_format=response_format
+            )
+        except Exception as e:
+            # If verbose_json fails, try json format
+            error_msg = str(e)
+            if enable_diarization and ("verbose_json" in error_msg or "response_format" in error_msg):
+                logger.warning(f"verbose_json not supported by vLLM, falling back to json format. Error: {error_msg}")
+                response_format = "json"
+                audio_file.seek(0)  # Reset file position
+                transcription_response = await client.audio.transcriptions.create(
+                    model=selected_model,
+                    file=audio_file,
+                    response_format=response_format
+                )
+            else:
+                raise
 
-        # Extract text from response (handle different response formats)
-        transcription_text = extract_transcription_text(transcription_response)
+        # Log what we got from transcription
+        logger.info(f"Transcription API call completed successfully")
+        transcription_text_preview = extract_transcription_text(transcription_response)
+        logger.info(f"Transcription text preview: '{transcription_text_preview[:200]}'")
+
+        # Perform speaker diarization if enabled
+        if enable_diarization:
+            try:
+                logger.info("Starting speaker diarization...")
+
+                # Perform diarization to identify speaker segments
+                diarization_service = get_diarization_service()
+                diarization_results = diarization_service.diarize_audio(
+                    audio_bytes,
+                    num_speakers=num_speakers
+                )
+
+                logger.info(f"Diarization found {len(diarization_results)} segments")
+
+                # Check if we have valid results
+                if not diarization_results:
+                    logger.warning("No speaker segments found in diarization")
+                    transcription_text = extract_transcription_text(transcription_response)
+                    transcription_text += "\n\n[No speakers detected in audio]"
+                else:
+                    # Split audio by speaker segments and transcribe each individually
+                    logger.info("Transcribing each speaker segment individually")
+
+                    import io
+                    import soundfile as sf
+
+                    # Load audio using soundfile
+                    audio_data, sample_rate = sf.read(io.BytesIO(audio_bytes))
+                    logger.info(f"Loaded audio: sample_rate={sample_rate}, shape={audio_data.shape}")
+
+                    # Process each speaker segment
+                    transcribed_segments = []
+
+                    for idx, seg in enumerate(diarization_results):
+                        speaker = seg['speaker']
+                        start_time = seg['start']
+                        end_time = seg['end']
+                        duration = end_time - start_time
+
+                        # Skip very short segments (< 0.5 seconds)
+                        if duration < 0.5:
+                            logger.info(f"Skipping segment {idx+1}: too short ({duration:.2f}s)")
+                            continue
+
+                        # Extract audio chunk for this segment
+                        start_sample = int(start_time * sample_rate)
+                        end_sample = int(end_time * sample_rate)
+
+                        # Handle stereo/mono audio
+                        if len(audio_data.shape) == 2:
+                            audio_chunk = audio_data[start_sample:end_sample, :]
+                        else:
+                            audio_chunk = audio_data[start_sample:end_sample]
+
+                        # Write audio chunk to WAV buffer
+                        chunk_buffer = io.BytesIO()
+                        sf.write(chunk_buffer, audio_chunk, sample_rate, format='WAV')
+                        chunk_buffer.seek(0)
+                        chunk_buffer.name = f"chunk_{idx}.wav"
+
+                        # Transcribe this segment
+                        try:
+                            logger.info(
+                                f"Transcribing segment {idx+1}/{len(diarization_results)}: "
+                                f"{speaker} ({start_time:.1f}s-{end_time:.1f}s, {duration:.1f}s)"
+                            )
+
+                            chunk_transcription = await client.audio.transcriptions.create(
+                                model=selected_model,
+                                file=chunk_buffer,
+                                response_format="text"
+                            )
+
+                            chunk_text = extract_transcription_text(chunk_transcription).strip()
+
+                            if chunk_text:
+                                transcribed_segments.append({
+                                    'speaker': speaker,
+                                    'text': chunk_text,
+                                    'start': start_time,
+                                    'end': end_time
+                                })
+                                logger.info(f"Segment {idx+1} transcribed: '{chunk_text[:50]}...'")
+                            else:
+                                logger.warning(f"Segment {idx+1} returned empty transcription")
+
+                        except Exception as e:
+                            logger.error(f"Failed to transcribe segment {idx+1}: {e}")
+                            continue
+
+                    # Format output with speaker labels
+                    if transcribed_segments:
+                        output_lines = [
+                            f"[{seg['speaker']}] {seg['text']} "
+                            f"({seg['start']:.1f}s - {seg['end']:.1f}s)"
+                            for seg in transcribed_segments
+                        ]
+                        transcription_text = "\n".join(output_lines)
+                        logger.info(f"Successfully transcribed {len(transcribed_segments)} speaker segments")
+                    else:
+                        logger.warning("No segments were successfully transcribed")
+                        transcription_text = extract_transcription_text(transcription_response)
+                        transcription_text += "\n\n[Diarization succeeded but segment transcription failed]"
+
+                logger.info("Diarization completed successfully")
+            except Exception as e:
+                logger.error(f"Diarization failed: {e}", exc_info=True)
+                # Fallback to plain text
+                transcription_text = extract_transcription_text(transcription_response)
+                transcription_text += "\n\n[Diarization failed - transcription only]"
+        else:
+            # Extract text from response (handle different response formats)
+            transcription_text = extract_transcription_text(transcription_response)
 
         logger.info(f"Transcription completed: {len(transcription_text)} characters")
 

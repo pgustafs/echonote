@@ -11,5 +11,18 @@ alembic==1.13.1  # Database migrations
 # OpenAI client for Whisper API
 openai==1.55.3
 
+# Speaker Diarization (CPU-only PyTorch to reduce image size)
+# Install with: pip install -r requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu
+torchaudio==2.8.0+cpu
+soundfile  # Audio I/O library (requires libsndfile system package)
+matplotlib>=3.6,<3.10  # Compatible with pyannote 3.3.2, avoid 3.10 font_manager crash
+huggingface_hub<1.0  # Pin to version compatible with pyannote 3.3.2 use_auth_token
+pyannote.audio==3.3.2  # Use version before matplotlib 3.10 requirement
+
+# Audio format conversion
+pydub  # Audio conversion (requires ffmpeg system package)
+
 # Environment and utilities
 python-dotenv==1.0.1

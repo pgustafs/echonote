@@ -12,6 +12,8 @@ Environment variables:
 - BACKEND_PORT: Port for FastAPI server (default: 8000)
 - BACKEND_HOST: Host for FastAPI server (default: 0.0.0.0)
 - CORS_ORIGINS: Comma-separated list of allowed CORS origins
+- DIARIZATION_MODEL: Pyannote model for speaker diarization (default: pyannote/speaker-diarization-3.1)
+- HF_TOKEN: Hugging Face token for accessing gated models
 
 Legacy environment variables (deprecated, use MODELS instead):
 - MODEL_URL: URL of the vLLM Whisper server
@@ -95,6 +97,13 @@ class Settings:
         "audio/ogg",
         "audio/flac",
     ]
+
+    # Speaker Diarization Configuration
+    DIARIZATION_MODEL: str = os.getenv(
+        "DIARIZATION_MODEL",
+        "pyannote/speaker-diarization-3.1"
+    )
+    HF_TOKEN: str = os.getenv("HF_TOKEN", "")  # Hugging Face token for gated models
 
 
 settings = Settings()

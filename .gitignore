@@ -32,6 +32,9 @@ htmlcov/
 .env.production
 .env.development
 
+# kuberenetes manifest
+echonote-kube-priv.yaml
+
 # IDEs
 .vscode/
 .idea/
@@ -76,6 +79,7 @@ lerna-debug.log*
 *.bak
 *.swp
 *~.nib
+oom
 
 # Audio files (for testing - remove if you want to commit test files)
 # *.wav
