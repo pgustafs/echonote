@@ -7,12 +7,19 @@
     @apply min-h-screen;
     background: linear-gradient(180deg, #0E1117 0%, #161B22 100%);
     background-attachment: fixed;
+    background-color: #0E1117; /* Fallback solid color */
   }
 
   body {
     @apply min-h-screen font-sans antialiased;
     background: transparent;
+    background-color: transparent;
     color: #E6E8EB;
+  }
+
+  #root {
+    min-height: 100vh;
+    background: transparent;
   }
 
   /* Better text rendering */

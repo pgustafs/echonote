@@ -90,3 +90,5 @@ oom
 # Documentation builds
 docs/_build/
 site/
+
+*_USER_STORY.md

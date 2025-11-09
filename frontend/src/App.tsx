@@ -18,15 +18,20 @@ function App() {
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalTranscriptions, setTotalTranscriptions] = useState(0)
+  const pageSize = 10 // Should match DEFAULT_PAGE_SIZE in backend
+
   // Load models on mount
   useEffect(() => {
     loadModels()
   }, [])
 
-  // Load transcriptions on mount and when filter changes
+  // Load transcriptions on mount and when filter or page changes
   useEffect(() => {
     loadTranscriptions()
-  }, [priorityFilter])
+  }, [priorityFilter, currentPage])
 
   const loadModels = async () => {
     try {
@@ -43,8 +48,10 @@ function App() {
     try {
       setIsLoading(true)
       setError(null)
-      const data = await getTranscriptions(0, 50, priorityFilter)
+      const skip = (currentPage - 1) * pageSize
+      const data = await getTranscriptions(skip, pageSize, priorityFilter)
       setTranscriptions(data.transcriptions)
+      setTotalTranscriptions(data.total)
     } catch (err) {
       console.error('Error loading transcriptions:', err)
       setError('Failed to load transcriptions')
@@ -66,7 +73,7 @@ function App() {
     try {
       const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
       const filename = `recording-${Date.now()}.${extension}`
-      const transcription = await transcribeAudio(
+      await transcribeAudio(
         audioBlob,
         filename,
         url,
@@ -75,8 +82,9 @@ function App() {
         numSpeakers
       )
 
-      // Add new transcription to the top of the list
-      setTranscriptions([transcription, ...transcriptions])
+      // Reload transcriptions to show new item (will be on page 1)
+      setCurrentPage(1)
+      loadTranscriptions()
     } catch (err) {
       console.error('Error transcribing audio:', err)
       setError(err instanceof Error ? err.message : 'Transcription failed')
@@ -85,12 +93,23 @@ function App() {
     }
   }
 
-  const handleDelete = (id: number) => {
-    setTranscriptions(transcriptions.filter((t) => t.id !== id))
+  const handleDelete = () => {
+    // Reload current page after deletion
+    loadTranscriptions()
   }
 
   const handleUpdate = (id: number, updated: Transcription) => {
     setTranscriptions(transcriptions.map((t) => t.id === id ? updated : t))
+  }
+
+  const handleFilterChange = (priority: Priority | null) => {
+    setPriorityFilter(priority)
+    setCurrentPage(1) // Reset to first page when filter changes
+  }
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -191,7 +210,7 @@ function App() {
               </label>
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                 <button
-                  onClick={() => setPriorityFilter(null)}
+                  onClick={() => handleFilterChange(null)}
                   className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
                   style={priorityFilter === null ? {
                     background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
@@ -220,7 +239,7 @@ function App() {
                   All
                 </button>
                 <button
-                  onClick={() => setPriorityFilter('high')}
+                  onClick={() => handleFilterChange('high')}
                   className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
                   style={priorityFilter === 'high' ? {
                     background: '#E44C65',
@@ -247,7 +266,7 @@ function App() {
                   High
                 </button>
                 <button
-                  onClick={() => setPriorityFilter('medium')}
+                  onClick={() => handleFilterChange('medium')}
                   className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
                   style={priorityFilter === 'medium' ? {
                     background: '#F9A826',
@@ -274,7 +293,7 @@ function App() {
                   Medium
                 </button>
                 <button
-                  onClick={() => setPriorityFilter('low')}
+                  onClick={() => handleFilterChange('low')}
                   className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
                   style={priorityFilter === 'low' ? {
                     background: '#4ADE80',
@@ -313,11 +332,110 @@ function App() {
               <p className="font-medium text-base sm:text-lg" style={{ color: '#E6E8EB' }}>Loading transcriptions...</p>
             </div>
           ) : (
-            <TranscriptionList
-              transcriptions={transcriptions}
-              onDelete={handleDelete}
-              onUpdate={handleUpdate}
-            />
+            <>
+              <TranscriptionList
+                transcriptions={transcriptions}
+                onDelete={handleDelete}
+                onUpdate={handleUpdate}
+              />
+
+              {/* Pagination Controls */}
+              {totalTranscriptions > pageSize && (
+                <div className="mt-6 sm:mt-8 enterprise-card-dark p-4 sm:p-6">
+                  <div className="flex flex-col gap-4">
+                    {/* Page info */}
+                    <div className="text-sm font-medium text-center sm:text-left" style={{ color: '#9BA4B5' }}>
+                      Showing {Math.min((currentPage - 1) * pageSize + 1, totalTranscriptions)} - {Math.min(currentPage * pageSize, totalTranscriptions)} of {totalTranscriptions}
+                    </div>
+
+                    {/* Pagination buttons */}
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
+                      {/* Previous button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="btn-secondary min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 flex-shrink-0"
+                        aria-label="Previous page"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Page numbers */}
+                      {(() => {
+                        const totalPages = Math.ceil(totalTranscriptions / pageSize)
+                        const pages: number[] = []
+
+                        // Show max 3 page numbers on mobile, 5 on desktop
+                        const maxPages = window.innerWidth < 640 ? 3 : 5
+                        const sidePages = Math.floor((maxPages - 1) / 2)
+
+                        let startPage = Math.max(1, currentPage - sidePages)
+                        let endPage = Math.min(totalPages, currentPage + sidePages)
+
+                        // Adjust if at edges
+                        if (currentPage <= sidePages + 1) {
+                          endPage = Math.min(maxPages, totalPages)
+                        }
+                        if (currentPage >= totalPages - sidePages) {
+                          startPage = Math.max(1, totalPages - maxPages + 1)
+                        }
+
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(i)
+                        }
+
+                        return pages.map(page => (
+                          <button
+                            key={page}
+                            onClick={() => handlePageChange(page)}
+                            className="min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 font-semibold transition-all duration-200 flex-shrink-0"
+                            style={currentPage === page ? {
+                              background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
+                              color: 'white',
+                              borderRadius: '1.5rem',
+                              boxShadow: '0 4px 12px rgba(92, 124, 250, 0.25)'
+                            } : {
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              color: '#9BA4B5',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '1.5rem'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (currentPage !== page) {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                                e.currentTarget.style.color = '#E6E8EB'
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (currentPage !== page) {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
+                                e.currentTarget.style.color = '#9BA4B5'
+                              }
+                            }}
+                          >
+                            {page}
+                          </button>
+                        ))
+                      })()}
+
+                      {/* Next button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= Math.ceil(totalTranscriptions / pageSize)}
+                        className="btn-secondary min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 flex-shrink-0"
+                        aria-label="Next page"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>

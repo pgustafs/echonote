@@ -14,6 +14,8 @@ Environment variables:
 - CORS_ORIGINS: Comma-separated list of allowed CORS origins
 - DIARIZATION_MODEL: Pyannote model for speaker diarization (default: pyannote/speaker-diarization-3.1)
 - HF_TOKEN: Hugging Face token for accessing gated models
+- DEFAULT_PAGE_SIZE: Default number of transcriptions per page (default: 10)
+- MAX_PAGE_SIZE: Maximum allowed page size (default: 100)
 
 Legacy environment variables (deprecated, use MODELS instead):
 - MODEL_URL: URL of the vLLM Whisper server
@@ -104,6 +106,10 @@ class Settings:
         "pyannote/speaker-diarization-3.1"
     )
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")  # Hugging Face token for gated models
+
+    # Pagination Configuration
+    DEFAULT_PAGE_SIZE: int = int(os.getenv("DEFAULT_PAGE_SIZE", "10"))
+    MAX_PAGE_SIZE: int = int(os.getenv("MAX_PAGE_SIZE", "100"))
 
 
 settings = Settings()

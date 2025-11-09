@@ -156,6 +156,12 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 # See SPEAKER_DIARIZATION.md for setup guide and troubleshooting
 HF_TOKEN=your_huggingface_token_here
 DIARIZATION_MODEL=pyannote/speaker-diarization-3.1
+
+# Pagination Configuration
+# Number of transcriptions to show per page (default: 10)
+DEFAULT_PAGE_SIZE=10
+# Maximum allowed page size (default: 100)
+MAX_PAGE_SIZE=100
 ```
 
 ### Database Configuration
@@ -200,9 +206,10 @@ Once the backend is running, visit:
 - `GET /api/transcriptions` - List all transcriptions (paginated)
   - **Query params**:
     - `skip`: Number of records to skip (default: 0)
-    - `limit`: Maximum records to return (default: 50)
+    - `limit`: Maximum records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
     - `priority`: Filter by priority (low, medium, high)
   - **Returns**: List of transcriptions with total count
+  - **Note**: Page size can be configured via `DEFAULT_PAGE_SIZE` and `MAX_PAGE_SIZE` environment variables
 
 - `GET /api/transcriptions/{id}` - Get specific transcription
   - **Returns**: Transcription details without audio data

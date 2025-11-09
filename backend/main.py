@@ -433,7 +433,7 @@ async def transcribe_audio(
 @app.get("/api/transcriptions", response_model=TranscriptionList)
 def list_transcriptions(
     skip: int = 0,
-    limit: int = 50,
+    limit: int | None = None,
     priority: str | None = None,
     session: Session = Depends(get_session)
 ):
@@ -442,13 +442,20 @@ def list_transcriptions(
 
     Args:
         skip: Number of records to skip (offset)
-        limit: Maximum number of records to return
+        limit: Maximum number of records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
         priority: Optional priority filter (low, medium, high)
         session: Database session dependency
 
     Returns:
         TranscriptionList: Paginated list of transcriptions
     """
+    # Use default page size if not provided
+    if limit is None:
+        limit = settings.DEFAULT_PAGE_SIZE
+
+    # Enforce maximum page size
+    limit = min(limit, settings.MAX_PAGE_SIZE)
+
     # Build base query
     statement = select(Transcription)
 
