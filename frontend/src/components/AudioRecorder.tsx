@@ -397,8 +397,199 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   }
 
   return (
-    <div className="enterprise-card-dark p-6 sm:p-8 lg:p-10">
-      <div className="flex flex-col items-center space-y-6 sm:space-y-8">
+    <div className="enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden">
+      {/* Animated Background Effect - DNA Spiral with Crossing Lines */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+        <svg
+          className="w-full h-full"
+          viewBox="0 0 800 400"
+          preserveAspectRatio="xMidYMid slice"
+          style={{ opacity: 0.6 }}
+        >
+          <defs>
+            {/* Gradient for line 1 (blue to cyan) */}
+            <linearGradient id="lineGradient1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#5C7CFA" stopOpacity="0.8" />
+              <stop offset="50%" stopColor="#4ADEDE" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#9775FA" stopOpacity="0.8" />
+            </linearGradient>
+
+            {/* Gradient for line 2 (purple to cyan) */}
+            <linearGradient id="lineGradient2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#9775FA" stopOpacity="0.8" />
+              <stop offset="50%" stopColor="#4ADEDE" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#5C7CFA" stopOpacity="0.8" />
+            </linearGradient>
+
+            {/* Glow filter for the line */}
+            <filter id="lineGlow">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+
+            {/* Glow filter for cold dots (cyan/blue) */}
+            <filter id="dotGlowCold">
+              <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+
+            {/* Glow filter for warm dot (orange/yellow) */}
+            <filter id="dotGlowWarm">
+              <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+
+            {/* Radial gradient for traveling glow effect */}
+            <radialGradient id="travelGlow">
+              <stop offset="0%" stopColor="white" stopOpacity="0.8"/>
+              <stop offset="50%" stopColor="white" stopOpacity="0.4"/>
+              <stop offset="100%" stopColor="white" stopOpacity="0"/>
+            </radialGradient>
+          </defs>
+
+          {/* First curved path - DNA helix top strand (positioned higher y=150) */}
+          <path
+            d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+            stroke="url(#lineGradient1)"
+            strokeWidth="1"
+            fill="none"
+            filter="url(#lineGlow)"
+            opacity="0.7"
+          />
+
+          {/* Second curved path - DNA helix bottom strand (inverse curve, crosses first) */}
+          <path
+            d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+            stroke="url(#lineGradient2)"
+            strokeWidth="1"
+            fill="none"
+            filter="url(#lineGlow)"
+            opacity="0.7"
+          />
+
+          {/* Traveling glow circles on first path (2 cold dots) */}
+          {[0, 0.5].map((offset, index) => (
+            <g key={`glow1-${index}`}>
+              {/* Glow area behind/in front of dot */}
+              <circle
+                r="20"
+                fill="url(#travelGlow)"
+                opacity="0.3"
+              >
+                <animateMotion
+                  dur="12s"
+                  repeatCount="indefinite"
+                  begin={`${offset * 12}s`}
+                  keyPoints="0;0.7;1"
+                  keyTimes="0;0.7;1"
+                  calcMode="spline"
+                  keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"
+                >
+                  <mpath href="#motionPath1" />
+                </animateMotion>
+              </circle>
+              {/* Cold colored dot (cyan) */}
+              <circle
+                r="2.5"
+                fill="#4ADEDE"
+                filter="url(#dotGlowCold)"
+              >
+                <animateMotion
+                  dur="12s"
+                  repeatCount="indefinite"
+                  begin={`${offset * 12}s`}
+                  keyPoints="0;0.7;1"
+                  keyTimes="0;0.7;1"
+                  calcMode="spline"
+                  keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"
+                >
+                  <mpath href="#motionPath1" />
+                </animateMotion>
+                <animate
+                  attributeName="opacity"
+                  values="0.4;1;1;0.4"
+                  dur="12s"
+                  repeatCount="indefinite"
+                  begin={`${offset * 12}s`}
+                  keyTimes="0;0.3;0.7;1"
+                />
+              </circle>
+            </g>
+          ))}
+
+          {/* Traveling glow on second path (1 warm dot) */}
+          <g>
+            {/* Glow area behind/in front of dot */}
+            <circle
+              r="20"
+              fill="url(#travelGlow)"
+              opacity="0.3"
+            >
+              <animateMotion
+                dur="12s"
+                repeatCount="indefinite"
+                begin="0s"
+                keyPoints="0;0.7;1"
+                keyTimes="0;0.7;1"
+                calcMode="spline"
+                keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"
+              >
+                <mpath href="#motionPath2" />
+              </animateMotion>
+            </circle>
+            {/* Warm colored dot (orange/amber) */}
+            <circle
+              r="2.5"
+              fill="#F9A826"
+              filter="url(#dotGlowWarm)"
+            >
+              <animateMotion
+                dur="12s"
+                repeatCount="indefinite"
+                begin="0s"
+                keyPoints="0;0.7;1"
+                keyTimes="0;0.7;1"
+                calcMode="spline"
+                keySplines="0.4 0 0.2 1; 0.4 0 0.2 1"
+              >
+                <mpath href="#motionPath2" />
+              </animateMotion>
+              <animate
+                attributeName="opacity"
+                values="0.4;1;1;0.4"
+                dur="12s"
+                repeatCount="indefinite"
+                keyTimes="0;0.3;0.7;1"
+              />
+            </circle>
+          </g>
+
+          {/* Hidden paths for motion */}
+          <path
+            id="motionPath1"
+            d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+            fill="none"
+            stroke="none"
+          />
+          <path
+            id="motionPath2"
+            d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+            fill="none"
+            stroke="none"
+          />
+        </svg>
+      </div>
+
+      <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
         <div className="text-center">
           <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>
             <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

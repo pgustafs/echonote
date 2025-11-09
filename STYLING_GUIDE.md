@@ -301,6 +301,76 @@ style={{
 
 **File:** `frontend/src/components/AudioRecorder.tsx` (Lines 443-474)
 
+### DNA Spiral Background Animation
+
+#### Overview
+The recording area features an animated DNA-like double helix effect with glowing dots traveling along curved paths. Inspired by modern web animations (like vite.dev), this creates subtle "AI energy" visual interest.
+
+#### Two Crossing Curved Lines
+```tsx
+{/* First curved path - DNA helix top strand */}
+<path
+  d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+  stroke="url(#lineGradient1)"
+  strokeWidth="1"
+  fill="none"
+  filter="url(#lineGlow)"
+  opacity="0.7"
+/>
+
+{/* Second curved path - DNA helix bottom strand (inverse curve) */}
+<path
+  d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+  stroke="url(#lineGradient2)"
+  strokeWidth="1"
+  fill="none"
+  filter="url(#lineGlow)"
+  opacity="0.7"
+/>
+```
+
+#### Color Scheme
+- **Line 1 Gradient**: `#5C7CFA` (blue) → `#4ADEDE` (cyan) → `#9775FA` (purple)
+- **Line 2 Gradient**: `#9775FA` (purple) → `#4ADEDE` (cyan) → `#5C7CFA` (blue) - inverse
+- **Cold Dots** (2): `#4ADEDE` (cyan) - represents cool energy
+- **Warm Dot** (1): `#F9A826` (amber) - represents warm energy
+
+#### Traveling Glow Effect
+Each dot has a radial gradient circle (radius 20) that follows it along the path, creating a "traveling glow" effect:
+
+```tsx
+{/* Glow area that travels with dot */}
+<circle r="20" fill="url(#travelGlow)" opacity="0.3">
+  <animateMotion dur="12s" repeatCount="indefinite">
+    <mpath href="#motionPath1" />
+  </animateMotion>
+</circle>
+
+{/* Radial gradient definition */}
+<radialGradient id="travelGlow">
+  <stop offset="0%" stopColor="white" stopOpacity="0.8"/>
+  <stop offset="50%" stopColor="white" stopOpacity="0.4"/>
+  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+</radialGradient>
+```
+
+#### Technical Details
+- **Animation Duration**: 12 seconds per cycle
+- **Positioning**: Lines centered at y=150 to pass through microphone button
+- **Crossing Point**: Both paths intersect at (400, 150) - center of the card
+- **Dot Count**: 3 total (2 cold + 1 warm)
+- **Convergence**: Dots slow down at end using spline timing `keyPoints="0;0.7;1"`
+- **Z-Index**: Background layer (z-index: 0) with `pointer-events-none`
+
+#### Key Features
+1. **DNA Helix Shape**: Two lines with inverse curves create crossing pattern
+2. **Multiple Small Curves**: 3-4 wave oscillations per path for dynamic flow
+3. **Traveling Glow**: Radial halos follow dots, "lighting up" the line as they pass
+4. **Color Temperature**: Mix of warm (amber) and cool (cyan) for visual depth
+5. **Smooth Animation**: Spline-based easing for natural, organic motion
+
+**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 401-590)
+
 ---
 
 ## Interactions & Animations
@@ -478,7 +548,8 @@ gap: 0.5rem;
 | **Base Styles** | `frontend/src/index.css` | 1-200 |
 | **Header** | `frontend/src/App.tsx` | 99-138 |
 | **Filter Buttons** | `frontend/src/App.tsx` | 183-306 |
-| **Microphone Button** | `frontend/src/components/AudioRecorder.tsx` | 430-490 |
+| **DNA Spiral Animation** | `frontend/src/components/AudioRecorder.tsx` | 401-590 |
+| **Microphone Button** | `frontend/src/components/AudioRecorder.tsx` | 592-630 |
 | **Transcription Cards** | `frontend/src/components/TranscriptionList.tsx` | 138-360 |
 
 ### Common Color Changes
@@ -567,6 +638,71 @@ curl http://localhost:5173
   <p style={{ color: '#9BA4B5' }}>Card description</p>
 </div>
 ```
+
+### Customizing DNA Spiral Animation
+
+The DNA spiral animation is highly customizable. Here are common tweaks:
+
+#### Change Animation Speed
+```tsx
+// Faster (8 seconds)
+<animateMotion dur="8s" repeatCount="indefinite">
+
+// Slower (16 seconds)
+<animateMotion dur="16s" repeatCount="indefinite">
+```
+
+#### Adjust Dot Colors
+```tsx
+// Cold dots (currently cyan)
+fill="#4ADEDE"
+
+// Warm dot (currently amber)
+fill="#F9A826"
+
+// Try other colors:
+// Electric blue: #5C7CFA
+// Purple: #9775FA
+// Mint green: #4ADE80
+```
+
+#### Change Glow Intensity
+```tsx
+// Stronger glow (current: stdDeviation="6")
+<filter id="dotGlowCold">
+  <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+</filter>
+
+// Subtle glow
+<filter id="dotGlowCold">
+  <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+</filter>
+```
+
+#### Adjust Number of Dots
+```tsx
+// Add more dots to first path
+{[0, 0.33, 0.66].map((offset, index) => (
+  // 3 dots instead of 2
+))}
+
+// Change timing offset for different spacing
+{[0, 0.25, 0.5, 0.75].map((offset, index) => (
+  // 4 evenly spaced dots
+))}
+```
+
+#### Change Traveling Glow Size
+```tsx
+// Larger glow halo (current: r="20")
+<circle r="30" fill="url(#travelGlow)" opacity="0.3">
+
+// Smaller, tighter glow
+<circle r="15" fill="url(#travelGlow)" opacity="0.3">
+```
+
+#### Disable Animation (Static Lines Only)
+Remove all `<circle>` elements and keep only the `<path>` elements for static DNA lines without moving dots.
 
 ---
 
