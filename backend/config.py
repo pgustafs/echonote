@@ -159,5 +159,13 @@ class Settings:
     DEFAULT_PAGE_SIZE: int = int(os.getenv("DEFAULT_PAGE_SIZE", "10"))
     MAX_PAGE_SIZE: int = int(os.getenv("MAX_PAGE_SIZE", "100"))
 
+    # JWT Authentication Configuration
+    JWT_SECRET_KEY: str = os.getenv(
+        "JWT_SECRET_KEY",
+        "your-secret-key-change-this-in-production"  # MUST be changed in production
+    )
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_DAYS: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "30"))
+
 
 settings = Settings()

@@ -7,9 +7,12 @@ import { useEffect, useState } from 'react'
 import { getModels, getTranscriptions, transcribeAudio } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
+import Login from './components/Login'
+import { useAuth } from './contexts/AuthContext'
 import { Priority, Transcription } from './types'
 
 function App() {
+  const { user, logout, isLoading: authLoading } = useAuth()
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -23,15 +26,19 @@ function App() {
   const [totalTranscriptions, setTotalTranscriptions] = useState(0)
   const pageSize = 10 // Should match DEFAULT_PAGE_SIZE in backend
 
-  // Load models on mount
+  // Load models on mount (only when user is authenticated)
   useEffect(() => {
-    loadModels()
-  }, [])
+    if (user) {
+      loadModels()
+    }
+  }, [user])
 
-  // Load transcriptions on mount and when filter or page changes
+  // Load transcriptions on mount and when filter or page changes (only when user is authenticated)
   useEffect(() => {
-    loadTranscriptions()
-  }, [priorityFilter, currentPage])
+    if (user) {
+      loadTranscriptions()
+    }
+  }, [priorityFilter, currentPage, user])
 
   const loadModels = async () => {
     try {
@@ -112,6 +119,20 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Show loading spinner while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-16 h-16 spinner"></div>
+      </div>
+    )
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return <Login />
+  }
+
   return (
     <div className="min-h-screen">
       {/* Header with animated gradient background */}
@@ -145,12 +166,45 @@ function App() {
                 </p>
               </div>
             </div>
-            {/* Stats badge - hidden on mobile */}
-            <div className="hidden sm:flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="text-white font-semibold">{transcriptions.length} Recordings</span>
+            {/* User info and logout */}
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* Stats badge - hidden on mobile */}
+              <div className="hidden sm:flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-white font-semibold">{totalTranscriptions} Recording{totalTranscriptions !== 1 ? 's' : ''}</span>
+              </div>
+
+              {/* User info */}
+              <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 sm:px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-white text-sm sm:text-base font-medium">{user.username}</span>
+              </div>
+
+              {/* Logout button */}
+              <button
+                onClick={logout}
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-2xl transition-all duration-200 min-h-[44px]"
+                style={{
+                  background: 'rgba(228, 76, 101, 0.2)',
+                  color: '#FF6B6B',
+                  border: '1px solid rgba(228, 76, 101, 0.3)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(228, 76, 101, 0.3)'
+                  e.currentTarget.style.color = '#FF8787'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(228, 76, 101, 0.2)'
+                  e.currentTarget.style.color = '#FF6B6B'
+                }}
+                title="Sign out"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>

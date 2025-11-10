@@ -5,6 +5,20 @@
 import { Priority, Transcription, TranscriptionList } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const TOKEN_KEY = 'echonote_token'
+
+/**
+ * Get authorization headers with JWT token if available
+ */
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    return {
+      Authorization: `Bearer ${token}`,
+    }
+  }
+  return {}
+}
 
 export interface ModelsResponse {
   models: string[]
@@ -15,7 +29,9 @@ export interface ModelsResponse {
  * Get available transcription models
  */
 export async function getModels(): Promise<ModelsResponse> {
-  const response = await fetch(`${API_BASE_URL}/models`)
+  const response = await fetch(`${API_BASE_URL}/models`, {
+    headers: getAuthHeaders(),
+  })
 
   if (!response.ok) {
     throw new Error('Failed to fetch models')
@@ -56,6 +72,7 @@ export async function transcribeAudio(
 
   const response = await fetch(`${API_BASE_URL}/transcribe`, {
     method: 'POST',
+    headers: getAuthHeaders(),
     body: formData,
   })
 
@@ -80,7 +97,9 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
     params.append('priority', priority)
   }
 
-  const response = await fetch(`${API_BASE_URL}/transcriptions?${params}`)
+  const response = await fetch(`${API_BASE_URL}/transcriptions?${params}`, {
+    headers: getAuthHeaders(),
+  })
 
   if (!response.ok) {
     throw new Error('Failed to fetch transcriptions')
@@ -93,7 +112,9 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
  * Get a specific transcription by ID
  */
 export async function getTranscription(id: number): Promise<Transcription> {
-  const response = await fetch(`${API_BASE_URL}/transcriptions/${id}`)
+  const response = await fetch(`${API_BASE_URL}/transcriptions/${id}`, {
+    headers: getAuthHeaders(),
+  })
 
   if (!response.ok) {
     throw new Error('Transcription not found')
@@ -104,8 +125,13 @@ export async function getTranscription(id: number): Promise<Transcription> {
 
 /**
  * Get audio URL for a transcription
+ * Note: For authenticated audio access, append token as query param in the audio element
  */
 export function getAudioUrl(id: number): string {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    return `${API_BASE_URL}/transcriptions/${id}/audio?token=${encodeURIComponent(token)}`
+  }
   return `${API_BASE_URL}/transcriptions/${id}/audio`
 }
 
@@ -119,6 +145,7 @@ export async function updateTranscriptionPriority(id: number, priority: Priority
 
   const response = await fetch(`${API_BASE_URL}/transcriptions/${id}?${params}`, {
     method: 'PATCH',
+    headers: getAuthHeaders(),
   })
 
   if (!response.ok) {
@@ -135,6 +162,7 @@ export async function updateTranscriptionPriority(id: number, priority: Priority
 export async function deleteTranscription(id: number): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/transcriptions/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   })
 
   if (!response.ok) {

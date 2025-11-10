@@ -15,7 +15,7 @@ os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
 import json
 import logging
 from io import BytesIO
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,10 +23,12 @@ from fastapi.responses import Response
 from openai import AsyncOpenAI
 from sqlmodel import Session, select
 
+from backend.auth import get_current_active_user
+from backend.auth_routes import router as auth_router
 from backend.config import settings
 from backend.database import create_db_and_tables, get_session
 from backend.diarization import get_diarization_service
-from backend.models import Priority, Transcription, TranscriptionList, TranscriptionPublic
+from backend.models import Priority, Transcription, TranscriptionList, TranscriptionPublic, User
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +52,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include authentication routes
+app.include_router(auth_router)
 
 # OpenAI clients will be created dynamically per request based on selected model
 logger.info(f"Available transcription models: {list(settings.MODELS.keys())}")
@@ -155,10 +160,13 @@ async def transcribe_audio(
     model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
     enable_diarization: Annotated[bool, Form(description="Enable speaker diarization")] = False,
     num_speakers: Annotated[int | None, Form(description="Number of speakers (optional)")] = None,
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
     Transcribe an audio file and store it in the database.
+
+    Requires authentication. Transcription will be associated with the authenticated user.
 
     Args:
         file: Audio file uploaded via multipart/form-data
@@ -407,6 +415,7 @@ async def transcribe_audio(
             audio_filename=file.filename or "audio.wav",
             audio_content_type=file.content_type or "audio/wav",
             url=url if url and url.strip() else None,
+            user_id=current_user.id,
         )
 
         session.add(db_transcription)
@@ -442,19 +451,23 @@ def list_transcriptions(
     skip: int = 0,
     limit: int | None = None,
     priority: str | None = None,
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
-    List all transcriptions with pagination and optional priority filtering.
+    List user's transcriptions with pagination and optional priority filtering.
+
+    Requires authentication. Only returns transcriptions belonging to the authenticated user.
 
     Args:
         skip: Number of records to skip (offset)
         limit: Maximum number of records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
         priority: Optional priority filter (low, medium, high)
+        current_user: Authenticated user
         session: Database session dependency
 
     Returns:
-        TranscriptionList: Paginated list of transcriptions
+        TranscriptionList: Paginated list of user's transcriptions
     """
     # Use default page size if not provided
     if limit is None:
@@ -463,8 +476,8 @@ def list_transcriptions(
     # Enforce maximum page size
     limit = min(limit, settings.MAX_PAGE_SIZE)
 
-    # Build base query
-    statement = select(Transcription)
+    # Build base query - filter by user
+    statement = select(Transcription).where(Transcription.user_id == current_user.id)
 
     # Add priority filter if provided
     if priority:
@@ -508,21 +521,32 @@ def list_transcriptions(
 @app.get("/api/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
 def get_transcription(
     transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
     Get a specific transcription by ID.
 
+    Requires authentication. Only returns transcription if it belongs to the authenticated user.
+
     Args:
         transcription_id: ID of the transcription
+        current_user: Authenticated user
         session: Database session dependency
 
     Returns:
         TranscriptionPublic: Transcription details
+
+    Raises:
+        HTTPException: If transcription not found or doesn't belong to user
     """
     transcription = session.get(Transcription, transcription_id)
     if not transcription:
         raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Verify ownership
+    if transcription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this transcription")
 
     return TranscriptionPublic(
         id=transcription.id,
@@ -537,23 +561,61 @@ def get_transcription(
 
 
 @app.get("/api/transcriptions/{transcription_id}/audio")
-def get_audio(
+async def get_audio(
     transcription_id: int,
+    token: Optional[str] = None,
     session: Session = Depends(get_session)
 ):
     """
     Download the audio file for a specific transcription.
 
+    Requires authentication via token query parameter (for HTML audio elements).
+    Only allows download if transcription belongs to the authenticated user.
+
     Args:
         transcription_id: ID of the transcription
+        token: JWT token as query parameter (required for audio playback)
         session: Database session dependency
 
     Returns:
         Response: Audio file as binary data
+
+    Raises:
+        HTTPException: If transcription not found or doesn't belong to user
     """
+    # Authenticate using token from query parameter
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token required"
+        )
+
+    try:
+        from backend.auth import decode_access_token, get_user_by_username
+        token_data = decode_access_token(token)
+        user = get_user_by_username(session, username=token_data.username)
+
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or inactive user"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token"
+        )
+
     transcription = session.get(Transcription, transcription_id)
     if not transcription:
         raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Verify ownership
+    if transcription.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this transcription")
 
     return Response(
         content=transcription.audio_data,
@@ -568,18 +630,25 @@ def get_audio(
 def update_transcription_priority(
     transcription_id: int,
     priority: str,
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
     Update the priority of a transcription.
 
+    Requires authentication. Only allows update if transcription belongs to the authenticated user.
+
     Args:
         transcription_id: ID of the transcription to update
         priority: New priority value (low, medium, high)
+        current_user: Authenticated user
         session: Database session dependency
 
     Returns:
         TranscriptionPublic: Updated transcription
+
+    Raises:
+        HTTPException: If transcription not found or doesn't belong to user
     """
     # Validate priority value
     valid_priorities = [p.value for p in Priority]
@@ -592,6 +661,10 @@ def update_transcription_priority(
     transcription = session.get(Transcription, transcription_id)
     if not transcription:
         raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Verify ownership
+    if transcription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this transcription")
 
     transcription.priority = priority
     session.add(transcription)
@@ -615,21 +688,32 @@ def update_transcription_priority(
 @app.delete("/api/transcriptions/{transcription_id}")
 def delete_transcription(
     transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
     Delete a transcription and its audio file.
 
+    Requires authentication. Only allows deletion if transcription belongs to the authenticated user.
+
     Args:
         transcription_id: ID of the transcription to delete
+        current_user: Authenticated user
         session: Database session dependency
 
     Returns:
         dict: Success message
+
+    Raises:
+        HTTPException: If transcription not found or doesn't belong to user
     """
     transcription = session.get(Transcription, transcription_id)
     if not transcription:
         raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Verify ownership
+    if transcription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this transcription")
 
     session.delete(transcription)
     session.commit()

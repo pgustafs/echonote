@@ -2,14 +2,14 @@
 SQLModel database models for EchoNote application.
 
 This module defines the database schema for storing voice transcriptions
-with their associated audio files.
+with their associated audio files and user authentication.
 """
 
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Priority(str, Enum):
@@ -19,12 +19,75 @@ class Priority(str, Enum):
     HIGH = "high"
 
 
+# ============================================================================
+# User Models
+# ============================================================================
+
+class User(SQLModel, table=True):
+    """
+    Database model for user accounts.
+
+    Stores user credentials and metadata for authentication.
+    """
+    __tablename__ = "users"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True, min_length=3, max_length=50)
+    email: str = Field(index=True, unique=True)
+    hashed_password: str = Field(description="Bcrypt hashed password")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="Timestamp when user was created"
+    )
+    is_active: bool = Field(default=True, description="Whether user account is active")
+
+    # Relationship to transcriptions
+    transcriptions: list["Transcription"] = Relationship(back_populates="user")
+
+
+class UserCreate(SQLModel):
+    """Schema for user registration"""
+    username: str = Field(min_length=3, max_length=50)
+    email: str
+    password: str = Field(min_length=8, max_length=100)
+
+
+class UserPublic(SQLModel):
+    """Public schema for user (without password)"""
+    id: int
+    username: str
+    email: str
+    created_at: datetime
+    is_active: bool
+
+
+class UserLogin(SQLModel):
+    """Schema for user login"""
+    username: str
+    password: str
+
+
+class Token(SQLModel):
+    """Schema for JWT token response"""
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenData(SQLModel):
+    """Schema for JWT token payload"""
+    username: Optional[str] = None
+
+
+# ============================================================================
+# Transcription Models
+# ============================================================================
+
 class Transcription(SQLModel, table=True):
     """
     Database model for storing voice transcriptions.
 
     Stores the transcribed text, audio file as binary data,
-    and metadata about the recording.
+    and metadata about the recording. Each transcription belongs to a user.
     """
     __tablename__ = "transcriptions"
 
@@ -52,6 +115,12 @@ class Transcription(SQLModel, table=True):
         default=None,
         description="Optional URL associated with the voice note"
     )
+
+    # Foreign key to user
+    user_id: int = Field(foreign_key="users.id", index=True)
+
+    # Relationship to user
+    user: Optional[User] = Relationship(back_populates="transcriptions")
 
 
 class TranscriptionCreate(SQLModel):
