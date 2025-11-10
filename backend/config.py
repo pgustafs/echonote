@@ -6,6 +6,10 @@ Environment variables:
   Example: '{"whisper-large-v3-turbo": "https://...", "whisper-medium": "https://..."}'
 - DEFAULT_MODEL: Name of the default model (must be a key in MODELS)
 - API_KEY: API key for vLLM server
+- ASSISTANT_MODELS: JSON object mapping AI assistant model names to base URLs
+  Example: '{"llama-3.1-70b": "https://...", "qwen-2.5-72b": "https://..."}'
+- DEFAULT_ASSISTANT_MODEL: Name of the default AI assistant model (must be a key in ASSISTANT_MODELS)
+- ASSISTANT_API_KEY: API key for AI assistant vLLM server (defaults to API_KEY if not set)
 - DATABASE_URL: PostgreSQL connection string (production)
 - SQLITE_DB: SQLite database filename (development, default: echonote.db)
 - DB_ECHO: Enable SQL query logging (default: false)
@@ -33,7 +37,7 @@ class Settings:
     # Whisper/vLLM Configuration
     # Support both new MODELS format and legacy MODEL_URL/MODEL_NAME
     def _load_models(self) -> Dict[str, str]:
-        """Load model configurations from environment variables."""
+        """Load transcription model configurations from environment variables."""
         models_json = os.getenv("MODELS")
 
         if models_json:
@@ -54,15 +58,34 @@ class Settings:
         )
         return {model_name: model_url}
 
+    def _load_assistant_models(self) -> Dict[str, str]:
+        """Load AI assistant model configurations from environment variables."""
+        models_json = os.getenv("ASSISTANT_MODELS")
+
+        if models_json:
+            try:
+                return json.loads(models_json)
+            except json.JSONDecodeError as e:
+                print(f"Warning: Failed to parse ASSISTANT_MODELS env var: {e}")
+                return {}
+
+        # Return empty dict if not configured (assistant models are optional)
+        return {}
+
     MODELS: Dict[str, str] = None  # Will be set in __init__
     DEFAULT_MODEL: str = None  # Will be set in __init__
     API_KEY: str = os.getenv("API_KEY", "EMPTY")
 
+    ASSISTANT_MODELS: Dict[str, str] = None  # Will be set in __init__
+    DEFAULT_ASSISTANT_MODEL: str = None  # Will be set in __init__
+    ASSISTANT_API_KEY: str = None  # Will be set in __init__
+
     def __init__(self):
         """Initialize settings and load models."""
+        # Load transcription models
         self.MODELS = self._load_models()
 
-        # Set default model
+        # Set default transcription model
         default_from_env = os.getenv("DEFAULT_MODEL")
         if default_from_env and default_from_env in self.MODELS:
             self.DEFAULT_MODEL = default_from_env
@@ -70,11 +93,36 @@ class Settings:
             # Use the first model as default
             self.DEFAULT_MODEL = list(self.MODELS.keys())[0]
 
+        # Load AI assistant models
+        self.ASSISTANT_MODELS = self._load_assistant_models()
+
+        # Set default assistant model
+        if self.ASSISTANT_MODELS:
+            default_assistant_from_env = os.getenv("DEFAULT_ASSISTANT_MODEL")
+            if default_assistant_from_env and default_assistant_from_env in self.ASSISTANT_MODELS:
+                self.DEFAULT_ASSISTANT_MODEL = default_assistant_from_env
+            else:
+                # Use the first assistant model as default
+                self.DEFAULT_ASSISTANT_MODEL = list(self.ASSISTANT_MODELS.keys())[0]
+        else:
+            self.DEFAULT_ASSISTANT_MODEL = None
+
+        # Set assistant API key (defaults to main API_KEY if not specified)
+        self.ASSISTANT_API_KEY = os.getenv("ASSISTANT_API_KEY", self.API_KEY)
+
     def get_model_url(self, model_name: str) -> str:
-        """Get the base URL for a specific model."""
+        """Get the base URL for a specific transcription model."""
         if model_name not in self.MODELS:
             raise ValueError(f"Unknown model: {model_name}. Available models: {list(self.MODELS.keys())}")
         return self.MODELS[model_name]
+
+    def get_assistant_model_url(self, model_name: str) -> str:
+        """Get the base URL for a specific AI assistant model."""
+        if not self.ASSISTANT_MODELS:
+            raise ValueError("No AI assistant models configured")
+        if model_name not in self.ASSISTANT_MODELS:
+            raise ValueError(f"Unknown assistant model: {model_name}. Available models: {list(self.ASSISTANT_MODELS.keys())}")
+        return self.ASSISTANT_MODELS[model_name]
 
     # Server Configuration
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))

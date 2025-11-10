@@ -52,8 +52,15 @@ app.add_middleware(
 )
 
 # OpenAI clients will be created dynamically per request based on selected model
-logger.info(f"Available models: {list(settings.MODELS.keys())}")
-logger.info(f"Default model: {settings.DEFAULT_MODEL}")
+logger.info(f"Available transcription models: {list(settings.MODELS.keys())}")
+logger.info(f"Default transcription model: {settings.DEFAULT_MODEL}")
+
+# Log AI assistant models if configured
+if settings.ASSISTANT_MODELS:
+    logger.info(f"Available AI assistant models: {list(settings.ASSISTANT_MODELS.keys())}")
+    logger.info(f"Default AI assistant model: {settings.DEFAULT_ASSISTANT_MODEL}")
+else:
+    logger.info("No AI assistant models configured")
 
 
 def extract_transcription_text(response) -> str:
