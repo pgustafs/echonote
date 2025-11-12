@@ -24,7 +24,7 @@ metadata:
   namespace: echonote
 type: Opaque
 stringData:
-  JWT_SECRET_KEY: "openssl rand -hex 32b"
+  JWT_SECRET_KEY: "CHANGE_ME(openssl rand -hex 32b)"
 
 ---
 apiVersion: v1
@@ -34,7 +34,7 @@ metadata:
   namespace: echonote
 type: Opaque
 stringData:
-  HF_TOKEN: "MY_HF_TOKEN
+  HF_TOKEN: "CHANGE_TO_MY_HF_TOKEN"
 
 ---
 apiVersion: v1
