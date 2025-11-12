@@ -11,6 +11,7 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
 💾 **Persistent Storage** - Audio files and transcriptions stored in database with user ownership
 🎵 **Audio Playback** - Listen to your recordings with built-in player
+📥 **Download Package** - Download transcriptions as ZIP with WAV audio and config.json
 📱 **Responsive Design** - Works seamlessly on desktop and mobile
 🌓 **Dark Mode Ready** - Beautiful UI in both light and dark themes
 🎨 **Format Conversion** - Server-side WebM to WAV conversion with FFmpeg (isolated subprocess)
@@ -268,6 +269,25 @@ Once the backend is running, visit:
   - **Headers**: `Authorization: Bearer <token>`
   - **Returns**: Binary audio file
   - **Authorization**: User must own the transcription (403 Forbidden otherwise)
+  - **Note**: For HTML `<audio>` elements, append token as query parameter: `/audio?token=<jwt_token>`
+
+- `GET /api/transcriptions/{id}/download` - Download transcription package (requires authentication)
+  - **Headers**: `Authorization: Bearer <token>`
+  - **Returns**: ZIP file containing:
+    - `{username}.wav`: Audio file in WAV format
+    - `config.json`: Configuration file with transcript and audio filename
+  - **Authorization**: User must own the transcription (403 Forbidden otherwise)
+  - **ZIP filename**: `transcription_{id}_{username}.zip`
+  - **config.json format**:
+    ```json
+    {
+      "username": {
+        "transcript": "Full transcription text here",
+        "audio_file": "username.wav"
+      }
+    }
+    ```
+  - **Note**: Audio is automatically converted to WAV format if stored in another format
 
 #### Updates & Deletion
 - `PATCH /api/transcriptions/{id}` - Update transcription priority (requires authentication)
@@ -387,7 +407,17 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Expand a transcription
    - Click the play button or use the audio controls
 
-7. **Logout**:
+7. **Download transcriptions**:
+   - Expand any transcription
+   - Click the blue "Download" button
+   - A ZIP file will be downloaded containing:
+     - `{username}.wav`: Your audio recording in WAV format
+     - `config.json`: Transcript text and metadata
+   - The download includes your complete transcription and high-quality audio
+   - Works from both the web UI and the API
+   - **Use case**: Archive recordings, share with others, or integrate with other tools
+
+8. **Logout**:
    - Click the "Logout" button in the header
    - Your token will be cleared and you'll return to the login page
 
@@ -528,6 +558,309 @@ podman ps
 ✅ Compatible with Kubernetes/OpenShift
 
 For detailed container deployment instructions, see [CONTAINER.md](CONTAINER.md).
+
+## OpenShift Deployment
+
+EchoNote can be deployed to OpenShift 4.19 with PostgreSQL 16 and images hosted on Quay.io.
+
+### Prerequisites
+
+- OpenShift 4.19 cluster access
+- `oc` CLI tool installed and configured
+- Quay.io account for storing container images
+- PostgreSQL 16 support (rhel10/postgresql-16)
+
+### Quick OpenShift Deployment
+
+```bash
+# 1. Build and push images to Quay.io
+podman login quay.io
+podman build -t quay.io/YOUR_USERNAME/echonote-backend:latest backend/
+podman push quay.io/YOUR_USERNAME/echonote-backend:latest
+
+podman build -t quay.io/YOUR_USERNAME/echonote-frontend:latest frontend/
+podman push quay.io/YOUR_USERNAME/echonote-frontend:latest
+
+# 2. Update the deployment file with your Quay.io username
+sed -i 's/pgustafs/YOUR_USERNAME/g' openshift-deployment.yaml
+
+# 3. Update PostgreSQL password (IMPORTANT: Change in production!)
+# Edit openshift-deployment.yaml and update the postgresql-secret password
+
+# 4. Deploy to OpenShift (initial deployment)
+oc apply -f openshift-deployment.yaml
+
+# 5. Get your OpenShift route URLs
+# These are auto-generated URLs that OpenShift creates for external access
+oc get routes -n echonote
+
+# Example output:
+# NAME       HOST/PORT                                          PATH   SERVICES   PORT   TERMINATION   WILDCARD
+# backend    backend-echonote.apps.YOUR_CLUSTER.example.com            backend    http   edge          None
+# frontend   frontend-echonote.apps.YOUR_CLUSTER.example.com           frontend   http   edge          None
+
+# Get URLs directly:
+echo "Frontend URL: https://$(oc get route frontend -n echonote -o jsonpath='{.spec.host}')"
+echo "Backend URL: https://$(oc get route backend -n echonote -o jsonpath='{.spec.host}')"
+
+# 6. Update CORS origins with your actual route URLs
+# Edit openshift-deployment.yaml ConfigMap section:
+# Find the CORS_ORIGINS line and update it with your route URLs from step 5
+# CORS_ORIGINS: "https://frontend-echonote.apps.YOUR_CLUSTER.example.com,https://backend-echonote.apps.YOUR_CLUSTER.example.com"
+
+# Apply the updated configuration
+oc apply -f openshift-deployment.yaml
+
+# Restart backend to pick up new CORS settings
+oc rollout restart deployment/backend -n echonote
+
+# 7. Initialize the database (run once)
+# Wait for all pods to be ready
+oc get pods -n echonote -w
+
+# Run database migration
+oc exec -n echonote deployment/backend -- alembic upgrade head
+
+# 8. Access the application
+# Open the frontend URL from step 5 in your browser
+# Example: https://frontend-echonote.apps.YOUR_CLUSTER.example.com
+```
+
+### Understanding OpenShift Routes
+
+OpenShift automatically creates publicly accessible URLs for your services through Routes. Here's how to work with them:
+
+```bash
+# List all routes in the echonote namespace
+oc get routes -n echonote
+
+# Get detailed route information
+oc describe route frontend -n echonote
+oc describe route backend -n echonote
+
+# Get just the hostname for frontend
+oc get route frontend -n echonote -o jsonpath='{.spec.host}'
+# Output example: frontend-echonote.apps.cluster.example.com
+
+# Get the full URL with https://
+echo "https://$(oc get route frontend -n echonote -o jsonpath='{.spec.host}')"
+
+# Get both URLs in one command
+echo "Frontend: https://$(oc get route frontend -n echonote -o jsonpath='{.spec.host}')"
+echo "Backend: https://$(oc get route backend -n echonote -o jsonpath='{.spec.host}')"
+
+# Save to environment variables for easy reuse
+export FRONTEND_URL="https://$(oc get route frontend -n echonote -o jsonpath='{.spec.host}')"
+export BACKEND_URL="https://$(oc get route backend -n echonote -o jsonpath='{.spec.host}')"
+
+# Test the routes
+curl -I $FRONTEND_URL
+curl $BACKEND_URL
+```
+
+The route URLs follow this pattern:
+- Format: `<route-name>-<namespace>.apps.<cluster-domain>`
+- Example: `frontend-echonote.apps.ai3.pgustafs.com`
+- Always use `https://` (TLS is enabled by default)
+
+### OpenShift Deployment Architecture
+
+The OpenShift deployment includes:
+
+**PostgreSQL 16 Database:**
+- Image: `registry.redhat.io/rhel10/postgresql-16:latest`
+- 10Gi persistent storage
+- Credentials stored in Secrets
+- Health checks and automatic restarts
+
+**Backend Service:**
+- Image: `quay.io/YOUR_USERNAME/echonote-backend:latest`
+- PostgreSQL database connection
+- Whisper transcription models (whisper-large-v3-turbo-quantizedw4a16, kb-whisper-large)
+- AI assistant models (gpt-4o, claude-3-5-sonnet)
+- HuggingFace cache (2Gi persistent storage for pyannote diarization models)
+- JWT authentication with secure secrets
+- TLS-enabled Route for external access
+- Resource limits: 2 CPU, 28Gi RAM
+
+**Frontend Service:**
+- Image: `quay.io/YOUR_USERNAME/echonote-frontend:latest`
+- Static file serving with Node.js
+- TLS-enabled Route for external access
+- Resource limits: 500m CPU, 256Mi RAM
+
+**Security Features:**
+- Secrets for PostgreSQL credentials, JWT secret, and HuggingFace token
+- Non-root containers with dropped capabilities
+- SeccompProfile and proper security contexts
+- TLS termination at edge with redirect for insecure traffic
+- Network policies for pod-to-pod communication
+
+### Configuration
+
+The deployment uses three main configuration resources:
+
+**Secrets** (sensitive data):
+- `postgresql-secret`: Database credentials
+- `jwt-secret`: JWT signing key (change in production!)
+- `huggingface-secret`: HuggingFace API token for diarization models
+
+**ConfigMap** (application settings):
+- Whisper models configuration
+- AI assistant models (GPT-4o, Claude 3.5 Sonnet)
+- CORS origins (must match your OpenShift route URLs)
+- JWT algorithm and token expiration
+- Diarization model settings
+
+**PersistentVolumeClaims** (storage):
+- `postgresql-data`: 10Gi for PostgreSQL database
+- `huggingface-cache`: 2Gi for pyannote diarization models (prevents re-downloading ~300MB model on restarts)
+
+### Updating the Deployment
+
+```bash
+# Update container images
+podman build -t quay.io/YOUR_USERNAME/echonote-backend:latest backend/
+podman push quay.io/YOUR_USERNAME/echonote-backend:latest
+
+# Trigger rolling update
+oc rollout restart deployment/backend -n echonote
+oc rollout status deployment/backend -n echonote
+
+# Update frontend
+podman build -t quay.io/YOUR_USERNAME/echonote-frontend:latest frontend/
+podman push quay.io/YOUR_USERNAME/echonote-frontend:latest
+oc rollout restart deployment/frontend -n echonote
+```
+
+### Monitoring and Logs
+
+```bash
+# View pod logs
+oc logs -f deployment/backend -n echonote
+oc logs -f deployment/frontend -n echonote
+oc logs -f deployment/postgresql -n echonote
+
+# Check pod status
+oc get pods -n echonote
+oc describe pod backend-XXXXX -n echonote
+
+# View events
+oc get events -n echonote --sort-by='.lastTimestamp'
+
+# Check routes and their status
+oc get routes -n echonote
+oc describe route frontend -n echonote
+```
+
+### Scaling
+
+```bash
+# Scale backend (if needed for high load)
+oc scale deployment/backend --replicas=3 -n echonote
+
+# Scale frontend
+oc scale deployment/frontend --replicas=2 -n echonote
+
+# Note: PostgreSQL should remain at 1 replica (single primary)
+```
+
+### Troubleshooting OpenShift Deployment
+
+**Pod not starting:**
+```bash
+# Check pod events
+oc describe pod POD_NAME -n echonote
+
+# Check image pull
+oc get events -n echonote | grep -i pull
+
+# Verify Quay.io credentials (images should be public or you need imagePullSecrets)
+oc get pods -n echonote
+```
+
+**Database connection issues:**
+```bash
+# Test PostgreSQL connectivity
+oc exec -it deployment/backend -n echonote -- env | grep DATABASE
+oc exec -it deployment/postgresql -n echonote -- psql -U echonote -d echonote -c 'SELECT 1'
+
+# Check PostgreSQL logs
+oc logs deployment/postgresql -n echonote
+```
+
+**Route not accessible:**
+```bash
+# Check route configuration
+oc get route frontend -n echonote -o yaml
+oc get route backend -n echonote -o yaml
+
+# Verify TLS termination
+curl -I https://$(oc get route frontend -n echonote -o jsonpath='{.spec.host}')
+
+# Test backend health
+curl https://$(oc get route backend -n echonote -o jsonpath='{.spec.host}')
+```
+
+**CORS errors in browser console:**
+```bash
+# This means CORS_ORIGINS doesn't match your actual route URLs
+# Get your route URLs
+oc get routes -n echonote
+
+# Update CORS_ORIGINS in openshift-deployment.yaml with the exact URLs
+# Then apply and restart:
+oc apply -f openshift-deployment.yaml
+oc rollout restart deployment/backend -n echonote
+```
+
+**HuggingFace model download issues:**
+```bash
+# Check HF token
+oc exec deployment/backend -n echonote -- env | grep HF_TOKEN
+
+# Check cache volume
+oc exec deployment/backend -n echonote -- ls -la /opt/app-root/src/hf-cache
+
+# Monitor first diarization request (downloads ~300MB)
+oc logs -f deployment/backend -n echonote
+```
+
+### Database Migrations
+
+```bash
+# Create a new migration
+oc exec -it deployment/backend -n echonote -- alembic revision --autogenerate -m "description"
+
+# Apply migrations
+oc exec -it deployment/backend -n echonote -- alembic upgrade head
+
+# View migration history
+oc exec -it deployment/backend -n echonote -- alembic history
+
+# Rollback migration
+oc exec -it deployment/backend -n echonote -- alembic downgrade -1
+```
+
+### Production Checklist
+
+Before deploying to production:
+
+- [ ] Change PostgreSQL password in `postgresql-secret`
+- [ ] Generate new JWT secret key: `openssl rand -hex 32`
+- [ ] Update JWT_SECRET_KEY in `jwt-secret`
+- [ ] Set your HuggingFace token in `huggingface-secret`
+- [ ] Update Quay.io image references with your username
+- [ ] Deploy first, then get route URLs: `oc get routes -n echonote`
+- [ ] Update CORS_ORIGINS with your actual OpenShift route URLs
+- [ ] Redeploy to apply CORS changes: `oc apply -f openshift-deployment.yaml && oc rollout restart deployment/backend -n echonote`
+- [ ] Review resource limits (CPU/memory) based on your cluster capacity
+- [ ] Set up backup strategy for PostgreSQL PVC
+- [ ] Configure monitoring and alerting
+- [ ] Test database migrations
+- [ ] Verify TLS certificates on routes
+- [ ] Test authentication flow
+- [ ] Test transcription and diarization functionality
 
 ## License
 

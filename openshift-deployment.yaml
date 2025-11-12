@@ -1,0 +1,524 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: echonote
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgresql-secret
+  namespace: echonote
+type: Opaque
+stringData:
+  POSTGRESQL_USER: "echonote"
+  POSTGRESQL_PASSWORD: "changeme-secure-password"
+  POSTGRESQL_DATABASE: "echonote"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jwt-secret
+  namespace: echonote
+type: Opaque
+stringData:
+  JWT_SECRET_KEY: "openssl rand -hex 32b"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: huggingface-secret
+  namespace: echonote
+type: Opaque
+stringData:
+  HF_TOKEN: "MY_HF_TOKEN
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: echonote-config
+  namespace: echonote
+data:
+  API_KEY: "not-needed"
+  CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,https://echonote-frontend-echonote.apps.ai3.pgustafs.com"
+  MAX_UPLOAD_SIZE: "104857600"
+  JWT_ALGORITHM: "HS256"
+  ACCESS_TOKEN_EXPIRE_DAYS: "30"
+  DIARIZATION_MODEL: "pyannote/speaker-diarization-3.1"
+
+  # Whisper models configuration
+  models: |
+    {
+      "whisper-large-v3-turbo-quantizedw4a16": "https://whisper-large-v3-turbo-quantizedw4a16-models.apps.ai3.pgustafs.com/v1",
+      "kb-whisper-large": "https://kb-whisper-large-models.apps.ai3.pgustafs.com/v1"
+    }
+  default-model: "whisper-large-v3-turbo-quantizedw4a16"
+
+  # AI Assistant models configuration
+  assistant-models: |
+    {
+      "gpt-4o": {
+        "provider": "openai",
+        "api_base": "https://api.openai.com/v1",
+        "model_name": "gpt-4o"
+      },
+      "claude-3-5-sonnet": {
+        "provider": "anthropic",
+        "api_base": "https://api.anthropic.com/v1",
+        "model_name": "claude-3-5-sonnet-20241022"
+      }
+    }
+  default-assistant-model: "gpt-4o"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data
+  namespace: echonote
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: huggingface-cache
+  namespace: echonote
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  namespace: echonote
+  labels:
+    app: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: registry.redhat.io/rhel10/postgresql-16:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        env:
+        - name: POSTGRESQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_USER
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_PASSWORD
+        - name: POSTGRESQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_DATABASE
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/pgsql/data
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - psql -U $POSTGRESQL_USER -d $POSTGRESQL_DATABASE -c 'SELECT 1'
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: postgresql-data
+        persistentVolumeClaim:
+          claimName: postgresql-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: echonote
+  labels:
+    app: postgresql
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgresql
+  selector:
+    app: postgresql
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echonote
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: echonote
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: quay.io/pgustafs/echonote-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        env:
+        # Whisper models configuration
+        - name: MODELS
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: models
+        - name: DEFAULT_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: default-model
+
+        # AI Assistant models configuration
+        - name: ASSISTANT_MODELS
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: assistant-models
+        - name: DEFAULT_ASSISTANT_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: default-assistant-model
+
+        # Database configuration
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRESQL_USER):$(POSTGRESQL_PASSWORD)@postgresql:5432/$(POSTGRESQL_DATABASE)"
+        - name: POSTGRESQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_USER
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_PASSWORD
+        - name: POSTGRESQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: POSTGRESQL_DATABASE
+
+        # Application configuration
+        - name: API_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: API_KEY
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: CORS_ORIGINS
+        - name: MAX_UPLOAD_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: MAX_UPLOAD_SIZE
+
+        # HuggingFace configuration
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: huggingface-secret
+              key: HF_TOKEN
+        - name: DIARIZATION_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: DIARIZATION_MODEL
+        - name: HF_HOME
+          value: "/opt/app-root/src/hf-cache"
+
+        # JWT Authentication
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: JWT_SECRET_KEY
+        - name: JWT_ALGORITHM
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: JWT_ALGORITHM
+        - name: ACCESS_TOKEN_EXPIRE_DAYS
+          valueFrom:
+            configMapKeyRef:
+              name: echonote-config
+              key: ACCESS_TOKEN_EXPIRE_DAYS
+
+        # PyTorch memory optimization
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "max_split_size_mb:128"
+        - name: OMP_NUM_THREADS
+          value: "2"
+        - name: MKL_NUM_THREADS
+          value: "2"
+        - name: MPLBACKEND
+          value: "Agg"
+
+        volumeMounts:
+        - name: huggingface-cache
+          mountPath: /opt/app-root/src/hf-cache
+
+        resources:
+          limits:
+            cpu: "2"
+            memory: "28Gi"
+          requests:
+            cpu: "500m"
+            memory: "28Gi"
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+      volumes:
+      - name: huggingface-cache
+        persistentVolumeClaim:
+          claimName: huggingface-cache
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: backend
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: echonote
+    component: backend
+  type: ClusterIP
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: backend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: backend
+spec:
+  to:
+    kind: Service
+    name: backend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echonote
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: echonote
+        component: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: quay.io/pgustafs/echonote-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: frontend
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: echonote
+    component: frontend
+  type: ClusterIP
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: frontend
+  namespace: echonote
+  labels:
+    app: echonote
+    component: frontend
+spec:
+  to:
+    kind: Service
+    name: frontend
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

@@ -14,12 +14,13 @@ os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
 
 import json
 import logging
+import zipfile
 from io import BytesIO
 from typing import Annotated, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from openai import AsyncOpenAI
 from sqlmodel import Session, select
 
@@ -220,6 +221,10 @@ async def transcribe_audio(
             api_key=settings.API_KEY,
         )
 
+        # Track actual content type (will be updated if we convert)
+        actual_content_type = file.content_type
+        actual_filename = file.filename
+
         # Convert WebM to WAV if needed (vLLM Whisper has issues with WebM)
         # WebM conversion runs in isolated subprocess to prevent memory conflicts
         if file.content_type == "audio/webm":
@@ -248,8 +253,12 @@ async def transcribe_audio(
                 audio_file = BytesIO(wav_bytes)
                 audio_file.name = file.filename.replace('.webm', '.wav') if file.filename else "audio.wav"
 
-                # Replace original WebM bytes with WAV bytes for diarization
+                # Replace original WebM bytes with WAV bytes for storage
                 audio_bytes = wav_bytes
+
+                # Update content type and filename to reflect WAV format
+                actual_content_type = "audio/wav"
+                actual_filename = audio_file.name
             except Exception as e:
                 logger.error(f"WebM to WAV conversion failed: {e}", exc_info=True)
                 raise HTTPException(
@@ -412,8 +421,8 @@ async def transcribe_audio(
         db_transcription = Transcription(
             text=transcription_text,
             audio_data=audio_bytes,
-            audio_filename=file.filename or "audio.wav",
-            audio_content_type=file.content_type or "audio/wav",
+            audio_filename=actual_filename or "audio.wav",
+            audio_content_type=actual_content_type or "audio/wav",
             url=url if url and url.strip() else None,
             user_id=current_user.id,
         )
@@ -622,6 +631,113 @@ async def get_audio(
         media_type=transcription.audio_content_type,
         headers={
             "Content-Disposition": f'inline; filename="{transcription.audio_filename}"'
+        }
+    )
+
+
+@app.get("/api/transcriptions/{transcription_id}/download")
+async def download_transcription(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Download a transcription as a ZIP file containing:
+    - USERNAME.wav: Audio file in WAV format
+    - config.json: Transcription metadata and text
+
+    Requires authentication. Only allows download if transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user
+        session: Database session dependency
+
+    Returns:
+        StreamingResponse: ZIP file containing audio and config
+
+    Raises:
+        HTTPException: If transcription not found or doesn't belong to user
+    """
+    transcription = session.get(Transcription, transcription_id)
+    if not transcription:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Verify ownership
+    if transcription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this transcription")
+
+    # Get audio in WAV format (convert if needed)
+    try:
+        # Check if audio is already in WAV format
+        # Check both metadata AND actual file signature (RIFF header)
+        is_wav_by_metadata = transcription.audio_content_type == 'audio/wav'
+        is_wav_by_signature = transcription.audio_data[:4] == b'RIFF' and transcription.audio_data[8:12] == b'WAVE'
+
+        if is_wav_by_metadata or is_wav_by_signature:
+            # Already WAV, no conversion needed
+            wav_bytes = transcription.audio_data
+            if is_wav_by_signature and not is_wav_by_metadata:
+                logger.warning(
+                    f"Transcription {transcription_id} has WAV data but incorrect content_type "
+                    f"({transcription.audio_content_type}). Using WAV data without conversion."
+                )
+            else:
+                logger.info(f"Audio already in WAV format for transcription {transcription_id}")
+        else:
+            # Need to convert to WAV
+            from backend.audio_converter import convert_audio_to_wav
+
+            # Determine format from content type
+            format_mapping = {
+                'audio/webm': 'webm',
+                'audio/mp3': 'mp3',
+                'audio/mpeg': 'mp3',
+            }
+            input_format = format_mapping.get(transcription.audio_content_type, 'wav')
+
+            # Convert to WAV
+            wav_bytes = convert_audio_to_wav(transcription.audio_data, source_format=input_format)
+
+            logger.info(f"Converted audio from {input_format.upper()} to WAV format for transcription {transcription_id}")
+    except Exception as e:
+        logger.error(f"Error processing audio to WAV: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process audio to WAV format")
+
+    # Create config.json content
+    wav_filename = f"{current_user.username}.wav"
+    config_data = {
+        current_user.username: {
+            "transcript": transcription.text,
+            "audio_file": wav_filename
+        }
+    }
+    config_json = json.dumps(config_data, indent=4)
+
+    # Create ZIP file in memory
+    zip_buffer = BytesIO()
+    try:
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add WAV file
+            zip_file.writestr(wav_filename, wav_bytes)
+
+            # Add config.json
+            zip_file.writestr('config.json', config_json)
+
+        zip_buffer.seek(0)
+        logger.info(f"Created ZIP archive for transcription {transcription_id}")
+    except Exception as e:
+        logger.error(f"Error creating ZIP file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create download package")
+
+    # Generate a meaningful filename for the ZIP
+    zip_filename = f"transcription_{transcription_id}_{current_user.username}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename}"'
         }
     )
 

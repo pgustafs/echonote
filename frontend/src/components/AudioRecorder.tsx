@@ -25,6 +25,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
+  const [isStopping, setIsStopping] = useState(false)
   const [includeUrl, setIncludeUrl] = useState(false)
   const [url, setUrl] = useState('')
   const [selectedModel, setSelectedModel] = useState(defaultModel)
@@ -41,6 +42,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   } | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const isStoppingRef = useRef<boolean>(false)
 
   // Update selected model when default changes
   useEffect(() => {
@@ -317,6 +319,16 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
       return
     }
 
+    // Prevent multiple simultaneous stop calls
+    if (isStoppingRef.current) {
+      log.warn('stopRecording already in progress, ignoring duplicate call')
+      return
+    }
+
+    // Mark that we're stopping
+    isStoppingRef.current = true
+    setIsStopping(true)
+
     log.info('Stopping recording...', {
       state: mediaRecorderRef.current.state,
       chunksCollected: chunksRef.current.length
@@ -357,15 +369,25 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
       }
     } catch (error) {
       log.error('Error during stop:', error)
+      // On error, still reset states
+      setIsRecording(false)
+      setIsPaused(false)
+      setIsStopping(false)
+      isStoppingRef.current = false
+      return
     }
 
     setIsRecording(false)
     setIsPaused(false)
+    setIsStopping(false)
 
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
+
+    // Reset stopping flag
+    isStoppingRef.current = false
   }
 
   const togglePause = () => {
@@ -841,16 +863,27 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
               </button>
               <button
                 onClick={stopRecording}
+                disabled={isStopping}
                 className="btn-danger flex-1 sm:flex-none"
+                style={isStopping ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
               >
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Stop & Transcribe</span>
+                {isStopping ? (
+                  <>
+                    <div className="spinner w-5 h-5 mr-2" />
+                    <span>Stopping...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <span>Stop & Transcribe</span>
+                  </>
+                )}
               </button>
             </>
           )}

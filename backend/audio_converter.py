@@ -23,16 +23,17 @@ logger = logging.getLogger(__name__)
 
 
 
-def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
+def convert_audio_to_wav(audio_bytes: bytes, source_format: str = "webm") -> bytes:
     """
-    Convert WebM audio to WAV format in isolated subprocess.
+    Convert audio to WAV format in isolated subprocess.
 
     This function runs pydub/ffmpeg in a completely separate process
     that terminates before returning, ensuring no memory conflicts
     with the diarization pipeline.
 
     Args:
-        webm_bytes: WebM audio data as bytes
+        audio_bytes: Audio data as bytes
+        source_format: Source audio format (webm, mp3, etc.)
 
     Returns:
         WAV audio data as bytes
@@ -41,29 +42,29 @@ def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
         Exception: If conversion fails or times out (30s timeout)
 
     Example:
-        >>> with open("audio.webm", "rb") as f:
-        ...     webm_data = f.read()
-        >>> wav_data = convert_webm_to_wav(webm_data)
+        >>> with open("audio.mp3", "rb") as f:
+        ...     audio_data = f.read()
+        >>> wav_data = convert_audio_to_wav(audio_data, "mp3")
         >>> with open("audio.wav", "wb") as f:
         ...     f.write(wav_data)
     """
-    logger.info("Converting WebM to WAV in isolated subprocess")
+    logger.info(f"Converting {source_format.upper()} to WAV in isolated subprocess")
 
     # Create Python script to run in subprocess
-    # This script reads WebM from stdin and writes WAV to stdout
-    script = '''
+    # This script reads audio from stdin and writes WAV to stdout
+    script = f'''
 import sys
 from io import BytesIO
 from pydub import AudioSegment
 
-# Read WebM audio from stdin
-webm_bytes = sys.stdin.buffer.read()
+# Read audio from stdin
+audio_bytes = sys.stdin.buffer.read()
 
 # Convert to AudioSegment (uses ffmpeg internally)
-audio = AudioSegment.from_file(BytesIO(webm_bytes), format="webm")
+audio = AudioSegment.from_file(BytesIO(audio_bytes), format="{source_format}")
 
 # Log conversion details to stderr (doesn't interfere with stdout data)
-print(f"LOADED: duration={len(audio)}ms, channels={audio.channels}, rate={audio.frame_rate}Hz", file=sys.stderr)
+print(f"LOADED: duration={{len(audio)}}ms, channels={{audio.channels}}, rate={{audio.frame_rate}}Hz", file=sys.stderr)
 
 # Export as WAV format
 wav_buffer = BytesIO()
@@ -78,7 +79,7 @@ sys.stdout.buffer.write(wav_buffer.getvalue())
         # The subprocess exits after conversion, ensuring no memory leaks
         result = subprocess.run(
             [sys.executable, '-c', script],
-            input=webm_bytes,
+            input=audio_bytes,
             capture_output=True,
             check=True,
             timeout=30  # 30-second timeout for safety
@@ -100,7 +101,32 @@ sys.stdout.buffer.write(wav_buffer.getvalue())
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode() if e.stderr else str(e)
         logger.error(f"Subprocess conversion failed: {error_msg}")
-        raise Exception(f"WebM to WAV conversion failed: {error_msg}")
+        raise Exception(f"{source_format.upper()} to WAV conversion failed: {error_msg}")
     except subprocess.TimeoutExpired:
         logger.error("Subprocess conversion timed out after 30 seconds")
-        raise Exception("WebM to WAV conversion timed out")
+        raise Exception(f"{source_format.upper()} to WAV conversion timed out")
+
+
+def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
+    """
+    Convert WebM audio to WAV format in isolated subprocess.
+
+    This is a convenience wrapper around convert_audio_to_wav() for backward compatibility.
+
+    Args:
+        webm_bytes: WebM audio data as bytes
+
+    Returns:
+        WAV audio data as bytes
+
+    Raises:
+        Exception: If conversion fails or times out (30s timeout)
+
+    Example:
+        >>> with open("audio.webm", "rb") as f:
+        ...     webm_data = f.read()
+        >>> wav_data = convert_webm_to_wav(webm_data)
+        >>> with open("audio.wav", "wb") as f:
+        ...     f.write(wav_data)
+    """
+    return convert_audio_to_wav(webm_bytes, source_format="webm")

@@ -169,3 +169,41 @@ export async function deleteTranscription(id: number): Promise<void> {
     throw new Error('Failed to delete transcription')
   }
 }
+
+/**
+ * Download a transcription as ZIP containing WAV audio and config.json
+ */
+export async function downloadTranscription(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/transcriptions/${id}/download`, {
+    headers: getAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to download transcription')
+  }
+
+  // Get the filename from Content-Disposition header, or use a default
+  const contentDisposition = response.headers.get('Content-Disposition')
+  let filename = `transcription_${id}.zip`
+  if (contentDisposition) {
+    const matches = /filename="([^"]+)"/.exec(contentDisposition)
+    if (matches && matches[1]) {
+      filename = matches[1]
+    }
+  }
+
+  // Create a blob from the response
+  const blob = await response.blob()
+
+  // Create a temporary link element and trigger download
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+
+  // Cleanup
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}

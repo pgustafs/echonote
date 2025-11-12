@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react'
-import { deleteTranscription, getAudioUrl, updateTranscriptionPriority } from '../api'
+import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority } from '../api'
 import { Priority, Transcription } from '../types'
 
 interface TranscriptionListProps {
@@ -17,6 +17,7 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [downloadingId, setDownloadingId] = useState<number | null>(null)
 
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id)
@@ -49,6 +50,18 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
       alert('Failed to update priority')
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  const handleDownload = async (id: number) => {
+    setDownloadingId(id)
+    try {
+      await downloadTranscription(id)
+    } catch (error) {
+      console.error('Error downloading transcription:', error)
+      alert('Failed to download transcription')
+    } finally {
+      setDownloadingId(null)
     }
   }
 
@@ -314,8 +327,54 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
                       </div>
                     </div>
 
-                    {/* Delete Button */}
-                    <div className="flex justify-start pt-2">
+                    {/* Action Buttons */}
+                    <div className="flex justify-start gap-3 pt-2">
+                      {/* Download Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDownload(transcription.id)
+                        }}
+                        disabled={downloadingId === transcription.id}
+                        className="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center space-x-2 min-h-[44px]"
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.2)',
+                          color: '#60A5FA',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (downloadingId !== transcription.id) {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)'
+                            e.currentTarget.style.color = '#93C5FD'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'
+                          e.currentTarget.style.color = '#60A5FA'
+                        }}
+                        title="Download as ZIP with WAV audio and config.json"
+                      >
+                        {downloadingId === transcription.id ? (
+                          <>
+                            <div className="spinner w-4 h-4" />
+                            <span>Downloading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                              />
+                            </svg>
+                            <span>Download</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Delete Button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
