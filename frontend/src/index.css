@@ -190,20 +190,10 @@
     @apply min-h-[44px] min-w-[44px];
   }
 
-  /* Animated gradient header */
+  /* Static header background - clean and stable */
   .gradient-header {
-    background: linear-gradient(90deg, #5C7CFA, #4ADEDE, #9775FA, #5C7CFA);
-    background-size: 300% 100%;
-    animation: gradientShift 10s ease infinite;
-  }
-
-  @keyframes gradientShift {
-    0%, 100% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
+    /* Static dark gray background for cleaner, more stable appearance */
+    background: #1a1f2e;
   }
 
   /* Subtle elevation */

@@ -375,26 +375,24 @@ Each dot has a radial gradient circle (radius 20) that follows it along the path
 
 ## Interactions & Animations
 
-### Animated Gradient Header
+### Static Header Background
+
+The header uses a clean, static dark gray background to provide visual stability and emphasize the recording button as the primary CTA.
 
 ```css
 .gradient-header {
-  background: linear-gradient(90deg, #5C7CFA, #4ADEDE, #9775FA, #5C7CFA);
-  background-size: 300% 100%;
-  animation: gradientShift 10s ease infinite;
-}
-
-@keyframes gradientShift {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+  /* Static dark gray background for cleaner, more stable appearance */
+  background: #1a1f2e;
 }
 ```
 
-**File:** `frontend/src/index.css` (Lines 169-182)
+**File:** `frontend/src/index.css` (Lines 193-197)
+
+**Design Rationale:**
+- Clean, non-distracting background
+- Emphasizes the recording button and content
+- More stable, professional appearance
+- Reduces visual noise and animation overhead
 
 ### Loading Spinner
 
@@ -554,9 +552,28 @@ gap: 0.5rem;
 
 ### Common Color Changes
 
+#### Change Header Background
+
+**Current:** `#1a1f2e` (Static Dark Gray)
+**File:** `frontend/src/index.css` (Line 196)
+
+To change the header color:
+```css
+.gradient-header {
+  background: #your-color-here;
+}
+```
+
+For a gradient instead of solid color:
+```css
+.gradient-header {
+  background: linear-gradient(135deg, #color1, #color2);
+}
+```
+
 #### Change Main Accent Color
 
-**From:** `#5C7CFA` (Electric Iris)  
+**From:** `#5C7CFA` (Electric Iris)
 **To:** Your color
 
 Files to update:

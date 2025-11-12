@@ -135,7 +135,7 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {/* Header with animated gradient background */}
+      {/* Header with static dark background */}
       <header className="gradient-header shadow-xl relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
           <div className="flex items-center justify-between flex-wrap gap-4">
