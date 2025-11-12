@@ -16,12 +16,13 @@ interface AudioRecorderProps {
   isTranscribing: boolean
   availableModels: string[]
   defaultModel: string
+  isMobile?: boolean
 }
 
 // WAV conversion functions removed - we send WebM directly like production apps
 // This avoids conversion overhead and potential quality issues
 
-export default function AudioRecorder({ onRecordingComplete, isTranscribing, availableModels, defaultModel }: AudioRecorderProps) {
+export default function AudioRecorder({ onRecordingComplete, isTranscribing, availableModels, defaultModel, isMobile = false }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
@@ -419,7 +420,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   }
 
   return (
-    <div className="enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden">
+    <div className={isMobile ? "enterprise-card-dark p-6 relative overflow-hidden" : "enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden"}>
       <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
         <div className="text-center">
           <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>

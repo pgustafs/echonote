@@ -764,6 +764,142 @@ gap: 0.5rem;
 
 ## Mobile Responsiveness
 
+### Mobile-First Layout Philosophy
+
+EchoNote implements a **dedicated mobile layout** for devices with viewport width < 768px, providing an optimized app-like experience:
+
+#### Key Mobile Design Principles
+
+1. **Maximum Content Space** - No header on mobile, full-width cards
+2. **Contextual Controls** - Logout footer appears only when needed (on scroll)
+3. **Touch-Optimized** - All interactive elements meet 44px minimum
+4. **Progressive Enhancement** - Desktop layout adds more features
+
+### Mobile Layout Changes (< 768px)
+
+#### 1. Header Visibility
+```tsx
+{/* Header hidden on mobile devices */}
+{!isMobile && (
+  <header className="gradient-header shadow-xl relative overflow-hidden">
+    {/* Desktop header content */}
+  </header>
+)}
+```
+
+**Rationale:** Mobile screens need maximum vertical space for content. Logo and branding less critical on small screens.
+
+**File:** `frontend/src/App.tsx` (Lines 193-249)
+
+#### 2. Full-Width Content
+
+```tsx
+{/* Mobile: remove padding, desktop: maintain max-width container */}
+<main className={isMobile ? "px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"}>
+```
+
+**Components with mobile-specific styling:**
+
+- **Recording Card**: `isMobile ? "p-6" : "p-6 sm:p-8 lg:p-10"`
+- **Transcription Cards**: `isMobile ? "p-4" : "p-5 sm:p-6"`
+- **Filter Card**: `isMobile ? "p-4" : "p-4 sm:p-6"`
+
+**File:** `frontend/src/App.tsx` (Line 252)
+
+#### 3. Mobile Footer (Scroll-Triggered)
+
+```tsx
+{/* Mobile Footer - appears on scroll */}
+{isMobile && showMobileFooter && (
+  <div
+    className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300"
+    style={{
+      background: 'rgba(255, 255, 255, 0.02)',
+      backdropFilter: 'blur(10px)',
+      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+      boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
+    }}
+  >
+    <div className="px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center space-x-2">
+        <svg className="w-4 h-4 text-white">...</svg>
+        <span className="text-white text-sm font-medium">{user.username}</span>
+      </div>
+      <button onClick={logout} className="px-4 py-2 text-sm font-semibold rounded-xl">
+        Logout
+      </button>
+    </div>
+  </div>
+)}
+```
+
+**Behavior:**
+- **Appears:** When user scrolls (any direction)
+- **Disappears:** After 2 seconds of no scrolling
+- **Styling:** Glass morphism with blur effect, fixed to bottom
+- **Content:** Username and logout button
+
+**File:** `frontend/src/App.tsx` (Lines 577-607)
+
+#### 4. Mobile Detection Implementation
+
+```tsx
+// State
+const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+const [showMobileFooter, setShowMobileFooter] = useState(false)
+
+// Resize listener
+useEffect(() => {
+  const handleResize = () => {
+    setIsMobile(window.innerWidth < 768)
+  }
+  window.addEventListener('resize', handleResize)
+  return () => window.removeEventListener('resize', handleResize)
+}, [])
+
+// Scroll handler for mobile footer
+useEffect(() => {
+  if (!isMobile) {
+    setShowMobileFooter(false)
+    return
+  }
+
+  let scrollTimeout: number | undefined
+  const handleScroll = () => {
+    setShowMobileFooter(true)
+
+    if (scrollTimeout !== undefined) {
+      window.clearTimeout(scrollTimeout)
+    }
+    scrollTimeout = window.setTimeout(() => {
+      setShowMobileFooter(false)
+    }, 2000)
+  }
+
+  window.addEventListener('scroll', handleScroll)
+  return () => {
+    window.removeEventListener('scroll', handleScroll)
+    if (scrollTimeout !== undefined) {
+      window.clearTimeout(scrollTimeout)
+    }
+  }
+}, [isMobile])
+```
+
+**File:** `frontend/src/App.tsx` (Lines 28-29, 37-72)
+
+### Responsive Breakpoints
+
+| Breakpoint | Min Width | Usage |
+|------------|-----------|-------|
+| **Mobile** | < 640px | Phone portrait |
+| **sm** | ≥ 640px | Large phones, tablets portrait |
+| **md** | ≥ 768px | Tablets landscape, desktop threshold |
+| **lg** | ≥ 1024px | Desktop |
+| **xl** | ≥ 1280px | Large desktop |
+
+**Mobile threshold:** 768px (where `isMobile` = true)
+
 ### Responsive Sizing Example
 
 ```tsx
@@ -786,6 +922,23 @@ gap: 0.5rem;
 ```
 
 **File:** `frontend/src/components/TranscriptionList.tsx` (Line 238)
+
+### Testing Mobile Layout
+
+#### Browser DevTools
+1. Open DevTools (F12)
+2. Toggle device toolbar (Ctrl+Shift+M / Cmd+Shift+M)
+3. Select a mobile device or set custom width < 768px
+4. Refresh page to trigger mobile detection
+
+#### What to Test
+- ✅ Header should be hidden
+- ✅ All cards span full width (edge-to-edge)
+- ✅ Scroll to trigger footer appearance
+- ✅ Footer disappears after 2 seconds
+- ✅ Logout button functional in mobile footer
+- ✅ PWA sync indicator visible
+- ✅ Touch targets ≥ 44px
 
 ---
 

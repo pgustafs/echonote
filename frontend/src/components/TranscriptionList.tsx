@@ -10,9 +10,10 @@ interface TranscriptionListProps {
   transcriptions: Transcription[]
   onDelete: (id: number) => void
   onUpdate: (id: number, updated: Transcription) => void
+  isMobile?: boolean
 }
 
-export default function TranscriptionList({ transcriptions, onDelete, onUpdate }: TranscriptionListProps) {
+export default function TranscriptionList({ transcriptions, onDelete, onUpdate, isMobile = false }: TranscriptionListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -96,7 +97,7 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
 
   if (transcriptions.length === 0) {
     return (
-      <div className="enterprise-card-dark p-12 sm:p-16 text-center">
+      <div className={isMobile ? "enterprise-card-dark p-8 text-center" : "enterprise-card-dark p-12 sm:p-16 text-center"}>
         <div className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center">
           <svg
             className="w-12 h-12 sm:w-16 sm:h-16 text-blue-400"
@@ -123,8 +124,8 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+    <div className={isMobile ? "space-y-4" : "space-y-4 sm:space-y-6"}>
+      <div className={isMobile ? "flex flex-col gap-3 px-4 py-2" : "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0"}>
         <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center space-x-3">
           <svg className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -150,7 +151,7 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate }
           return (
             <div
               key={transcription.id}
-              className={`enterprise-card-dark p-5 sm:p-6 transition-all duration-200 ${
+              className={`enterprise-card-dark ${isMobile ? 'p-4' : 'p-5 sm:p-6'} transition-all duration-200 ${
                 isExpanded ? 'ring-2 ring-blue-500/50 shadow-xl' : 'hover:shadow-xl'
               }`}
             >

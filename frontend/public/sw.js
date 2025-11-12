@@ -3,10 +3,10 @@
  * Provides offline caching, background sync, and PWA functionality
  */
 
-const CACHE_NAME = 'echonote-v1';
-const RUNTIME_CACHE = 'echonote-runtime';
+const CACHE_NAME = 'echonote-v2';
+const RUNTIME_CACHE = 'echonote-runtime-v2';
 
-// Assets to cache on install
+// Assets to cache on install (exclude hashed JS/CSS files)
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -107,7 +107,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets - cache first
+  // Hashed assets (JS/CSS with [hash] in filename) - network first (they change on every build)
+  if (url.pathname.includes('/assets/') && (url.pathname.includes('.js') || url.pathname.includes('.css'))) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Clone and cache the new version
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(RUNTIME_CACHE)
+              .then((cache) => {
+                cache.put(request, responseToCache);
+              });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Fallback to cache only if network fails
+          return caches.match(request);
+        })
+    );
+    return;
+  }
+
+  // Other static assets (images, fonts, etc.) - cache first
   event.respondWith(
     caches.match(request)
       .then((cachedResponse) => {

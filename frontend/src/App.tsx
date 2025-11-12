@@ -24,10 +24,52 @@ function App() {
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [showMobileFooter, setShowMobileFooter] = useState(false)
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [totalTranscriptions, setTotalTranscriptions] = useState(0)
   const pageSize = 10 // Should match DEFAULT_PAGE_SIZE in backend
+
+  // Handle window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Handle scroll for mobile footer
+  useEffect(() => {
+    if (!isMobile) {
+      setShowMobileFooter(false)
+      return
+    }
+
+    let scrollTimeout: number | undefined
+    const handleScroll = () => {
+      setShowMobileFooter(true)
+
+      // Hide footer after 2 seconds of no scrolling
+      if (scrollTimeout !== undefined) {
+        window.clearTimeout(scrollTimeout)
+      }
+      scrollTimeout = window.setTimeout(() => {
+        setShowMobileFooter(false)
+      }, 2000)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (scrollTimeout !== undefined) {
+        window.clearTimeout(scrollTimeout)
+      }
+    }
+  }, [isMobile])
 
   // Load models on mount (only when user is authenticated)
   useEffect(() => {
@@ -151,68 +193,70 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {/* Header with glass effect matching footer */}
-      <header className="gradient-header shadow-xl relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            {/* Logo */}
-            <div className="flex items-center">
-              <img
-                src="/econote_logo.png"
-                alt="EchoNote Logo"
-                className="h-12 sm:h-16 lg:h-20 w-auto"
-                style={{ filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3))' }}
-              />
-            </div>
-            {/* User info and logout */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              {/* Stats badge - hidden on mobile */}
-              <div className="hidden sm:flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-white font-semibold">{totalTranscriptions} Recording{totalTranscriptions !== 1 ? 's' : ''}</span>
+      {/* Header - hidden on mobile */}
+      {!isMobile && (
+        <header className="gradient-header shadow-xl relative overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              {/* Logo */}
+              <div className="flex items-center">
+                <img
+                  src="/econote_logo.png"
+                  alt="EchoNote Logo"
+                  className="h-12 sm:h-16 lg:h-20 w-auto"
+                  style={{ filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3))' }}
+                />
               </div>
+              {/* User info and logout */}
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                {/* Stats badge */}
+                <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="text-white font-semibold">{totalTranscriptions} Recording{totalTranscriptions !== 1 ? 's' : ''}</span>
+                </div>
 
-              {/* User info */}
-              <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 sm:px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="text-white text-sm sm:text-base font-medium">{user.username}</span>
+                {/* User info */}
+                <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 sm:px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="text-white text-sm sm:text-base font-medium">{user.username}</span>
+                </div>
+
+                {/* Logout button */}
+                <button
+                  onClick={logout}
+                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-2xl transition-all duration-200 min-h-[44px]"
+                  style={{
+                    background: 'rgba(228, 76, 101, 0.2)',
+                    color: '#FF6B6B',
+                    border: '1px solid rgba(228, 76, 101, 0.3)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(228, 76, 101, 0.3)'
+                    e.currentTarget.style.color = '#FF8787'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(228, 76, 101, 0.2)'
+                    e.currentTarget.style.color = '#FF6B6B'
+                  }}
+                  title="Sign out"
+                >
+                  Logout
+                </button>
               </div>
-
-              {/* Logout button */}
-              <button
-                onClick={logout}
-                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-2xl transition-all duration-200 min-h-[44px]"
-                style={{
-                  background: 'rgba(228, 76, 101, 0.2)',
-                  color: '#FF6B6B',
-                  border: '1px solid rgba(228, 76, 101, 0.3)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(228, 76, 101, 0.3)'
-                  e.currentTarget.style.color = '#FF8787'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(228, 76, 101, 0.2)'
-                  e.currentTarget.style.color = '#FF6B6B'
-                }}
-                title="Sign out"
-              >
-                Logout
-              </button>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+      <main className={isMobile ? "px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"}>
         {/* Error Message */}
         {error && (
-          <div className="mb-6 sm:mb-8 rounded-2xl p-4 shadow-lg" style={{ background: 'rgba(228, 76, 101, 0.1)', border: '1px solid rgba(228, 76, 101, 0.3)' }}>
+          <div className={isMobile ? "mb-4 p-4 shadow-lg" : "mb-6 sm:mb-8 rounded-2xl p-4 shadow-lg"} style={{ background: 'rgba(228, 76, 101, 0.1)', border: '1px solid rgba(228, 76, 101, 0.3)' }}>
             <div className="flex items-start space-x-3">
               <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#E44C65' }} fill="currentColor" viewBox="0 0 20 20">
                 <path
@@ -241,18 +285,19 @@ function App() {
         )}
 
         {/* Audio Recorder Section */}
-        <section className="mb-8 sm:mb-12">
+        <section className={isMobile ? "mb-4" : "mb-8 sm:mb-12"}>
           <AudioRecorder
             onRecordingComplete={handleRecordingComplete}
             isTranscribing={isTranscribing}
             availableModels={availableModels}
             defaultModel={defaultModel}
+            isMobile={isMobile}
           />
         </section>
 
         {/* Filter Section */}
-        <section className="mb-6 sm:mb-8">
-          <div className="enterprise-card-dark p-4 sm:p-6">
+        <section className={isMobile ? "mb-4" : "mb-6 sm:mb-8"}>
+          <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
             <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
               <label className="font-semibold text-sm sm:text-base lg:text-lg flex items-center space-x-2" style={{ color: '#E6E8EB' }}>
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -389,6 +434,7 @@ function App() {
                 transcriptions={transcriptions}
                 onDelete={handleDelete}
                 onUpdate={handleUpdate}
+                isMobile={isMobile}
               />
 
               {/* Pagination Controls */}
@@ -492,42 +538,77 @@ function App() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-12 sm:mt-20" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
-            <p style={{ color: '#9BA4B5' }}>
-              © 2025 EchoNote. AI-powered voice transcription.
-            </p>
-            <div className="flex items-center space-x-4" style={{ color: '#9BA4B5' }}>
-              <span>Powered by</span>
-              <a
-                href="https://fastapi.tiangolo.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="transition-colors underline"
-                style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
-              >
-                FastAPI
-              </a>
-              <span>&</span>
-              <a
-                href="https://vitejs.dev/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="transition-colors underline"
-                style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
-              >
-                Vite
-              </a>
+      {/* Desktop Footer */}
+      {!isMobile && (
+        <footer className="mt-12 sm:mt-20" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
+              <p style={{ color: '#9BA4B5' }}>
+                © 2025 EchoNote. AI-powered voice transcription.
+              </p>
+              <div className="flex items-center space-x-4" style={{ color: '#9BA4B5' }}>
+                <span>Powered by</span>
+                <a
+                  href="https://fastapi.tiangolo.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors underline"
+                  style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
+                >
+                  FastAPI
+                </a>
+                <span>&</span>
+                <a
+                  href="https://vitejs.dev/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors underline"
+                  style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
+                >
+                  Vite
+                </a>
+              </div>
             </div>
           </div>
+        </footer>
+      )}
+
+      {/* Mobile Footer - appears on scroll */}
+      {isMobile && showMobileFooter && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300"
+          style={{
+            background: 'rgba(255, 255, 255, 0.02)',
+            backdropFilter: 'blur(10px)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="text-white text-sm font-medium">{user.username}</span>
+            </div>
+            <button
+              onClick={logout}
+              className="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200"
+              style={{
+                background: 'rgba(228, 76, 101, 0.2)',
+                color: '#FF6B6B',
+                border: '1px solid rgba(228, 76, 101, 0.3)',
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
-      </footer>
+      )}
 
       {/* Sync Indicator for PWA offline/online status */}
       <SyncIndicator
