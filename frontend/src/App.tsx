@@ -139,32 +139,14 @@ function App() {
       <header className="gradient-header shadow-xl relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              {/* Icon */}
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/10 backdrop-blur-md rounded-2xl shadow-lg flex items-center justify-center flex-shrink-0 border border-white/20">
-                <svg
-                  className="w-7 h-7 sm:w-8 sm:h-8 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                  />
-                </svg>
-              </div>
-              {/* Title */}
-              <div>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white" style={{ textShadow: '0 2px 8px rgba(0, 0, 0, 0.3)' }}>
-                  EchoNote
-                </h1>
-                <p className="text-white/90 text-sm sm:text-base mt-1">
-                  AI-Powered Voice Transcription
-                </p>
-              </div>
+            {/* Logo */}
+            <div className="flex items-center">
+              <img
+                src="/econote_logo.png"
+                alt="EchoNote Logo"
+                className="h-12 sm:h-16 lg:h-20 w-auto"
+                style={{ filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3))' }}
+              />
             </div>
             {/* User info and logout */}
             <div className="flex items-center space-x-2 sm:space-x-3">

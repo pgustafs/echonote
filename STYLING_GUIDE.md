@@ -649,10 +649,27 @@ Each dot has a radial gradient circle (radius 20) that follows it along the path
 
 ## Interactions & Animations
 
-### Header Background - Glass Effect
+### Header with Logo
 
-The header uses a semi-transparent glass effect that matches the footer design, creating visual cohesion between the top and bottom sections of the application.
+The header features the EchoNote logo with a semi-transparent glass effect background that matches the footer design.
 
+#### Logo Implementation
+```tsx
+{/* Logo */}
+<div className="flex items-center">
+  <img
+    src="/econote_logo.png"
+    alt="EchoNote Logo"
+    className="h-12 sm:h-16 lg:h-20 w-auto"
+    style={{ filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3))' }}
+  />
+</div>
+```
+
+**File:** `frontend/src/App.tsx` (Lines 142-150)
+**Logo Asset:** `frontend/public/econote_logo.png`
+
+#### Header Background
 ```css
 .gradient-header {
   /* Semi-transparent glass effect matching footer design */
@@ -664,11 +681,13 @@ The header uses a semi-transparent glass effect that matches the footer design, 
 **File:** `frontend/src/index.css` (Lines 289-294)
 
 **Design Rationale:**
+- Custom logo replaces generic icon and text for brand identity
+- Responsive sizing: 48px (mobile) → 64px (tablet) → 80px (desktop)
+- Drop shadow for depth and legibility against varying backgrounds
 - Matches footer styling for visual consistency
 - Semi-transparent glass effect creates depth
 - Subtle border provides gentle separation
 - Clean, professional appearance
-- Emphasizes the recording button and content
 
 ### Loading Spinner
 
