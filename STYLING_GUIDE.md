@@ -267,6 +267,42 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
 
 **File:** `frontend/src/index.css` (Lines 131-154)
 
+### Recording Options Card
+
+A visually distinct container that groups all recording settings (model selector, URL input, diarization options) to provide clear visual organization and prevent settings from floating in the middle of the page.
+
+#### Card Structure
+```tsx
+<div className="bg-slate-800/40 backdrop-blur-sm border border-slate-600/50 rounded-xl p-5 sm:p-6 space-y-4 sm:space-y-5">
+  {/* Card Header with Icon */}
+  <div className="flex items-center space-x-2 pb-3 border-b border-slate-600/30">
+    <svg className="w-5 h-5 text-blue-400">...</svg>
+    <h3 className="text-lg font-semibold text-white">Recording Options</h3>
+  </div>
+
+  {/* Settings Content */}
+  <div className="space-y-4">
+    {/* Model selector, checkboxes, inputs */}
+  </div>
+</div>
+```
+
+#### Design Elements
+- **Background**: `bg-slate-800/40` - Semi-transparent dark gray with 40% opacity
+- **Backdrop Blur**: `backdrop-blur-sm` - Subtle blur effect for glass morphism
+- **Border**: `border-slate-600/50` - Subtle border at 50% opacity
+- **Border Radius**: `rounded-xl` - 0.75rem (12px) for smooth corners
+- **Padding**: `p-5 sm:p-6` - 1.25rem mobile, 1.5rem tablet+
+- **Header Separator**: Bottom border (`border-b border-slate-600/30`) divides header from content
+
+#### Benefits
+- **Visual Hierarchy**: Clear container separates settings from main recording action
+- **Organization**: Grouped related controls with descriptive heading
+- **Professional Look**: Intentional, structured appearance vs. floating elements
+- **Focus Direction**: Helps users understand where to configure before recording
+
+**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 783-901)
+
 ### Microphone Ring Button (Recording CTA)
 
 The microphone button is the **single primary interaction point** for recording. This unified approach eliminates confusion and creates a clear, focused user experience.

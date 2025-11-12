@@ -780,61 +780,41 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
           </div>
         )}
 
-        {/* Model Selector & URL Input Section */}
+        {/* Recording Options Card */}
         {!isRecording && !isTranscribing && (
-          <div className="w-full max-w-2xl space-y-4 sm:space-y-5">
-            {/* Model Selector */}
-            {availableModels.length > 0 && (
-              <div className="space-y-2">
-                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                  </svg>
-                  <span>Transcription Model</span>
-                </label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="input-field-dark"
-                >
-                  {availableModels.map((model) => (
-                    <option key={model} value={model} className="bg-slate-800">
-                      {model}
-                    </option>
-                  ))}
-                </select>
+          <div className="w-full max-w-2xl">
+            {/* Settings Card Container */}
+            <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-600/50 rounded-xl p-5 sm:p-6 space-y-4 sm:space-y-5">
+              {/* Card Header */}
+              <div className="flex items-center space-x-2 pb-3 border-b border-slate-600/30">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                <h3 className="text-lg font-semibold text-white">Recording Options</h3>
               </div>
-            )}
 
-            {/* URL Checkbox */}
-            <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
-              <input
-                type="checkbox"
-                checked={includeUrl}
-                onChange={(e) => setIncludeUrl(e.target.checked)}
-                className="w-5 h-5 rounded border-2 border-blue-500 text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-700 cursor-pointer"
-              />
-              <span className="text-white font-medium text-sm sm:text-base group-hover:text-blue-300 transition-colors">Add URL to voice note</span>
-            </label>
-
-            {/* URL Input */}
-            {includeUrl && (
-              <div className="space-y-2">
-                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  <span>URL</span>
-                </label>
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="input-field-dark"
-                />
-              </div>
-            )}
+              {/* Model Selector */}
+              {availableModels.length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                    <span>Transcription Model</span>
+                  </label>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="input-field-dark"
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model} value={model} className="bg-slate-800">
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
             {/* Diarization Checkbox */}
             <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
@@ -886,6 +866,44 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                 </p>
               </div>
             )}
+
+            {/* URL Attachment (Optional) - Moved to last position */}
+            <div className="pt-4 border-t border-slate-600/30">
+              <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
+                <input
+                  type="checkbox"
+                  checked={includeUrl}
+                  onChange={(e) => setIncludeUrl(e.target.checked)}
+                  className="w-5 h-5 rounded border-2 border-blue-500 text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-700 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <span className="text-white font-medium text-sm sm:text-base group-hover:text-blue-300 transition-colors block">
+                    Attach URL to note <span className="text-slate-400 text-xs font-normal">(optional)</span>
+                  </span>
+                  <span className="text-xs text-slate-400">Include a reference link with your transcription</span>
+                </div>
+              </label>
+
+              {/* URL Input */}
+              {includeUrl && (
+                <div className="space-y-2 mt-3 pl-8 border-l-2 border-blue-500/30">
+                  <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    <span>URL</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="input-field-dark"
+                  />
+                </div>
+              )}
+            </div>
+            </div>
           </div>
         )}
 
