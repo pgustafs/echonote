@@ -8,11 +8,14 @@ import { getModels, getTranscriptions, transcribeAudio } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
 import Login from './components/Login'
+import SyncIndicator from './components/SyncIndicator'
 import { useAuth } from './contexts/AuthContext'
+import { useOfflineRecording } from './hooks/useOfflineRecording'
 import { Priority, Transcription } from './types'
 
 function App() {
   const { user, logout, isLoading: authLoading } = useAuth()
+  const { isOnline, syncStatus, pendingCount, saveOfflineRecording, triggerSync } = useOfflineRecording()
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -78,20 +81,33 @@ function App() {
     setError(null)
 
     try {
-      const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
-      const filename = `recording-${Date.now()}.${extension}`
-      await transcribeAudio(
-        audioBlob,
-        filename,
-        url,
-        model,
-        enableDiarization,
-        numSpeakers
-      )
+      // If online, transcribe immediately
+      if (isOnline) {
+        const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
+        const filename = `recording-${Date.now()}.${extension}`
+        await transcribeAudio(
+          audioBlob,
+          filename,
+          url,
+          model,
+          enableDiarization,
+          numSpeakers
+        )
 
-      // Reload transcriptions to show new item (will be on page 1)
-      setCurrentPage(1)
-      loadTranscriptions()
+        // Reload transcriptions to show new item (will be on page 1)
+        setCurrentPage(1)
+        loadTranscriptions()
+      } else {
+        // If offline, save for later sync
+        await saveOfflineRecording(
+          audioBlob,
+          url,
+          model,
+          enableDiarization,
+          numSpeakers
+        )
+        console.log('[App] Recording saved offline for later sync')
+      }
     } catch (err) {
       console.error('Error transcribing audio:', err)
       setError(err instanceof Error ? err.message : 'Transcription failed')
@@ -512,6 +528,14 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* Sync Indicator for PWA offline/online status */}
+      <SyncIndicator
+        isOnline={isOnline}
+        syncStatus={syncStatus}
+        pendingCount={pendingCount}
+        onSyncClick={triggerSync}
+      />
     </div>
   )
 }
