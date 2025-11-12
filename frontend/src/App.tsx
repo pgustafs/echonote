@@ -301,8 +301,9 @@ function App() {
           />
         </section>
 
-        {/* Search Section */}
-        <section className={isMobile ? "mb-4" : "mb-6 sm:mb-8"}>
+        {/* Search Section - Desktop only */}
+        {!isMobile && (
+        <section className="mb-6 sm:mb-8">
           <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
             <div className="flex items-center space-x-3">
               <div className="flex-shrink-0">
@@ -357,9 +358,11 @@ function App() {
             </div>
           </div>
         </section>
+        )}
 
-        {/* Filter Section */}
-        <section className={isMobile ? "mb-4" : "mb-6 sm:mb-8"}>
+        {/* Filter Section - Desktop only */}
+        {!isMobile && (
+        <section className="mb-6 sm:mb-8">
           <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
             <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
               <label className="font-semibold text-sm sm:text-base lg:text-lg flex items-center space-x-2" style={{ color: '#E6E8EB' }}>
@@ -483,6 +486,7 @@ function App() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Transcriptions List */}
         <section>
@@ -498,6 +502,11 @@ function App() {
                 onDelete={handleDelete}
                 onUpdate={handleUpdate}
                 isMobile={isMobile}
+                searchQuery={searchQuery}
+                onSearchChange={handleSearchChange}
+                priorityFilter={priorityFilter}
+                onFilterChange={handleFilterChange}
+                totalCount={totalTranscriptions}
               />
 
               {/* Pagination Controls */}

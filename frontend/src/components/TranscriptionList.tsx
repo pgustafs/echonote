@@ -11,9 +11,24 @@ interface TranscriptionListProps {
   onDelete: (id: number) => void
   onUpdate: (id: number, updated: Transcription) => void
   isMobile?: boolean
+  searchQuery?: string
+  onSearchChange?: (query: string) => void
+  priorityFilter?: Priority | null
+  onFilterChange?: (priority: Priority | null) => void
+  totalCount?: number
 }
 
-export default function TranscriptionList({ transcriptions, onDelete, onUpdate, isMobile = false }: TranscriptionListProps) {
+export default function TranscriptionList({
+  transcriptions,
+  onDelete,
+  onUpdate,
+  isMobile = false,
+  searchQuery = '',
+  onSearchChange,
+  priorityFilter = null,
+  onFilterChange,
+  totalCount = 0
+}: TranscriptionListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -95,55 +110,186 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate, 
     }
   }
 
-  if (transcriptions.length === 0) {
-    return (
-      <div className={isMobile ? "enterprise-card-dark p-8 text-center" : "enterprise-card-dark p-12 sm:p-16 text-center"}>
-        <div className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center">
-          <svg
-            className="w-12 h-12 sm:w-16 sm:h-16 text-blue-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
-          </svg>
-        </div>
-        <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">
-          No Transcriptions Yet
-        </h3>
-        <p className="text-slate-300 text-base sm:text-lg">
-          Record your first voice message to get started
-        </p>
-      </div>
-    )
-  }
-
   return (
-    <div className={isMobile ? "space-y-4" : "space-y-4 sm:space-y-6"}>
-      <div className={isMobile ? "flex flex-col gap-3 px-4 py-2" : "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0"}>
-        <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center space-x-3">
-          <svg className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span>Transcriptions</span>
-        </h2>
-        <div className="flex items-center space-x-2 bg-slate-700/50 px-4 py-2 rounded-lg border border-slate-600">
-          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
-          </svg>
-          <span className="text-white font-semibold text-sm sm:text-base">
-            {transcriptions.length} {transcriptions.length === 1 ? 'Recording' : 'Recordings'}
-          </span>
-        </div>
-      </div>
+    <div className={isMobile ? "space-y-0" : "space-y-4 sm:space-y-6"}>
+      {/* Mobile: Compact header with count */}
+      {isMobile ? (
+        <div className="px-4 py-3 space-y-3" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+          {/* Header with count */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold" style={{ color: '#E6E8EB' }}>
+              Transcriptions
+            </h2>
+            <span className="text-sm font-medium" style={{ color: '#9BA4B5' }}>
+              {totalCount} {totalCount === 1 ? 'result' : 'results'}
+            </span>
+          </div>
 
-      <div className="space-y-4">
-        {transcriptions.map((transcription) => {
+          {/* Search bar */}
+          {onSearchChange && (
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                <svg className="w-4 h-4" style={{ color: '#9BA4B5' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search transcriptions..."
+                className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  color: '#E6E8EB',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  outline: 'none',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                  style={{ color: '#9BA4B5' }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Filter pills - horizontal scroll */}
+          {onFilterChange && (
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <button
+                onClick={() => onFilterChange(null)}
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                style={
+                  priorityFilter === null
+                    ? {
+                        background: 'rgba(92, 124, 250, 0.15)',
+                        color: '#5C7CFA',
+                        border: '1px solid rgba(92, 124, 250, 0.3)',
+                      }
+                    : {
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        color: '#9BA4B5',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                }
+              >
+                All
+              </button>
+              <button
+                onClick={() => onFilterChange('high')}
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                style={
+                  priorityFilter === 'high'
+                    ? {
+                        background: 'rgba(228, 76, 101, 0.15)',
+                        color: '#FF6B6B',
+                        border: '1px solid rgba(228, 76, 101, 0.3)',
+                      }
+                    : {
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        color: '#9BA4B5',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                }
+              >
+                High
+              </button>
+              <button
+                onClick={() => onFilterChange('medium')}
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                style={
+                  priorityFilter === 'medium'
+                    ? {
+                        background: 'rgba(249, 168, 38, 0.15)',
+                        color: '#F9A826',
+                        border: '1px solid rgba(249, 168, 38, 0.3)',
+                      }
+                    : {
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        color: '#9BA4B5',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                }
+              >
+                Medium
+              </button>
+              <button
+                onClick={() => onFilterChange('low')}
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                style={
+                  priorityFilter === 'low'
+                    ? {
+                        background: 'rgba(74, 222, 128, 0.15)',
+                        color: '#4ADE80',
+                        border: '1px solid rgba(74, 222, 128, 0.3)',
+                      }
+                    : {
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        color: '#9BA4B5',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                }
+              >
+                Low
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Desktop: Original header */
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center space-x-3">
+            <svg className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Transcriptions</span>
+          </h2>
+          <div className="flex items-center space-x-2 bg-slate-700/50 px-4 py-2 rounded-lg border border-slate-600">
+            <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
+            </svg>
+            <span className="text-white font-semibold text-sm sm:text-base">
+              {transcriptions.length} {transcriptions.length === 1 ? 'Recording' : 'Recordings'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state or transcription list */}
+      {transcriptions.length === 0 ? (
+        <div className={isMobile ? "enterprise-card-dark p-8 text-center" : "enterprise-card-dark p-12 sm:p-16 text-center"}>
+          <div className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <svg
+              className="w-12 h-12 sm:w-16 sm:h-16 text-blue-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">
+            No Transcriptions Found
+          </h3>
+          <p className="text-slate-300 text-base sm:text-lg">
+            {searchQuery || priorityFilter ? 'Try adjusting your search or filters' : 'Record your first voice message to get started'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {transcriptions.map((transcription) => {
           const isExpanded = expandedId === transcription.id
           const isPlaying = playingId === transcription.id
           const isDeleting = deletingId === transcription.id
@@ -410,7 +556,8 @@ export default function TranscriptionList({ transcriptions, onDelete, onUpdate, 
             </div>
           )
         })}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

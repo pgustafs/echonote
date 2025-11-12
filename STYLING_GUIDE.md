@@ -1072,6 +1072,73 @@ useEffect(() => {
 
 **File:** `frontend/src/components/TranscriptionList.tsx` (Line 238)
 
+### Mobile Search & Filter UI
+
+On mobile devices (< 768px), search and filter controls are integrated directly into the TranscriptionList header for a cleaner, more compact interface.
+
+#### Design Principles
+1. **Vertical Space Conservation** - Filters compressed into horizontal scroll pills
+2. **iOS-Style Search** - Full-width search bar with icon
+3. **Lighter Colors** - Reduced saturation, border-based selection
+4. **Result Count** - Always visible in header
+
+#### Implementation
+
+```tsx
+{isMobile ? (
+  <div className="px-4 py-3 space-y-3" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+    {/* Header with count */}
+    <div className="flex items-center justify-between">
+      <h2 className="text-lg font-bold" style={{ color: '#E6E8EB' }}>
+        Transcriptions
+      </h2>
+      <span className="text-sm font-medium" style={{ color: '#9BA4B5' }}>
+        {totalCount} {totalCount === 1 ? 'result' : 'results'}
+      </span>
+    </div>
+
+    {/* Search bar */}
+    <div className="relative">
+      <input
+        type="text"
+        placeholder="Search transcriptions..."
+        className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg"
+        style={{
+          background: 'rgba(255, 255, 255, 0.06)',
+          color: '#E6E8EB',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}
+      />
+    </div>
+
+    {/* Filter pills - horizontal scroll */}
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <button className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full">
+        All
+      </button>
+      {/* ... other pills */}
+    </div>
+  </div>
+) : (
+  /* Desktop layout */
+)}
+```
+
+**Filter Pill Styling (Mobile):**
+- **Selected**: Colored background (15% opacity) + colored text + colored border (30% opacity)
+- **Unselected**: Gray background (4% opacity) + gray text + gray border (10% opacity)
+- **Size**: `px-3 py-1.5 text-xs` (compact)
+- **Shape**: `rounded-full` (pill shape)
+- **Scroll**: Horizontal overflow with hidden scrollbar
+
+**Colors:**
+- **All**: Blue (#5C7CFA)
+- **High**: Red (#FF6B6B)
+- **Medium**: Amber (#F9A826)
+- **Low**: Green (#4ADE80)
+
+**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 144-272)
+
 ### Testing Mobile Layout
 
 #### Browser DevTools
@@ -1083,6 +1150,9 @@ useEffect(() => {
 #### What to Test
 - ✅ Header should be hidden
 - ✅ All cards span full width (edge-to-edge)
+- ✅ Search bar appears in transcription header
+- ✅ Filter pills scroll horizontally
+- ✅ Result count visible in header
 - ✅ Scroll to trigger footer appearance
 - ✅ Footer disappears after 2 seconds
 - ✅ Logout button functional in mobile footer
