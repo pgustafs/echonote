@@ -620,7 +620,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             <span>Record Voice Message</span>
           </h2>
           <p className="text-sm sm:text-base" style={{ color: '#9BA4B5' }}>
-            Click the microphone to start recording your message
+            Adjust options below, then press the microphone to start.
           </p>
         </div>
 
@@ -641,10 +641,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
 
         {/* Microphone Icon / Animation */}
         <button
-          onClick={isRecording ? undefined : startRecording}
-          disabled={isTranscribing || isRecording}
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={isTranscribing || isStopping}
           className="relative group"
-          aria-label={isRecording ? 'Recording in progress' : 'Start recording'}
+          aria-label={isRecording ? 'Stop recording and transcribe' : 'Start recording'}
         >
           {/* Pulse rings */}
           {isRecording && !isPaused && (
@@ -657,35 +657,49 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center transition-all duration-300"
             style={
               isRecording
-                ? { background: '#E44C65', boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)', transform: 'scale(1.05)' }
+                ? { background: '#E44C65', boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)', transform: 'scale(1.05)', cursor: 'pointer' }
                 : isTranscribing
                 ? { background: 'rgba(255, 255, 255, 0.2)', cursor: 'not-allowed' }
                 : { background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)', boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4)', cursor: 'pointer' }
             }
             onMouseEnter={(e) => {
-              if (!isRecording && !isTranscribing) {
-                e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
-                e.currentTarget.style.transform = 'scale(1.05)'
+              if (!isTranscribing && !isStopping) {
+                if (isRecording) {
+                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6)'
+                  e.currentTarget.style.transform = 'scale(1.1)'
+                } else {
+                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
+                  e.currentTarget.style.transform = 'scale(1.05)'
+                }
               }
             }}
             onMouseLeave={(e) => {
-              if (!isRecording && !isTranscribing) {
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(92, 124, 250, 0.4)'
-                e.currentTarget.style.transform = 'scale(1)'
+              if (!isTranscribing && !isStopping) {
+                if (isRecording) {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(228, 76, 101, 0.4)'
+                  e.currentTarget.style.transform = 'scale(1.05)'
+                } else {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(92, 124, 250, 0.4)'
+                  e.currentTarget.style.transform = 'scale(1)'
+                }
               }
             }}
             onMouseDown={(e) => {
-              if (!isRecording && !isTranscribing) {
-                e.currentTarget.style.transform = 'scale(0.95)'
-              } else if (isRecording) {
-                e.stopPropagation()
+              if (!isTranscribing && !isStopping) {
+                if (isRecording) {
+                  e.currentTarget.style.transform = 'scale(1)'
+                } else {
+                  e.currentTarget.style.transform = 'scale(0.95)'
+                }
               }
             }}
             onMouseUp={(e) => {
-              if (!isRecording && !isTranscribing) {
-                e.currentTarget.style.transform = 'scale(1.05)'
-              } else if (isRecording) {
-                e.stopPropagation()
+              if (!isTranscribing && !isStopping) {
+                if (isRecording) {
+                  e.currentTarget.style.transform = 'scale(1.1)'
+                } else {
+                  e.currentTarget.style.transform = 'scale(1.05)'
+                }
               }
             }}
           >
@@ -814,80 +828,39 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
           </div>
         )}
 
-        {/* Control Buttons */}
-        <div className="flex flex-wrap gap-3 sm:gap-4 justify-center w-full sm:w-auto">
-          {!isRecording ? (
+        {/* Pause/Resume Button - Only shown during recording */}
+        {isRecording && (
+          <div className="flex justify-center w-full sm:w-auto">
             <button
-              onClick={startRecording}
-              disabled={isTranscribing}
-              className="btn-primary px-8 sm:px-10 text-base sm:text-lg flex-1 sm:flex-none"
+              onClick={togglePause}
+              className="btn-secondary px-6 sm:px-8 py-3 text-base flex items-center"
             >
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span>Start Recording</span>
+              {isPaused ? (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>Pause</span>
+                </>
+              )}
             </button>
-          ) : (
-            <>
-              <button
-                onClick={togglePause}
-                className="btn-secondary flex-1 sm:flex-none"
-              >
-                {isPaused ? (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>Resume</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>Pause</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={stopRecording}
-                disabled={isStopping}
-                className="btn-danger flex-1 sm:flex-none"
-                style={isStopping ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
-              >
-                {isStopping ? (
-                  <>
-                    <div className="spinner w-5 h-5 mr-2" />
-                    <span>Stopping...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>Stop & Transcribe</span>
-                  </>
-                )}
-              </button>
-            </>
-          )}
-        </div>
+          </div>
+        )}
 
         {isTranscribing && (
           <div className="bg-blue-50 border border-blue-200 px-6 sm:px-8 py-4 rounded-lg shadow-sm w-full sm:w-auto">

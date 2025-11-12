@@ -269,20 +269,30 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
 
 ### Microphone Button (Recording CTA)
 
+The microphone button is the **single primary interaction point** for recording. This unified approach eliminates confusion and creates a clear, focused user experience.
+
+#### Design Philosophy
+- **Single Point of Control**: One button handles both start and stop actions
+- **Visual State Clarity**: Color and animation clearly indicate current state
+- **No Redundant Controls**: Removed separate "Start Recording" and "Stop Recording" buttons to avoid split focus
+- **Clear Instruction**: Subtitle guides users: "Adjust options below, then press the microphone to start."
+
 #### Idle State (Gradient)
 ```tsx
 style={{
   background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
   boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4)',
   borderRadius: '50%',
-  width: '10rem',  /* 160px */
+  width: '10rem',  /* 160px on mobile, 160px on tablet+ */
   height: '10rem',
   transition: 'all 0.3s',
   cursor: 'pointer'
 }}
 ```
 
-#### Hover State
+**Action**: Click to start recording
+
+#### Hover State (Idle)
 ```tsx
 onMouseEnter={(e) => {
   e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
@@ -290,16 +300,41 @@ onMouseEnter={(e) => {
 }}
 ```
 
-#### Recording State
+#### Recording State (Active)
 ```tsx
 style={{
-  background: '#E44C65',
+  background: '#E44C65',  /* Crimson red */
   boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)',
-  transform: 'scale(1.05)'
+  transform: 'scale(1.05)',
+  cursor: 'pointer'  /* Still clickable to stop */
 }}
 ```
 
-**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 443-474)
+**Action**: Click to stop recording and transcribe
+
+**Visual Feedback**:
+- Pulsing red ring animation
+- Enlarged scale (1.05)
+- Red background (#E44C65)
+
+#### Hover State (Recording)
+```tsx
+onMouseEnter={(e) => {
+  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6)'
+  e.currentTarget.style.transform = 'scale(1.1)'  /* Slightly larger than idle hover */
+}}
+```
+
+#### Button Behavior
+```tsx
+<button
+  onClick={isRecording ? stopRecording : startRecording}
+  disabled={isTranscribing || isStopping}
+  aria-label={isRecording ? 'Stop recording and transcribe' : 'Start recording'}
+>
+```
+
+**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 643-705)
 
 ### DNA Spiral Background Animation
 
@@ -496,6 +531,24 @@ gap: 0.5rem;
 
 ## Best Practices
 
+### Interface Design Philosophy
+
+**Single Point of Interaction**
+- The microphone button is the sole control for recording start/stop
+- Eliminates decision fatigue and split focus
+- Clear visual states (blue gradient = start, red = stop)
+- Subtitle provides contextual guidance before action
+
+**Why We Removed Redundant Buttons:**
+- **Problem**: Having both a large microphone icon AND separate "Start Recording" / "Stop & Transcribe" buttons split user attention
+- **Solution**: One clear, large, impossible-to-miss control
+- **Result**: Cleaner interface, faster user decisions, less visual clutter
+
+**Guidance Text:**
+- Changed from "Click the microphone to start recording your message" to "Adjust options below, then press the microphone to start."
+- Emphasizes workflow: configure first, then act
+- More concise and action-oriented
+
 ### DO ✅
 
 1. **Use glass morphism** for cards
@@ -511,8 +564,7 @@ gap: 0.5rem;
    - Buttons: `0 4px 12px rgba(92, 124, 250, 0.25)`
 
 4. **Use gradients sparingly**
-   - Primary CTA buttons
-   - Header
+   - Primary CTA buttons (like the microphone)
    - Major interactive elements only
 
 5. **Ensure 44px minimum** for touch targets
@@ -524,6 +576,10 @@ gap: 0.5rem;
 7. **Add hover glows** for premium feel
    - `box-shadow: 0 0 16px rgba(92, 124, 250, 0.5)`
 
+8. **Maintain single primary CTA per view**
+   - Avoid duplicate controls for the same action
+   - Make the primary action visually dominant
+
 ### DON'T ❌
 
 1. Don't use pure white (`#FFFFFF`) for text → Use `#E6E8EB`
@@ -534,6 +590,7 @@ gap: 0.5rem;
 6. Don't use small touch targets → 44px minimum
 7. Don't use saturated colors → Muted tones feel premium
 8. Don't ignore accessibility → Maintain contrast ratios
+9. Don't create redundant controls → One button per action (e.g., don't have both a microphone icon AND a "Start Recording" button)
 
 ---
 

@@ -4,9 +4,9 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 
 ## Features
 
-✨ **Modern UI** - Beautiful, responsive interface built with React and Tailwind CSS
+✨ **Modern UI** - Beautiful, responsive interface built with React and Tailwind CSS with streamlined single-button control
 🔐 **User Authentication** - Secure JWT-based authentication with user registration and login
-🎙️ **Audio Recording** - Record directly in the browser with pause/resume support
+🎙️ **Audio Recording** - Record directly in the browser with one-click start/stop using the microphone button
 🤖 **AI Transcription** - Powered by Whisper (large-v3-turbo) via vLLM
 👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
 💾 **Persistent Storage** - Audio files and transcriptions stored in database with user ownership
@@ -385,10 +385,10 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Your JWT token is stored securely in browser localStorage
 
 3. **Record a voice message**:
-   - Click "Start Recording"
+   - Adjust recording options (model, diarization) if desired
+   - Click the large microphone button to start recording
    - Speak your message
-   - Use "Pause" if needed
-   - Click "Stop & Transcribe"
+   - Click the microphone button again to stop and transcribe
 
 4. **Enable speaker diarization** (optional):
    - Check the "Enable speaker diarization" checkbox before recording
