@@ -245,6 +245,71 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
 
 **File:** `frontend/src/index.css` (Lines 136-153)
 
+#### Search Input
+
+Modern search input with icon, focus ring, and clear button.
+
+```tsx
+<div className="flex items-center space-x-3">
+  {/* Search Icon */}
+  <div className="flex-shrink-0">
+    <svg className="w-5 h-5" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  </div>
+
+  {/* Search Input */}
+  <input
+    type="text"
+    value={searchQuery}
+    onChange={(e) => handleSearchChange(e.target.value)}
+    placeholder="Search in transcriptions..."
+    className="flex-1 px-4 py-2.5 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 min-h-[44px]"
+    style={{
+      background: 'rgba(255, 255, 255, 0.04)',
+      color: '#E6E8EB',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      outline: 'none',
+    }}
+    onFocus={(e) => {
+      e.currentTarget.style.border = '1px solid rgba(92, 124, 250, 0.5)'
+      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(92, 124, 250, 0.1)'
+    }}
+    onBlur={(e) => {
+      e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.08)'
+      e.currentTarget.style.boxShadow = 'none'
+    }}
+  />
+
+  {/* Clear Button (conditional) */}
+  {searchQuery && (
+    <button
+      onClick={() => handleSearchChange('')}
+      className="flex-shrink-0 p-2 rounded-lg transition-all duration-200"
+      style={{
+        background: 'rgba(255, 255, 255, 0.04)',
+        color: '#9BA4B5',
+      }}
+      title="Clear search"
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  )}
+</div>
+```
+
+**Features:**
+- Search icon on the left for visual clarity
+- Focus ring with accent color (#5C7CFA)
+- Conditional clear button (X) that only appears when text is present
+- Responsive text sizing (sm on mobile, base on desktop)
+- Touch-friendly 44px minimum height
+- Smooth transitions on focus/blur
+
+**File:** `frontend/src/App.tsx` (Lines 304-359)
+
 #### Custom Select/Dropdown (Dark)
 
 Professional custom-styled dropdown with chevron icon, replacing default browser styles.
@@ -718,6 +783,90 @@ transition: all 0.2s;
 /* On hover */
 box-shadow: 0 0 16px rgba(92, 124, 250, 0.5);
 ```
+
+---
+
+## Search & Filter Components
+
+### Search Bar
+
+The search feature provides full-text search across all transcriptions with real-time updates.
+
+**Implementation:**
+```tsx
+const [searchQuery, setSearchQuery] = useState<string>('')
+
+const handleSearchChange = (query: string) => {
+  setSearchQuery(query)
+  setCurrentPage(1) // Reset to first page when search changes
+}
+
+// Auto-triggers API call via useEffect
+useEffect(() => {
+  if (user) {
+    loadTranscriptions() // Includes search parameter
+  }
+}, [searchQuery, priorityFilter, currentPage, user])
+```
+
+**UI Components:**
+1. **Search Icon** - Visual indicator (magnifying glass, #5C7CFA)
+2. **Input Field** - Flexible width with focus ring
+3. **Clear Button** - Conditional X button (only when text present)
+
+**Behavior:**
+- Case-insensitive search on backend (`ILIKE`)
+- Searches full transcription text
+- Resets pagination to page 1 on search change
+- Works together with priority filter
+- Real-time updates as you type
+
+**File:** `frontend/src/App.tsx` (Lines 24, 176-179, 304-359)
+
+### Priority Filter Buttons
+
+Filter transcriptions by priority level with color-coded buttons.
+
+**Button States:**
+- **All** (selected): Blue gradient with shadow
+- **High**: Red (#E44C65) when selected, light red bg when not
+- **Medium**: Amber (#F9A826) when selected, light amber bg when not
+- **Low**: Green (#4ADE80) when selected, light green bg when not
+
+**Interaction:**
+```tsx
+const handleFilterChange = (priority: Priority | null) => {
+  setPriorityFilter(priority)
+  setCurrentPage(1) // Reset to first page when filter changes
+}
+```
+
+**Combined Behavior:**
+- Search + Filter work together
+- Example: Search "meeting" + Filter "High" = high priority transcriptions containing "meeting"
+- Both reset pagination to page 1 when changed
+- API handles both parameters simultaneously
+
+**File:** `frontend/src/App.tsx` (Lines 361-437)
+
+### Backend API
+
+**Endpoint:** `GET /api/transcriptions`
+
+**Query Parameters:**
+- `skip`: Pagination offset (default: 0)
+- `limit`: Page size (default: 10)
+- `priority`: Optional filter (low, medium, high)
+- `search`: Optional search query (case-insensitive)
+
+**Example:**
+```
+GET /api/transcriptions?skip=0&limit=10&priority=high&search=project
+```
+
+Returns all high-priority transcriptions containing "project" in the text.
+
+**File:** `backend/main.py` (Lines 458-500)
 
 ---
 

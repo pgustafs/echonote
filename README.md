@@ -12,9 +12,11 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 💾 **Persistent Storage** - Audio files and transcriptions stored in database with user ownership
 🎵 **Audio Playback** - Listen to your recordings with built-in player
 📥 **Download Package** - Download transcriptions as ZIP with WAV audio and config.json
-📱 **Responsive Design** - Works seamlessly on desktop and mobile
+🔍 **Search & Filter** - Full-text search in transcriptions with priority filtering
+📱 **Responsive Design** - Works seamlessly on desktop and mobile with dedicated mobile layout
 🌓 **Dark Mode Ready** - Beautiful UI in both light and dark themes
 🎨 **Format Conversion** - Server-side WebM to WAV conversion with FFmpeg (isolated subprocess)
+📴 **PWA Support** - Install as app, offline recording, background sync
 
 ## Tech Stack
 
@@ -395,7 +397,14 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Optionally specify the number of speakers (leave empty for auto-detection)
    - The transcription will include a speaker timeline showing who spoke when
 
-5. **View transcriptions**:
+5. **Search and filter transcriptions**:
+   - **Search**: Type keywords in the search box to find specific content in your transcriptions
+   - Search is case-insensitive and searches the full text
+   - **Filter**: Use priority buttons (All, High, Medium, Low) to filter by priority level
+   - Search and filters work together - you can search within a specific priority
+   - Clear search by clicking the X button or clearing the text
+
+6. **View transcriptions**:
    - All your transcriptions appear in the list below
    - Click on any transcription to expand it
    - View full text and play audio
@@ -403,11 +412,11 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Delete unwanted transcriptions
    - **Note**: You can only see and manage your own transcriptions
 
-6. **Play audio**:
+7. **Play audio**:
    - Expand a transcription
    - Click the play button or use the audio controls
 
-7. **Download transcriptions**:
+8. **Download transcriptions**:
    - Expand any transcription
    - Click the blue "Download" button
    - A ZIP file will be downloaded containing:
@@ -417,8 +426,9 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
    - Works from both the web UI and the API
    - **Use case**: Archive recordings, share with others, or integrate with other tools
 
-8. **Logout**:
-   - Click the "Logout" button in the header
+9. **Logout**:
+   - Click the "Logout" button in the header (desktop)
+   - On mobile, scroll to show the footer and tap "Logout"
    - Your token will be cleared and you'll return to the login page
 
 ## Troubleshooting

@@ -97,7 +97,7 @@ export async function transcribeAudio(
 /**
  * Get list of transcriptions with pagination and optional priority filter
  */
-export async function getTranscriptions(skip: number = 0, limit: number = 50, priority?: Priority | null): Promise<TranscriptionList> {
+export async function getTranscriptions(skip: number = 0, limit: number = 50, priority?: Priority | null, search?: string | null): Promise<TranscriptionList> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
@@ -105,6 +105,10 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
 
   if (priority) {
     params.append('priority', priority)
+  }
+
+  if (search && search.trim()) {
+    params.append('search', search.trim())
   }
 
   const response = await fetch(`${getApiBaseUrl()}/transcriptions?${params}`, {

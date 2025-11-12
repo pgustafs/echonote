@@ -460,11 +460,12 @@ def list_transcriptions(
     skip: int = 0,
     limit: int | None = None,
     priority: str | None = None,
+    search: str | None = None,
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
-    List user's transcriptions with pagination and optional priority filtering.
+    List user's transcriptions with pagination, optional priority filtering, and search.
 
     Requires authentication. Only returns transcriptions belonging to the authenticated user.
 
@@ -472,6 +473,7 @@ def list_transcriptions(
         skip: Number of records to skip (offset)
         limit: Maximum number of records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
         priority: Optional priority filter (low, medium, high)
+        search: Optional search query (searches in transcription text)
         current_user: Authenticated user
         session: Database session dependency
 
@@ -491,6 +493,11 @@ def list_transcriptions(
     # Add priority filter if provided
     if priority:
         statement = statement.where(Transcription.priority == priority)
+
+    # Add search filter if provided (case-insensitive search in text)
+    if search:
+        search_pattern = f"%{search}%"
+        statement = statement.where(Transcription.text.ilike(search_pattern))
 
     # Get total count with filter
     total = len(session.exec(statement).all())

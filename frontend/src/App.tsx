@@ -21,6 +21,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
 
@@ -78,12 +79,12 @@ function App() {
     }
   }, [user])
 
-  // Load transcriptions on mount and when filter or page changes (only when user is authenticated)
+  // Load transcriptions on mount and when filter, search, or page changes (only when user is authenticated)
   useEffect(() => {
     if (user) {
       loadTranscriptions()
     }
-  }, [priorityFilter, currentPage, user])
+  }, [priorityFilter, searchQuery, currentPage, user])
 
   const loadModels = async () => {
     try {
@@ -101,7 +102,7 @@ function App() {
       setIsLoading(true)
       setError(null)
       const skip = (currentPage - 1) * pageSize
-      const data = await getTranscriptions(skip, pageSize, priorityFilter)
+      const data = await getTranscriptions(skip, pageSize, priorityFilter, searchQuery || null)
       setTranscriptions(data.transcriptions)
       setTotalTranscriptions(data.total)
     } catch (err) {
@@ -170,6 +171,11 @@ function App() {
   const handleFilterChange = (priority: Priority | null) => {
     setPriorityFilter(priority)
     setCurrentPage(1) // Reset to first page when filter changes
+  }
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query)
+    setCurrentPage(1) // Reset to first page when search changes
   }
 
   const handlePageChange = (page: number) => {
@@ -293,6 +299,63 @@ function App() {
             defaultModel={defaultModel}
             isMobile={isMobile}
           />
+        </section>
+
+        {/* Search Section */}
+        <section className={isMobile ? "mb-4" : "mb-6 sm:mb-8"}>
+          <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <svg className="w-5 h-5" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search in transcriptions..."
+                className="flex-1 px-4 py-2.5 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 min-h-[44px]"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  color: '#E6E8EB',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  outline: 'none',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.border = '1px solid rgba(92, 124, 250, 0.5)'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(92, 124, 250, 0.1)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.08)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => handleSearchChange('')}
+                  className="flex-shrink-0 p-2 rounded-lg transition-all duration-200"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    color: '#9BA4B5',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                    e.currentTarget.style.color = '#E6E8EB'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
+                    e.currentTarget.style.color = '#9BA4B5'
+                  }}
+                  title="Clear search"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Filter Section */}
