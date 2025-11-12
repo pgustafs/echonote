@@ -805,10 +805,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="input-field-dark"
+                    className="select-dark"
                   >
                     {availableModels.map((model) => (
-                      <option key={model} value={model} className="bg-slate-800">
+                      <option key={model} value={model}>
                         {model}
                       </option>
                     ))}
@@ -827,7 +827,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     setNumSpeakers(undefined)
                   }
                 }}
-                className="w-5 h-5 rounded border-2 border-purple-500 text-purple-600 focus:ring-2 focus:ring-purple-500 bg-slate-700 cursor-pointer"
+                className="checkbox-dark checkbox-purple"
               />
               <div className="flex-1">
                 <span className="text-white font-medium text-sm sm:text-base group-hover:text-purple-300 transition-colors block">
@@ -874,7 +874,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                   type="checkbox"
                   checked={includeUrl}
                   onChange={(e) => setIncludeUrl(e.target.checked)}
-                  className="w-5 h-5 rounded border-2 border-blue-500 text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-700 cursor-pointer"
+                  className="checkbox-dark checkbox-blue"
                 />
                 <div className="flex-1">
                   <span className="text-white font-medium text-sm sm:text-base group-hover:text-blue-300 transition-colors block">

@@ -243,7 +243,132 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
 }
 ```
 
-**File:** `frontend/src/index.css` (Lines 111-128)
+**File:** `frontend/src/index.css` (Lines 136-153)
+
+#### Custom Select/Dropdown (Dark)
+
+Professional custom-styled dropdown with chevron icon, replacing default browser styles.
+
+```css
+.select-dark {
+  background-color: rgba(15, 23, 42, 0.95);  /* Solid dark slate */
+  background-image: url("data:image/svg+xml,...");  /* Custom chevron */
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  color: #E6E8EB;
+  color-scheme: dark;  /* Hint browser to use dark theme */
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  padding-right: 2.5rem;
+  appearance: none;  /* Remove default arrow */
+  cursor: pointer;
+}
+
+.select-dark:hover {
+  background-color: rgba(15, 23, 42, 1);  /* Fully opaque on hover */
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.select-dark:focus {
+  outline: none;
+  border-color: #5C7CFA;
+  box-shadow: 0 0 0 3px rgba(92, 124, 250, 0.2);
+  background-color: rgba(15, 23, 42, 1);
+}
+
+.select-dark option {
+  background-color: #0f172a;  /* Dark slate-900 for options */
+  color: #E6E8EB;
+  padding: 0.75rem 1rem;
+}
+
+.select-dark option:checked {
+  background-color: #5C7CFA;  /* Blue for selected option */
+  color: white;
+}
+```
+
+**Features:**
+- Removes default browser dropdown arrow with `appearance: none`
+- Custom chevron icon in gray (`#9BA4B5`) positioned right
+- **Solid dark background** - `rgba(15, 23, 42, 0.95)` instead of transparent
+- **`color-scheme: dark`** - Tells browser to use dark native controls
+- **Dark dropdown menu** - Options appear with `#0f172a` background
+- Hover state becomes fully opaque
+- Focus state shows blue ring
+- Selected option highlighted in blue (`#5C7CFA`)
+
+**File:** `frontend/src/index.css` (Lines 155-186)
+
+#### Custom Checkbox (Dark)
+
+Professional custom checkbox with gradient fill and checkmark, replacing default browser styles.
+
+```css
+.checkbox-dark {
+  appearance: none;  /* Remove default checkbox */
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.375rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.checkbox-dark:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.checkbox-dark:checked {
+  background: linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%);
+  border-color: #5C7CFA;
+}
+
+.checkbox-dark:checked::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 0.35rem;
+  height: 0.65rem;
+  border: solid white;
+  border-width: 0 2px 2px 0;  /* L-shape rotated = checkmark */
+}
+```
+
+**Variants:**
+```css
+.checkbox-blue:checked {
+  background: linear-gradient(135deg, #5C7CFA 0%, #4ADEDE 100%);
+}
+
+.checkbox-purple:checked {
+  background: linear-gradient(135deg, #9775FA 0%, #7C3AED 100%);
+}
+```
+
+**Features:**
+- Removes default browser checkbox with `appearance: none`
+- Custom checkmark created with CSS border trick (rotated L-shape)
+- Gradient background when checked (matches brand colors)
+- Smooth hover states
+- Focus ring for accessibility
+- Color variants for different sections (blue for URL, purple for diarization)
+
+**Usage:**
+```tsx
+<input type="checkbox" className="checkbox-dark checkbox-purple" />
+<input type="checkbox" className="checkbox-dark checkbox-blue" />
+```
+
+**File:** `frontend/src/index.css` (Lines 188-243)
 
 ### Badges
 
