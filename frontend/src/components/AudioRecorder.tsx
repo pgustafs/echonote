@@ -420,15 +420,37 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
 
   return (
     <div className="enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden">
-      {/* Animated Background Effect - DNA Spiral with Crossing Lines */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
-        <svg
-          className="w-full h-full"
-          viewBox="0 0 800 400"
-          preserveAspectRatio="xMidYMid slice"
-          style={{ opacity: 0.6 }}
-        >
-          <defs>
+      <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
+        <div className="text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>
+            <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <span>Record Voice Message</span>
+          </h2>
+          <p className="text-sm sm:text-base" style={{ color: '#9BA4B5' }}>
+            Adjust options below, then press the microphone to start.
+          </p>
+        </div>
+
+        {/* Microphone Button Container with DNA Spiral Background */}
+        <div className="relative">
+          {/* DNA Spiral Animation - Anchored to button center */}
+          <div className="absolute pointer-events-none" style={{
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '600px',
+            height: '300px',
+            zIndex: 0
+          }}>
+            <svg
+              className="w-full h-full"
+              viewBox="0 0 800 400"
+              preserveAspectRatio="xMidYMid meet"
+              style={{ opacity: 0.6 }}
+            >
+              <defs>
             {/* Gradient for line 1 (blue to cyan) */}
             <linearGradient id="lineGradient1" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#5C7CFA" stopOpacity="0.8" />
@@ -478,9 +500,9 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             </radialGradient>
           </defs>
 
-          {/* First curved path - DNA helix top strand (positioned higher y=150) */}
+          {/* First curved path - DNA helix top strand (centered at y=200) */}
           <path
-            d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+            d="M -50 200 Q 100 160, 200 190 Q 300 220, 400 200 Q 500 180, 600 210 Q 700 240, 850 210"
             stroke="url(#lineGradient1)"
             strokeWidth="1"
             fill="none"
@@ -488,9 +510,9 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             opacity="0.7"
           />
 
-          {/* Second curved path - DNA helix bottom strand (inverse curve, crosses first) */}
+          {/* Second curved path - DNA helix bottom strand (inverse curve, crosses first at y=200) */}
           <path
-            d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+            d="M -50 210 Q 100 240, 200 210 Q 300 180, 400 200 Q 500 220, 600 190 Q 700 160, 850 190"
             stroke="url(#lineGradient2)"
             strokeWidth="1"
             fill="none"
@@ -598,77 +620,65 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
           {/* Hidden paths for motion */}
           <path
             id="motionPath1"
-            d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+            d="M -50 200 Q 100 160, 200 190 Q 300 220, 400 200 Q 500 180, 600 210 Q 700 240, 850 210"
             fill="none"
             stroke="none"
           />
           <path
             id="motionPath2"
-            d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+            d="M -50 210 Q 100 240, 200 210 Q 300 180, 400 200 Q 500 220, 600 190 Q 700 160, 850 190"
             fill="none"
             stroke="none"
           />
         </svg>
-      </div>
-
-      <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
-        <div className="text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>
-            <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-            <span>Record Voice Message</span>
-          </h2>
-          <p className="text-sm sm:text-base" style={{ color: '#9BA4B5' }}>
-            Adjust options below, then press the microphone to start.
-          </p>
-        </div>
-
-        {/* Recording Indicator */}
-        {isRecording && (
-          <div className="bg-slate-700/50 backdrop-blur-sm px-6 sm:px-8 py-3 sm:py-4 rounded-lg border border-slate-600">
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
-              <span className="text-2xl sm:text-3xl font-mono font-bold text-white tabular-nums">
-                {formatTime(recordingTime)}
-              </span>
-              <span className="text-sm text-slate-400 hidden sm:inline">
-                {isPaused ? 'Paused' : 'Recording'}
-              </span>
-            </div>
           </div>
-        )}
 
-        {/* Microphone Icon / Animation */}
-        <button
+          {/* Microphone Ring Button - Positioned on top of DNA spiral */}
+          <button
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isTranscribing || isStopping}
           className="relative group"
+          style={{ zIndex: 1 }}
           aria-label={isRecording ? 'Stop recording and transcribe' : 'Start recording'}
         >
           {/* Pulse rings */}
           {isRecording && !isPaused && (
             <>
-              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
-              <div className="absolute inset-0 rounded-full bg-red-500/10 animate-pulse" />
+              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ border: '6px solid transparent' }} />
+              <div className="absolute inset-0 rounded-full bg-red-500/10 animate-pulse" style={{ border: '6px solid transparent' }} />
             </>
           )}
           <div
-            className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center transition-all duration-300"
+            className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center transition-all duration-300"
             style={
               isRecording
-                ? { background: '#E44C65', boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)', transform: 'scale(1.05)', cursor: 'pointer' }
+                ? {
+                    background: 'transparent',
+                    border: '6px solid #E44C65',
+                    boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4), inset 0 0 20px rgba(228, 76, 101, 0.1)',
+                    transform: 'scale(1.05)',
+                    cursor: 'pointer'
+                  }
                 : isTranscribing
-                ? { background: 'rgba(255, 255, 255, 0.2)', cursor: 'not-allowed' }
-                : { background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)', boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4)', cursor: 'pointer' }
+                ? {
+                    background: 'transparent',
+                    border: '6px solid rgba(255, 255, 255, 0.3)',
+                    cursor: 'not-allowed'
+                  }
+                : {
+                    background: 'transparent',
+                    border: '6px solid #9775FA',
+                    boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4), inset 0 0 20px rgba(92, 124, 250, 0.1)',
+                    cursor: 'pointer'
+                  }
             }
             onMouseEnter={(e) => {
               if (!isTranscribing && !isStopping) {
                 if (isRecording) {
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6)'
+                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6), inset 0 0 30px rgba(228, 76, 101, 0.15)'
                   e.currentTarget.style.transform = 'scale(1.1)'
                 } else {
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
+                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6), inset 0 0 30px rgba(92, 124, 250, 0.15)'
                   e.currentTarget.style.transform = 'scale(1.05)'
                 }
               }
@@ -676,10 +686,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             onMouseLeave={(e) => {
               if (!isTranscribing && !isStopping) {
                 if (isRecording) {
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(228, 76, 101, 0.4)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(228, 76, 101, 0.4), inset 0 0 20px rgba(228, 76, 101, 0.1)'
                   e.currentTarget.style.transform = 'scale(1.05)'
                 } else {
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(92, 124, 250, 0.4)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(92, 124, 250, 0.4), inset 0 0 20px rgba(92, 124, 250, 0.1)'
                   e.currentTarget.style.transform = 'scale(1)'
                 }
               }
@@ -704,7 +714,8 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             }}
           >
             <svg
-              className="w-16 h-16 sm:w-20 sm:h-20 text-white"
+              className="w-20 h-20 sm:w-24 sm:h-24 transition-colors duration-300"
+              style={{ color: isRecording ? '#E44C65' : '#9775FA' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -718,6 +729,56 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             </svg>
           </div>
         </button>
+        </div>
+
+        {/* Recording Indicator - Below microphone button */}
+        {isRecording && (
+          <div className="bg-slate-700/50 backdrop-blur-sm px-6 sm:px-8 py-3 sm:py-4 rounded-lg border border-slate-600">
+            <div className="flex items-center justify-center space-x-3 sm:space-x-4">
+              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
+              <span className="text-2xl sm:text-3xl font-mono font-bold text-white tabular-nums">
+                {formatTime(recordingTime)}
+              </span>
+              <span className="text-sm text-slate-400 hidden sm:inline">
+                {isPaused ? 'Paused' : 'Recording'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Pause/Resume Button - Below timer when recording */}
+        {isRecording && (
+          <div className="flex justify-center w-full sm:w-auto">
+            <button
+              onClick={togglePause}
+              className="btn-secondary px-6 sm:px-8 py-3 text-base flex items-center"
+            >
+              {isPaused ? (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>Pause</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Model Selector & URL Input Section */}
         {!isRecording && !isTranscribing && (
@@ -825,40 +886,6 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                 </p>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Pause/Resume Button - Only shown during recording */}
-        {isRecording && (
-          <div className="flex justify-center w-full sm:w-auto">
-            <button
-              onClick={togglePause}
-              className="btn-secondary px-6 sm:px-8 py-3 text-base flex items-center"
-            >
-              {isPaused ? (
-                <>
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <span>Resume</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <span>Pause</span>
-                </>
-              )}
-            </button>
           </div>
         )}
 

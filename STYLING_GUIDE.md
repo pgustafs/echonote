@@ -267,62 +267,92 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
 
 **File:** `frontend/src/index.css` (Lines 131-154)
 
-### Microphone Button (Recording CTA)
+### Microphone Ring Button (Recording CTA)
 
 The microphone button is the **single primary interaction point** for recording. This unified approach eliminates confusion and creates a clear, focused user experience.
 
 #### Design Philosophy
 - **Single Point of Control**: One button handles both start and stop actions
+- **Ring Design**: Circular outline (not filled) for modern, clean aesthetic
+- **Fixed Position**: Button stays in same position; timer and pause button appear below when recording
 - **Visual State Clarity**: Color and animation clearly indicate current state
 - **No Redundant Controls**: Removed separate "Start Recording" and "Stop Recording" buttons to avoid split focus
 - **Clear Instruction**: Subtitle guides users: "Adjust options below, then press the microphone to start."
 
-#### Idle State (Gradient)
+#### Idle State (Purple Ring)
 ```tsx
 style={{
-  background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
-  boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4)',
+  background: 'transparent',
+  border: '6px solid #9775FA',  /* Solid purple ring */
+  boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4), inset 0 0 20px rgba(92, 124, 250, 0.1)',
   borderRadius: '50%',
-  width: '10rem',  /* 160px on mobile, 160px on tablet+ */
+  width: '10rem',   /* 160px on mobile */
   height: '10rem',
+  /* 12rem on tablet+ (192px) */
   transition: 'all 0.3s',
   cursor: 'pointer'
 }}
 ```
 
+**Border Color**: `#9775FA` (Solid Purple - ensures perfect circular shape)
+**Icon Color**: `#9775FA` (Purple)
 **Action**: Click to start recording
+
+**Note**: Using solid border instead of `borderImage` gradient to maintain perfect circular shape (borderImage is incompatible with border-radius)
 
 #### Hover State (Idle)
 ```tsx
 onMouseEnter={(e) => {
-  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6)'
+  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6), inset 0 0 30px rgba(92, 124, 250, 0.15)'
   e.currentTarget.style.transform = 'scale(1.05)'
 }}
 ```
 
-#### Recording State (Active)
+#### Recording State (Red Ring)
 ```tsx
 style={{
-  background: '#E44C65',  /* Crimson red */
-  boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4)',
+  background: 'transparent',
+  border: '6px solid #E44C65',  /* Solid red ring */
+  boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4), inset 0 0 20px rgba(228, 76, 101, 0.1)',
   transform: 'scale(1.05)',
   cursor: 'pointer'  /* Still clickable to stop */
 }}
 ```
 
+**Icon Color**: `#E44C65` (Crimson Red)
 **Action**: Click to stop recording and transcribe
 
 **Visual Feedback**:
-- Pulsing red ring animation
+- Pulsing red ring animation around button
 - Enlarged scale (1.05)
-- Red background (#E44C65)
+- Red border (#E44C65)
+- Red microphone icon
+- Timer appears below button
+- Pause/Resume button appears below timer
 
 #### Hover State (Recording)
 ```tsx
 onMouseEnter={(e) => {
-  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6)'
+  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6), inset 0 0 30px rgba(228, 76, 101, 0.15)'
   e.currentTarget.style.transform = 'scale(1.1)'  /* Slightly larger than idle hover */
 }}
+```
+
+#### Layout Structure
+```
+┌─────────────────────────────────┐
+│   Microphone Ring Button        │  ← Always in same position
+│   (Purple/Red Ring + Icon)      │
+└─────────────────────────────────┘
+          ↓ (when recording)
+┌─────────────────────────────────┐
+│   Timer Display                 │  ← Appears below button
+│   "0:45 Recording"              │
+└─────────────────────────────────┘
+          ↓
+┌─────────────────────────────────┐
+│   [Pause] or [Resume] Button    │  ← Appears below timer
+└─────────────────────────────────┘
 ```
 
 #### Button Behavior
@@ -334,18 +364,51 @@ onMouseEnter={(e) => {
 >
 ```
 
-**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 643-705)
+**File:** `frontend/src/components/AudioRecorder.tsx` (Lines 627-771)
 
 ### DNA Spiral Background Animation
 
 #### Overview
 The recording area features an animated DNA-like double helix effect with glowing dots traveling along curved paths. Inspired by modern web animations (like vite.dev), this creates subtle "AI energy" visual interest.
 
+**Key Feature**: The DNA spiral is **anchored to the microphone button**, not the card. This means it stays centered behind the button regardless of card size changes when recording indicators appear/disappear.
+
+#### Positioning Strategy
+```tsx
+{/* Button Container with DNA Spiral */}
+<div className="relative">
+  {/* DNA Spiral - Absolutely positioned relative to button */}
+  <div className="absolute pointer-events-none" style={{
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '600px',
+    height: '300px',
+    zIndex: 0
+  }}>
+    <svg viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet">
+      {/* DNA paths centered at x=400, y=150 */}
+    </svg>
+  </div>
+
+  {/* Button positioned above spiral */}
+  <button style={{ zIndex: 1 }}>
+    {/* Button content */}
+  </button>
+</div>
+```
+
+This structure ensures:
+- DNA spiral is always centered on button (via `transform: translate(-50%, -50%)`)
+- Button stays above spiral (via `zIndex: 1`)
+- When card height changes (recording indicators), button and spiral move together
+- Fixed 600px × 300px spiral container provides consistent animation area
+
 #### Two Crossing Curved Lines
 ```tsx
-{/* First curved path - DNA helix top strand */}
+{/* First curved path - DNA helix top strand (centered at y=200) */}
 <path
-  d="M -50 150 Q 100 110, 200 140 Q 300 170, 400 150 Q 500 130, 600 160 Q 700 190, 850 160"
+  d="M -50 200 Q 100 160, 200 190 Q 300 220, 400 200 Q 500 180, 600 210 Q 700 240, 850 210"
   stroke="url(#lineGradient1)"
   strokeWidth="1"
   fill="none"
@@ -353,9 +416,9 @@ The recording area features an animated DNA-like double helix effect with glowin
   opacity="0.7"
 />
 
-{/* Second curved path - DNA helix bottom strand (inverse curve) */}
+{/* Second curved path - DNA helix bottom strand (inverse curve, crosses at y=200) */}
 <path
-  d="M -50 160 Q 100 190, 200 160 Q 300 130, 400 150 Q 500 170, 600 140 Q 700 110, 850 140"
+  d="M -50 210 Q 100 240, 200 210 Q 300 180, 400 200 Q 500 220, 600 190 Q 700 160, 850 190"
   stroke="url(#lineGradient2)"
   strokeWidth="1"
   fill="none"
@@ -391,11 +454,13 @@ Each dot has a radial gradient circle (radius 20) that follows it along the path
 
 #### Technical Details
 - **Animation Duration**: 12 seconds per cycle
-- **Positioning**: Lines centered at y=150 to pass through microphone button
-- **Crossing Point**: Both paths intersect at (400, 150) - center of the card
+- **ViewBox**: 0 0 800 400 (800px wide, 400px tall)
+- **Positioning**: Lines centered at y=200 (exact vertical center of 400px viewBox)
+- **Crossing Point**: Both paths intersect at (400, 200) - perfect center of the viewBox
 - **Dot Count**: 3 total (2 cold + 1 warm)
 - **Convergence**: Dots slow down at end using spline timing `keyPoints="0;0.7;1"`
 - **Z-Index**: Background layer (z-index: 0) with `pointer-events-none`
+- **Anchoring**: Positioned absolutely relative to button container, not card
 
 #### Key Features
 1. **DNA Helix Shape**: Two lines with inverse curves create crossing pattern
