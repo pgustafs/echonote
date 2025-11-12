@@ -34,6 +34,7 @@ htmlcov/
 
 # kuberenetes manifest
 echonote-kube-priv.yaml
+openshift-deployment-priv.yaml
 
 # IDEs
 .vscode/

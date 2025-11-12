@@ -24,7 +24,7 @@ metadata:
   namespace: echonote
 type: Opaque
 stringData:
-  JWT_SECRET_KEY: "CHANGE_ME(openssl rand -hex 32b)"
+  JWT_SECRET_KEY: "CHANGE_ME(openssl rand -hex 32)"
 
 ---
 apiVersion: v1
@@ -254,9 +254,7 @@ spec:
               name: echonote-config
               key: default-assistant-model
 
-        # Database configuration
-        - name: DATABASE_URL
-          value: "postgresql://$(POSTGRESQL_USER):$(POSTGRESQL_PASSWORD)@postgresql:5432/$(POSTGRESQL_DATABASE)"
+        # Database configuration (individual credentials, backend will construct URL)
         - name: POSTGRESQL_USER
           valueFrom:
             secretKeyRef:
@@ -272,6 +270,10 @@ spec:
             secretKeyRef:
               name: postgresql-secret
               key: POSTGRESQL_DATABASE
+        - name: POSTGRESQL_HOST
+          value: "postgresql"
+        - name: POSTGRESQL_PORT
+          value: "5432"
 
         # Application configuration
         - name: API_KEY
@@ -338,10 +340,10 @@ spec:
         resources:
           limits:
             cpu: "2"
-            memory: "28Gi"
+            memory: "8Gi"
           requests:
             cpu: "500m"
-            memory: "28Gi"
+            memory: "2Gi"
 
         livenessProbe:
           httpGet:
@@ -365,7 +367,6 @@ spec:
 
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
           allowPrivilegeEscalation: false
           capabilities:
             drop:
@@ -420,6 +421,19 @@ spec:
   wildcardPolicy: None
 
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: echonote
+data:
+  config.js: |
+    // Runtime configuration for EchoNote frontend
+    window.APP_CONFIG = {
+      API_URL: 'https://backend-echonote.apps.ai3.pgustafs.com/api'
+    }
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -447,6 +461,10 @@ spec:
         ports:
         - containerPort: 8080
           protocol: TCP
+        volumeMounts:
+        - name: frontend-config
+          mountPath: /opt/app-root/src/dist/config.js
+          subPath: config.js
         resources:
           limits:
             cpu: "500m"
@@ -474,13 +492,16 @@ spec:
           failureThreshold: 3
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - ALL
           seccompProfile:
             type: RuntimeDefault
+      volumes:
+      - name: frontend-config
+        configMap:
+          name: frontend-config
 
 ---
 apiVersion: v1

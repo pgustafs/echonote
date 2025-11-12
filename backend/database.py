@@ -26,6 +26,16 @@ def get_database_url() -> str:
             postgres_url = postgres_url.replace("postgres://", "postgresql://", 1)
         return postgres_url
 
+    # Check if individual PostgreSQL credentials are provided (e.g., Kubernetes)
+    pg_user = os.getenv("POSTGRESQL_USER")
+    pg_password = os.getenv("POSTGRESQL_PASSWORD")
+    pg_database = os.getenv("POSTGRESQL_DATABASE")
+    pg_host = os.getenv("POSTGRESQL_HOST", "postgresql")
+    pg_port = os.getenv("POSTGRESQL_PORT", "5432")
+
+    if pg_user and pg_password and pg_database:
+        return f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
+
     # Default to SQLite (development)
     db_file = os.getenv("SQLITE_DB", "echonote.db")
     return f"sqlite:///{db_file}"

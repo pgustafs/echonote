@@ -24,7 +24,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+// Get API URL from runtime config (injected via ConfigMap) or fallback to env var or localhost
+const getApiBaseUrl = (): string => {
+  // @ts-ignore - window.APP_CONFIG is injected at runtime
+  if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.API_URL) {
+    // @ts-ignore
+    return window.APP_CONFIG.API_URL
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+}
+
 const TOKEN_KEY = 'echonote_token'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -46,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchCurrentUser = async (authToken: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const response = await fetch(`${getApiBaseUrl()}/auth/me`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -69,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (username: string, password: string) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (username: string, email: string, password: string) => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

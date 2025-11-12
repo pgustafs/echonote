@@ -13,8 +13,8 @@ Environment variables:
 - DATABASE_URL: PostgreSQL connection string (production)
 - SQLITE_DB: SQLite database filename (development, default: echonote.db)
 - DB_ECHO: Enable SQL query logging (default: false)
-- BACKEND_PORT: Port for FastAPI server (default: 8000)
-- BACKEND_HOST: Host for FastAPI server (default: 0.0.0.0)
+- APP_PORT: Port for FastAPI server (default: 8000)
+- APP_HOST: Host for FastAPI server (default: 0.0.0.0)
 - CORS_ORIGINS: Comma-separated list of allowed CORS origins
 - DIARIZATION_MODEL: Pyannote model for speaker diarization (default: pyannote/speaker-diarization-3.1)
 - HF_TOKEN: Hugging Face token for accessing gated models
@@ -125,8 +125,8 @@ class Settings:
         return self.ASSISTANT_MODELS[model_name]
 
     # Server Configuration
-    BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
-    BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
+    APP_PORT: int = int(os.getenv("APP_PORT", "8000"))
+    APP_HOST: str = os.getenv("APP_HOST", "0.0.0.0")
 
     # CORS Configuration
     CORS_ORIGINS: List[str] = os.getenv(
