@@ -649,24 +649,26 @@ Each dot has a radial gradient circle (radius 20) that follows it along the path
 
 ## Interactions & Animations
 
-### Static Header Background
+### Header Background - Glass Effect
 
-The header uses a clean, static dark gray background to provide visual stability and emphasize the recording button as the primary CTA.
+The header uses a semi-transparent glass effect that matches the footer design, creating visual cohesion between the top and bottom sections of the application.
 
 ```css
 .gradient-header {
-  /* Static dark gray background for cleaner, more stable appearance */
-  background: #1a1f2e;
+  /* Semi-transparent glass effect matching footer design */
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 ```
 
-**File:** `frontend/src/index.css` (Lines 193-197)
+**File:** `frontend/src/index.css` (Lines 289-294)
 
 **Design Rationale:**
-- Clean, non-distracting background
+- Matches footer styling for visual consistency
+- Semi-transparent glass effect creates depth
+- Subtle border provides gentle separation
+- Clean, professional appearance
 - Emphasizes the recording button and content
-- More stable, professional appearance
-- Reduces visual noise and animation overhead
 
 ### Loading Spinner
 

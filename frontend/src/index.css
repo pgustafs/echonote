@@ -286,10 +286,11 @@
     @apply min-h-[44px] min-w-[44px];
   }
 
-  /* Static header background - clean and stable */
+  /* Static header background - matches footer theme */
   .gradient-header {
-    /* Static dark gray background for cleaner, more stable appearance */
-    background: #1a1f2e;
+    /* Semi-transparent glass effect matching footer design */
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   /* Subtle elevation */
