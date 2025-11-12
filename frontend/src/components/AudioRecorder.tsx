@@ -541,10 +541,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                   <mpath href="#motionPath1" />
                 </animateMotion>
               </circle>
-              {/* Cold colored dot (cyan) */}
+              {/* Cold colored dot (cyan when idle, red when recording) */}
               <circle
                 r="2.5"
-                fill="#4ADEDE"
+                fill={isRecording ? "#E44C65" : "#4ADEDE"}
                 filter="url(#dotGlowCold)"
               >
                 <animateMotion
@@ -590,10 +590,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                 <mpath href="#motionPath2" />
               </animateMotion>
             </circle>
-            {/* Warm colored dot (orange/amber) */}
+            {/* Warm colored dot (amber when idle, red when recording) */}
             <circle
               r="2.5"
-              fill="#F9A826"
+              fill={isRecording ? "#E44C65" : "#F9A826"}
               filter="url(#dotGlowWarm)"
             >
               <animateMotion

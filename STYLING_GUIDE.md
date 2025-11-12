@@ -428,10 +428,23 @@ This structure ensures:
 ```
 
 #### Color Scheme
+
+**Idle State (Not Recording):**
 - **Line 1 Gradient**: `#5C7CFA` (blue) → `#4ADEDE` (cyan) → `#9775FA` (purple)
 - **Line 2 Gradient**: `#9775FA` (purple) → `#4ADEDE` (cyan) → `#5C7CFA` (blue) - inverse
 - **Cold Dots** (2): `#4ADEDE` (cyan) - represents cool energy
 - **Warm Dot** (1): `#F9A826` (amber) - represents warm energy
+
+**Recording State:**
+- **Line Gradients**: Same as idle (unchanged)
+- **All Dots**: `#E44C65` (red) - all 3 dots turn red to match recording button
+- **Visual Unity**: Creates cohesive red theme (button ring + icon + DNA dots)
+
+```tsx
+// Dots change color based on recording state
+fill={isRecording ? "#E44C65" : "#4ADEDE"}  // Cold dots
+fill={isRecording ? "#E44C65" : "#F9A826"}  // Warm dot
+```
 
 #### Traveling Glow Effect
 Each dot has a radial gradient circle (radius 20) that follows it along the path, creating a "traveling glow" effect:
