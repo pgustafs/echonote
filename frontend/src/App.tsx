@@ -9,6 +9,7 @@ import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
 import Login from './components/Login'
 import SyncIndicator from './components/SyncIndicator'
+import BottomNav from './components/BottomNav'
 import { useAuth } from './contexts/AuthContext'
 import { useOfflineRecording } from './hooks/useOfflineRecording'
 import { Priority, Transcription } from './types'
@@ -27,7 +28,6 @@ function App() {
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const [showMobileFooter, setShowMobileFooter] = useState(false)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -43,34 +43,6 @@ function App() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Handle scroll for mobile footer
-  useEffect(() => {
-    if (!isMobile) {
-      setShowMobileFooter(false)
-      return
-    }
-
-    let scrollTimeout: number | undefined
-    const handleScroll = () => {
-      setShowMobileFooter(true)
-
-      // Hide footer after 2 seconds of no scrolling
-      if (scrollTimeout !== undefined) {
-        window.clearTimeout(scrollTimeout)
-      }
-      scrollTimeout = window.setTimeout(() => {
-        setShowMobileFooter(false)
-      }, 2000)
-    }
-
-    window.addEventListener('scroll', handleScroll)
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-      if (scrollTimeout !== undefined) {
-        window.clearTimeout(scrollTimeout)
-      }
-    }
-  }, [isMobile])
 
   // Load models on mount (only when user is authenticated)
   useEffect(() => {
@@ -259,7 +231,7 @@ function App() {
       )}
 
       {/* Main content */}
-      <main className={isMobile ? "px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"}>
+      <main className={isMobile ? "px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"} style={isMobile ? { paddingBottom: '80px' } : {}}>
         {/* Error Message */}
         {error && (
           <div className={isMobile ? "mb-4 p-4 shadow-lg" : "mb-6 sm:mb-8 rounded-2xl p-4 shadow-lg"} style={{ background: 'rgba(228, 76, 101, 0.1)', border: '1px solid rgba(228, 76, 101, 0.3)' }}>
@@ -454,38 +426,8 @@ function App() {
         </footer>
       )}
 
-      {/* Mobile Footer - appears on scroll */}
-      {isMobile && showMobileFooter && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300"
-          style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            backdropFilter: 'blur(10px)',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
-          }}
-        >
-          <div className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span className="text-white text-sm font-medium">{user.username}</span>
-            </div>
-            <button
-              onClick={logout}
-              className="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200"
-              style={{
-                background: 'rgba(228, 76, 101, 0.2)',
-                color: '#FF6B6B',
-                border: '1px solid rgba(228, 76, 101, 0.3)',
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Mobile Bottom Navigation */}
+      {isMobile && <BottomNav onLogout={logout} />}
 
       {/* Sync Indicator for PWA offline/online status */}
       <SyncIndicator

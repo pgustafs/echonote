@@ -424,9 +424,11 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
       <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
         <div className="text-center">
           <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>
-            <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
+            {!isMobile && (
+              <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            )}
             <span>Record Voice Message</span>
           </h2>
           <p className="text-sm sm:text-base" style={{ color: '#9BA4B5' }}>

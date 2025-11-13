@@ -949,7 +949,7 @@ EchoNote implements a **dedicated mobile layout** for devices with viewport widt
 #### Key Mobile Design Principles
 
 1. **Maximum Content Space** - No header on mobile, full-width cards
-2. **Contextual Controls** - Logout footer appears only when needed (on scroll)
+2. **Fixed Bottom Navigation** - LinkedIn-style tab bar always visible at bottom
 3. **Touch-Optimized** - All interactive elements meet 44px minimum
 4. **Progressive Enhancement** - Desktop layout adds more features
 
@@ -984,40 +984,70 @@ EchoNote implements a **dedicated mobile layout** for devices with viewport widt
 
 **File:** `frontend/src/App.tsx` (Line 252)
 
-#### 3. Mobile Footer (Scroll-Triggered)
+#### 3. Mobile Bottom Navigation (LinkedIn-Style)
 
 ```tsx
-{/* Mobile Footer - appears on scroll */}
-{isMobile && showMobileFooter && (
-  <div
-    className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300"
-    style={{
-      background: 'rgba(255, 255, 255, 0.02)',
-      backdropFilter: 'blur(10px)',
-      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-      boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
-    }}
-  >
-    <div className="px-4 py-3 flex items-center justify-between">
-      <div className="flex items-center space-x-2">
-        <svg className="w-4 h-4 text-white">...</svg>
-        <span className="text-white text-sm font-medium">{user.username}</span>
-      </div>
-      <button onClick={logout} className="px-4 py-2 text-sm font-semibold rounded-xl">
-        Logout
-      </button>
-    </div>
-  </div>
-)}
+{/* Mobile Bottom Navigation */}
+{isMobile && <BottomNav onLogout={logout} />}
 ```
 
-**Behavior:**
-- **Appears:** When user scrolls (any direction)
-- **Disappears:** After 2 seconds of no scrolling
-- **Styling:** Glass morphism with blur effect, fixed to bottom
-- **Content:** Username and logout button
+**Implementation:** `frontend/src/components/BottomNav.tsx`
 
-**File:** `frontend/src/App.tsx` (Lines 577-607)
+```tsx
+export default function BottomNav({ onLogout }: BottomNavProps) {
+  return (
+    <nav
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        backdropFilter: 'blur(12px)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        zIndex: 1000,
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center'
+      }}
+    >
+      <button
+        onClick={onLogout}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.25rem'
+        }}
+      >
+        <LogOut size={24} style={{ color: '#E44C65' }} />
+        <span style={{ fontSize: '0.75rem', color: '#E6E8EB' }}>
+          Logout
+        </span>
+      </button>
+    </nav>
+  )
+}
+```
+
+**Design Principles:**
+- **Always Visible:** Fixed at bottom, no scroll triggers (app-like experience)
+- **LinkedIn Pattern:** Icon on top, label below, vertical flex layout
+- **Glass Morphism:** Subtle blur and transparency for modern look
+- **Scalable:** Structure ready for adding more navigation items
+- **60px Height:** Standard mobile tab bar dimension
+- **Touch Target:** 44px+ minimum for accessibility
+
+**Current Stage:** Stage 1 with only logout icon. Future stages will add:
+- Home/Feed navigation
+- Search/Explore
+- Notifications
+- Profile menu
+
+**File References:**
+- Component: `frontend/src/components/BottomNav.tsx`
+- Usage: `frontend/src/App.tsx`
 
 #### 4. Mobile Detection Implementation
 
