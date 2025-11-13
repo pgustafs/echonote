@@ -16,6 +16,20 @@ interface TranscriptionListProps {
   priorityFilter?: Priority | null
   onFilterChange?: (priority: Priority | null) => void
   totalCount?: number
+  isLoading?: boolean
+}
+
+// Stable style objects defined outside component to prevent re-renders
+const mobileInputStyle = {
+  padding: '0.625rem 2.5rem',
+  fontSize: '0.875rem',
+  borderRadius: '0.5rem'
+}
+
+const desktopInputStyle = {
+  padding: '0.75rem 3rem',
+  fontSize: '1rem',
+  borderRadius: '0.75rem'
 }
 
 export default function TranscriptionList({
@@ -27,7 +41,8 @@ export default function TranscriptionList({
   onSearchChange,
   priorityFilter = null,
   onFilterChange,
-  totalCount = 0
+  totalCount = 0,
+  isLoading = false
 }: TranscriptionListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [playingId, setPlayingId] = useState<number | null>(null)
@@ -112,24 +127,29 @@ export default function TranscriptionList({
 
   return (
     <div className={isMobile ? "space-y-0" : "space-y-4 sm:space-y-6"}>
-      {/* Mobile: Compact header with count */}
-      {isMobile ? (
-        <div className="px-4 py-3 space-y-3" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
-          {/* Header with count */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold" style={{ color: '#E6E8EB' }}>
-              Transcriptions
-            </h2>
-            <span className="text-sm font-medium" style={{ color: '#9BA4B5' }}>
-              {totalCount} {totalCount === 1 ? 'result' : 'results'}
-            </span>
-          </div>
+      {/* Header with count and search - unified for both mobile and desktop */}
+      <div className={isMobile ? "px-4 py-3 space-y-3" : "enterprise-card-dark p-6"} style={isMobile ? { background: 'rgba(255, 255, 255, 0.02)' } : undefined}>
+        {/* Header with count */}
+        <div className={isMobile ? "flex items-center justify-between" : "flex items-center justify-between mb-6"}>
+          <h2 className={isMobile ? "text-lg font-bold" : "text-2xl sm:text-3xl font-bold flex items-center space-x-3"} style={{ color: '#E6E8EB' }}>
+            {!isMobile && (
+              <svg className="w-6 h-6 sm:w-7 sm:h-7" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )}
+            <span>Transcriptions</span>
+          </h2>
+          <span className={isMobile ? "text-sm font-medium" : "text-base font-semibold"} style={{ color: '#9BA4B5' }}>
+            {totalCount} {totalCount === 1 ? 'result' : 'results'}
+          </span>
+        </div>
 
-          {/* Search bar */}
-          {onSearchChange && (
+        {/* Single unified search bar - conditional styling only */}
+        {onSearchChange && (
+          <div className={isMobile ? "relative" : "mb-4"}>
             <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                <svg className="w-4 h-4" style={{ color: '#9BA4B5' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={isMobile ? "absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" : "absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"}>
+                <svg className={isMobile ? "w-4 h-4" : "w-5 h-5"} style={{ color: '#9BA4B5' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
@@ -138,41 +158,53 @@ export default function TranscriptionList({
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search transcriptions..."
-                className="w-full pl-10 pr-10 py-2.5 text-sm rounded-lg"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  color: '#E6E8EB',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  outline: 'none',
-                }}
+                className="input-field-dark w-full"
+                style={isMobile ? mobileInputStyle : desktopInputStyle}
               />
               {searchQuery && (
                 <button
                   onClick={() => onSearchChange('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                  className={isMobile
+                    ? "absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                    : "absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all"
+                  }
                   style={{ color: '#9BA4B5' }}
+                  onMouseEnter={!isMobile ? (e) => e.currentTarget.style.color = '#E6E8EB' : undefined}
+                  onMouseLeave={!isMobile ? (e) => e.currentTarget.style.color = '#9BA4B5' : undefined}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={isMobile ? "w-4 h-4" : "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Filter pills - horizontal scroll */}
-          {onFilterChange && (
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {/* Filter buttons - unified for both mobile and desktop */}
+        {onFilterChange && (
+          <div className={isMobile ? "flex gap-2 overflow-x-auto pb-1 scrollbar-hide" : "flex items-center gap-3"}>
+            {!isMobile && <span className="text-sm font-medium" style={{ color: '#9BA4B5' }}>Filter:</span>}
+            <div className={isMobile ? "flex gap-2" : "flex gap-2"}>
               <button
                 onClick={() => onFilterChange(null)}
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                className={isMobile
+                  ? "flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                  : "px-4 py-2 text-sm font-medium rounded-xl transition-all"
+                }
                 style={
                   priorityFilter === null
-                    ? {
-                        background: 'rgba(92, 124, 250, 0.15)',
-                        color: '#5C7CFA',
-                        border: '1px solid rgba(92, 124, 250, 0.3)',
-                      }
+                    ? isMobile
+                      ? {
+                          background: 'rgba(92, 124, 250, 0.15)',
+                          color: '#5C7CFA',
+                          border: '1px solid rgba(92, 124, 250, 0.3)',
+                        }
+                      : {
+                          background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
+                          color: 'white',
+                          boxShadow: '0 2px 8px rgba(92, 124, 250, 0.25)',
+                        }
                     : {
                         background: 'rgba(255, 255, 255, 0.04)',
                         color: '#9BA4B5',
@@ -184,18 +216,33 @@ export default function TranscriptionList({
               </button>
               <button
                 onClick={() => onFilterChange('high')}
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                className={isMobile
+                  ? "flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                  : "px-4 py-2 text-sm font-medium rounded-xl transition-all"
+                }
                 style={
                   priorityFilter === 'high'
+                    ? isMobile
+                      ? {
+                          background: 'rgba(228, 76, 101, 0.15)',
+                          color: '#FF6B6B',
+                          border: '1px solid rgba(228, 76, 101, 0.3)',
+                        }
+                      : {
+                          background: '#E44C65',
+                          color: 'white',
+                          boxShadow: '0 2px 8px rgba(228, 76, 101, 0.25)',
+                        }
+                    : isMobile
                     ? {
-                        background: 'rgba(228, 76, 101, 0.15)',
-                        color: '#FF6B6B',
-                        border: '1px solid rgba(228, 76, 101, 0.3)',
-                      }
-                    : {
                         background: 'rgba(255, 255, 255, 0.04)',
                         color: '#9BA4B5',
                         border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                    : {
+                        background: 'rgba(255, 107, 107, 0.1)',
+                        color: '#FF6B6B',
+                        border: '1px solid rgba(255, 107, 107, 0.3)',
                       }
                 }
               >
@@ -203,18 +250,33 @@ export default function TranscriptionList({
               </button>
               <button
                 onClick={() => onFilterChange('medium')}
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                className={isMobile
+                  ? "flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                  : "px-4 py-2 text-sm font-medium rounded-xl transition-all"
+                }
                 style={
                   priorityFilter === 'medium'
+                    ? isMobile
+                      ? {
+                          background: 'rgba(249, 168, 38, 0.15)',
+                          color: '#F9A826',
+                          border: '1px solid rgba(249, 168, 38, 0.3)',
+                        }
+                      : {
+                          background: '#F9A826',
+                          color: 'white',
+                          boxShadow: '0 2px 8px rgba(249, 168, 38, 0.25)',
+                        }
+                    : isMobile
                     ? {
-                        background: 'rgba(249, 168, 38, 0.15)',
-                        color: '#F9A826',
-                        border: '1px solid rgba(249, 168, 38, 0.3)',
-                      }
-                    : {
                         background: 'rgba(255, 255, 255, 0.04)',
                         color: '#9BA4B5',
                         border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                    : {
+                        background: 'rgba(249, 168, 38, 0.1)',
+                        color: '#F9A826',
+                        border: '1px solid rgba(249, 168, 38, 0.3)',
                       }
                 }
               >
@@ -222,48 +284,50 @@ export default function TranscriptionList({
               </button>
               <button
                 onClick={() => onFilterChange('low')}
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                className={isMobile
+                  ? "flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                  : "px-4 py-2 text-sm font-medium rounded-xl transition-all"
+                }
                 style={
                   priorityFilter === 'low'
+                    ? isMobile
+                      ? {
+                          background: 'rgba(74, 222, 128, 0.15)',
+                          color: '#4ADE80',
+                          border: '1px solid rgba(74, 222, 128, 0.3)',
+                        }
+                      : {
+                          background: '#4ADE80',
+                          color: 'white',
+                          boxShadow: '0 2px 8px rgba(74, 222, 128, 0.25)',
+                        }
+                    : isMobile
                     ? {
-                        background: 'rgba(74, 222, 128, 0.15)',
-                        color: '#4ADE80',
-                        border: '1px solid rgba(74, 222, 128, 0.3)',
-                      }
-                    : {
                         background: 'rgba(255, 255, 255, 0.04)',
                         color: '#9BA4B5',
                         border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }
+                    : {
+                        background: 'rgba(74, 222, 128, 0.1)',
+                        color: '#4ADE80',
+                        border: '1px solid rgba(74, 222, 128, 0.3)',
                       }
                 }
               >
                 Low
               </button>
             </div>
-          )}
-        </div>
-      ) : (
-        /* Desktop: Original header */
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center space-x-3">
-            <svg className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>Transcriptions</span>
-          </h2>
-          <div className="flex items-center space-x-2 bg-slate-700/50 px-4 py-2 rounded-lg border border-slate-600">
-            <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
-            </svg>
-            <span className="text-white font-semibold text-sm sm:text-base">
-              {transcriptions.length} {transcriptions.length === 1 ? 'Recording' : 'Recordings'}
-            </span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Empty state or transcription list */}
-      {transcriptions.length === 0 ? (
+      {/* Loading state */}
+      {isLoading ? (
+        <div className={isMobile ? "enterprise-card-dark p-8 text-center" : "enterprise-card-dark p-12 sm:p-16 text-center"}>
+          <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 sm:mb-6 spinner"></div>
+          <p className="font-medium text-base sm:text-lg" style={{ color: '#E6E8EB' }}>Loading transcriptions...</p>
+        </div>
+      ) : transcriptions.length === 0 ? (
         <div className={isMobile ? "enterprise-card-dark p-8 text-center" : "enterprise-card-dark p-12 sm:p-16 text-center"}>
           <div className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-6 rounded-full bg-blue-500/10 flex items-center justify-center">
             <svg

@@ -3,7 +3,7 @@
  * Professional enterprise design with mobile-first responsive layout
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { getModels, getTranscriptions, transcribeAudio } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
@@ -173,10 +173,10 @@ function App() {
     setCurrentPage(1) // Reset to first page when filter changes
   }
 
-  const handleSearchChange = (query: string) => {
+  const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query)
     setCurrentPage(1) // Reset to first page when search changes
-  }
+  }, [])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -301,216 +301,23 @@ function App() {
           />
         </section>
 
-        {/* Search Section - Desktop only */}
-        {!isMobile && (
-        <section className="mb-6 sm:mb-8">
-          <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
-            <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                <svg className="w-5 h-5" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search in transcriptions..."
-                className="flex-1 px-4 py-2.5 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 min-h-[44px]"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  color: '#E6E8EB',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  outline: 'none',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(92, 124, 250, 0.5)'
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(92, 124, 250, 0.1)'
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.08)'
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => handleSearchChange('')}
-                  className="flex-shrink-0 p-2 rounded-lg transition-all duration-200"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    color: '#9BA4B5',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
-                    e.currentTarget.style.color = '#E6E8EB'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                    e.currentTarget.style.color = '#9BA4B5'
-                  }}
-                  title="Clear search"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-        </section>
-        )}
-
-        {/* Filter Section - Desktop only */}
-        {!isMobile && (
-        <section className="mb-6 sm:mb-8">
-          <div className={isMobile ? "enterprise-card-dark p-4" : "enterprise-card-dark p-4 sm:p-6"}>
-            <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
-              <label className="font-semibold text-sm sm:text-base lg:text-lg flex items-center space-x-2" style={{ color: '#E6E8EB' }}>
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                <span>Filter by Priority</span>
-              </label>
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                <button
-                  onClick={() => handleFilterChange(null)}
-                  className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
-                  style={priorityFilter === null ? {
-                    background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
-                    color: 'white',
-                    borderRadius: '1.5rem',
-                    boxShadow: '0 4px 12px rgba(92, 124, 250, 0.25)'
-                  } : {
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    color: '#9BA4B5',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '1.5rem'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (priorityFilter !== null) {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
-                      e.currentTarget.style.color = '#E6E8EB'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (priorityFilter !== null) {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                      e.currentTarget.style.color = '#9BA4B5'
-                    }
-                  }}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => handleFilterChange('high')}
-                  className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
-                  style={priorityFilter === 'high' ? {
-                    background: '#E44C65',
-                    color: 'white',
-                    borderRadius: '1.5rem',
-                    boxShadow: '0 4px 12px rgba(228, 76, 101, 0.25)'
-                  } : {
-                    background: 'rgba(255, 107, 107, 0.1)',
-                    color: '#FF6B6B',
-                    border: '1px solid rgba(255, 107, 107, 0.3)',
-                    borderRadius: '1.5rem'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (priorityFilter !== 'high') {
-                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (priorityFilter !== 'high') {
-                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)'
-                    }
-                  }}
-                >
-                  High
-                </button>
-                <button
-                  onClick={() => handleFilterChange('medium')}
-                  className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
-                  style={priorityFilter === 'medium' ? {
-                    background: '#F9A826',
-                    color: 'white',
-                    borderRadius: '1.5rem',
-                    boxShadow: '0 4px 12px rgba(249, 168, 38, 0.25)'
-                  } : {
-                    background: 'rgba(249, 168, 38, 0.1)',
-                    color: '#F9A826',
-                    border: '1px solid rgba(249, 168, 38, 0.3)',
-                    borderRadius: '1.5rem'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (priorityFilter !== 'medium') {
-                      e.currentTarget.style.background = 'rgba(249, 168, 38, 0.2)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (priorityFilter !== 'medium') {
-                      e.currentTarget.style.background = 'rgba(249, 168, 38, 0.1)'
-                    }
-                  }}
-                >
-                  Medium
-                </button>
-                <button
-                  onClick={() => handleFilterChange('low')}
-                  className="px-4 py-2.5 font-medium transition-all duration-200 min-h-[44px] touch-manipulation text-sm sm:text-base"
-                  style={priorityFilter === 'low' ? {
-                    background: '#4ADE80',
-                    color: 'white',
-                    borderRadius: '1.5rem',
-                    boxShadow: '0 4px 12px rgba(74, 222, 128, 0.25)'
-                  } : {
-                    background: 'rgba(74, 222, 128, 0.1)',
-                    color: '#4ADE80',
-                    border: '1px solid rgba(74, 222, 128, 0.3)',
-                    borderRadius: '1.5rem'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (priorityFilter !== 'low') {
-                      e.currentTarget.style.background = 'rgba(74, 222, 128, 0.2)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (priorityFilter !== 'low') {
-                      e.currentTarget.style.background = 'rgba(74, 222, 128, 0.1)'
-                    }
-                  }}
-                >
-                  Low
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        )}
-
         {/* Transcriptions List */}
         <section>
-          {isLoading ? (
-            <div className="enterprise-card-dark p-12 sm:p-16 text-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 sm:mb-6 spinner"></div>
-              <p className="font-medium text-base sm:text-lg" style={{ color: '#E6E8EB' }}>Loading transcriptions...</p>
-            </div>
-          ) : (
-            <>
-              <TranscriptionList
-                transcriptions={transcriptions}
-                onDelete={handleDelete}
-                onUpdate={handleUpdate}
-                isMobile={isMobile}
-                searchQuery={searchQuery}
-                onSearchChange={handleSearchChange}
-                priorityFilter={priorityFilter}
-                onFilterChange={handleFilterChange}
-                totalCount={totalTranscriptions}
-              />
+          <TranscriptionList
+            transcriptions={transcriptions}
+            onDelete={handleDelete}
+            onUpdate={handleUpdate}
+            isMobile={isMobile}
+            searchQuery={searchQuery}
+            onSearchChange={handleSearchChange}
+            priorityFilter={priorityFilter}
+            onFilterChange={handleFilterChange}
+            totalCount={totalTranscriptions}
+            isLoading={isLoading}
+          />
 
-              {/* Pagination Controls */}
-              {totalTranscriptions > pageSize && (
+          {/* Pagination Controls */}
+          {!isLoading && totalTranscriptions > pageSize && (
                 <div className="mt-6 sm:mt-8 enterprise-card-dark p-4 sm:p-6">
                   <div className="flex flex-col gap-4">
                     {/* Page info */}
@@ -605,8 +412,6 @@ function App() {
                   </div>
                 </div>
               )}
-            </>
-          )}
         </section>
       </main>
 

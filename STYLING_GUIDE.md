@@ -796,10 +796,10 @@ The search feature provides full-text search across all transcriptions with real
 ```tsx
 const [searchQuery, setSearchQuery] = useState<string>('')
 
-const handleSearchChange = (query: string) => {
+const handleSearchChange = useCallback((query: string) => {
   setSearchQuery(query)
   setCurrentPage(1) // Reset to first page when search changes
-}
+}, [])
 
 // Auto-triggers API call via useEffect
 useEffect(() => {
@@ -807,6 +807,27 @@ useEffect(() => {
     loadTranscriptions() // Includes search parameter
   }
 }, [searchQuery, priorityFilter, currentPage, user])
+```
+
+**IMPORTANT - Preventing Focus Loss:**
+The search input is rendered inside `TranscriptionList`, which must remain mounted at all times to prevent focus loss. The component receives `isLoading` as a prop and shows a loading state internally rather than being unmounted/remounted.
+
+**❌ WRONG - Causes focus loss:**
+```tsx
+{isLoading ? (
+  <LoadingSpinner />
+) : (
+  <TranscriptionList searchQuery={searchQuery} />
+)}
+```
+
+**✅ CORRECT - Maintains focus:**
+```tsx
+<TranscriptionList
+  searchQuery={searchQuery}
+  isLoading={isLoading}
+  // Component stays mounted, shows loading state internally
+/>
 ```
 
 **UI Components:**
@@ -820,8 +841,16 @@ useEffect(() => {
 - Resets pagination to page 1 on search change
 - Works together with priority filter
 - Real-time updates as you type
+- **Maintains focus** while typing (component stays mounted)
 
-**File:** `frontend/src/App.tsx` (Lines 24, 176-179, 304-359)
+**Technical Notes:**
+- `handleSearchChange` wrapped in `useCallback` for stable reference
+- Style objects defined outside component to prevent re-renders
+- Component architecture ensures input stays in DOM during data fetches
+
+**Files:**
+- `frontend/src/App.tsx` (Lines 24, 176-179, 306-317)
+- `frontend/src/components/TranscriptionList.tsx` (Lines 141-161)
 
 ### Priority Filter Buttons
 
@@ -1137,7 +1166,68 @@ On mobile devices (< 768px), search and filter controls are integrated directly 
 - **Medium**: Amber (#F9A826)
 - **Low**: Green (#4ADE80)
 
-**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 144-272)
+**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 144-244)
+
+### Desktop Search & Filter UI
+
+On desktop (≥ 768px), search and filter controls are also unified into a single card within the TranscriptionList component header.
+
+#### Desktop Design Principles
+1. **Single Card** - Search and filters combined in one enterprise-card
+2. **Result Count** - Always visible in header next to title
+3. **Full-Width Search** - Clean search bar with icon
+4. **Horizontal Filters** - Filter buttons in a row with "Filter:" label
+
+#### Implementation
+
+```tsx
+{!isMobile && (
+  <div className="enterprise-card-dark p-6">
+    {/* Header with count */}
+    <div className="flex items-center justify-between mb-6">
+      <h2 className="text-2xl sm:text-3xl font-bold flex items-center space-x-3">
+        <svg>...</svg>
+        <span>Transcriptions</span>
+      </h2>
+      <span className="text-base font-semibold">
+        {totalCount} {totalCount === 1 ? 'result' : 'results'}
+      </span>
+    </div>
+
+    {/* Search bar */}
+    <div className="mb-4">
+      <input
+        type="text"
+        placeholder="Search transcriptions..."
+        className="w-full pl-12 pr-12 py-3 text-base rounded-xl"
+      />
+    </div>
+
+    {/* Filter buttons */}
+    <div className="flex items-center gap-3">
+      <span className="text-sm font-medium">Filter:</span>
+      <div className="flex gap-2">
+        <button>All</button>
+        <button>High</button>
+        <button>Medium</button>
+        <button>Low</button>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+**Desktop Filter Button Styling:**
+- **Selected**: Full color background + white text + subtle shadow
+  - All: Blue gradient (#5C7CFA → #9775FA)
+  - High: Solid #E44C65
+  - Medium: Solid #F9A826
+  - Low: Solid #4ADE80
+- **Unselected**: Light background (10% opacity) + colored text + colored border
+- **Size**: `px-4 py-2 text-sm` (medium)
+- **Shape**: `rounded-xl` (standard rounded)
+
+**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 246-393)
 
 ### Testing Mobile Layout
 
