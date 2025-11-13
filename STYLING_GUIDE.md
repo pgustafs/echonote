@@ -1388,6 +1388,43 @@ podman kube play echonote-kube.yaml
 curl http://localhost:5173
 ```
 
+### Service Worker Cache Strategy
+
+**IMPORTANT:** The PWA service worker is configured to automatically handle deployments without white screens or manual cache clearing.
+
+**Cache Versions:**
+```javascript
+const CACHE_NAME = 'echonote-v3';
+const RUNTIME_CACHE = 'echonote-runtime-v3';
+```
+
+**When to Update Cache Version:**
+- ✅ When changing static assets in `PRECACHE_ASSETS` (logo, manifest.json, config.js)
+- ✅ When modifying service worker code (sw.js)
+- ✅ When troubleshooting persistent cache issues
+- ❌ **NOT needed** for normal code changes (React components, CSS)
+- ❌ **NOT needed** when Vite generates new hashed JS/CSS files
+
+**Why It Works Automatically:**
+
+The service worker uses **network-first** strategy for `index.html`:
+1. Browser always fetches fresh `index.html` from server
+2. New `index.html` contains references to new hashed assets (`index-ABC123.js`)
+3. New assets are also fetched with network-first strategy
+4. Old cached assets are ignored (no longer referenced)
+5. No white screen issues on deployment!
+
+**Caching Strategies by Asset Type:**
+
+| Asset Type | Strategy | Reason |
+|------------|----------|--------|
+| `index.html` | Network-first | Always get latest asset references |
+| Hashed JS/CSS (`/assets/*.js`) | Network-first | New hashes = new files |
+| Static assets (logo, fonts) | Cache-first | Performance, rarely change |
+| API requests (`/api/*`) | Network-first | Real-time data |
+
+**File:** `frontend/public/sw.js` (Lines 6-7, 108-162)
+
 ---
 
 ## Component Examples

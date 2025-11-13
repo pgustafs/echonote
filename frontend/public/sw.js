@@ -3,13 +3,11 @@
  * Provides offline caching, background sync, and PWA functionality
  */
 
-const CACHE_NAME = 'echonote-v2';
-const RUNTIME_CACHE = 'echonote-runtime-v2';
+const CACHE_NAME = 'echonote-v3';
+const RUNTIME_CACHE = 'echonote-runtime-v3';
 
-// Assets to cache on install (exclude hashed JS/CSS files)
+// Assets to cache on install (exclude index.html and hashed JS/CSS files)
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
   '/config.js',
   '/econote_logo.png',
   '/manifest.json'
@@ -101,6 +99,39 @@ self.addEventListener('fetch', (event) => {
                 );
               }
               throw new Error('Offline and no cached data');
+            });
+        })
+    );
+    return;
+  }
+
+  // index.html and root path - ALWAYS network first (critical for new deployments)
+  if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('/index.html')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Clone and cache the new version
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(request, responseToCache);
+              });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Fallback to cache only if network fails (offline)
+          return caches.match(request)
+            .then((cachedResponse) => {
+              if (cachedResponse) {
+                return cachedResponse;
+              }
+              // If no cache, return a basic offline page
+              return new Response(
+                '<html><body><h1>Offline</h1><p>Please check your internet connection.</p></body></html>',
+                { headers: { 'Content-Type': 'text/html' } }
+              );
             });
         })
     );
