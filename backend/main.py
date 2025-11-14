@@ -199,6 +199,7 @@ async def transcribe_audio(
     try:
         # Read audio file
         audio_bytes = await file.read()
+        original_size_mb = len(audio_bytes) / (1024 * 1024)
 
         # Check file size
         if len(audio_bytes) > settings.MAX_UPLOAD_SIZE:
@@ -207,10 +208,23 @@ async def transcribe_audio(
                 detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE} bytes"
             )
 
-        logger.info(f"Processing audio file: {file.filename} ({len(audio_bytes)} bytes)")
+        logger.info(f"Processing audio file: {file.filename}")
+        logger.info(f"Original file size: {len(audio_bytes)} bytes ({original_size_mb:.2f} MB)")
         logger.info(f"Content type: {file.content_type}")
         logger.info(f"Using model: {selected_model}")
         logger.info(f"Diarization enabled: {enable_diarization}")
+
+        # Get audio duration using soundfile (will try again after WebM conversion if this fails)
+        duration_seconds = None
+        try:
+            import soundfile as sf
+            import io
+            audio_data, sample_rate = sf.read(io.BytesIO(audio_bytes))
+            duration_seconds = len(audio_data) / sample_rate
+            duration_minutes = duration_seconds / 60
+            logger.info(f"Audio duration: {duration_seconds:.2f} seconds ({duration_minutes:.2f} minutes)")
+        except Exception as e:
+            logger.warning(f"Could not determine audio duration from original file: {e}")
 
         # Get the base URL for the selected model
         model_base_url = settings.get_model_url(selected_model)
@@ -234,7 +248,16 @@ async def transcribe_audio(
                 import sys
 
                 # Convert in isolated subprocess (see audio_converter.py)
-                wav_bytes = convert_webm_to_wav(audio_bytes)
+                # Returns tuple: (wav_bytes, duration_seconds)
+                wav_bytes, converter_duration = convert_webm_to_wav(audio_bytes)
+                wav_size_mb = len(wav_bytes) / (1024 * 1024)
+                logger.info(f"WebM converted to WAV: {len(wav_bytes)} bytes ({wav_size_mb:.2f} MB)")
+
+                # Use duration from converter if we didn't get it earlier
+                if duration_seconds is None and converter_duration is not None:
+                    duration_seconds = converter_duration
+                    duration_minutes = duration_seconds / 60
+                    logger.info(f"Audio duration (from converter): {duration_seconds:.2f} seconds ({duration_minutes:.2f} minutes)")
 
                 # Clean up converter module from memory
                 modules_to_remove = [m for m in sys.modules.keys() if 'pydub' in m.lower()]
@@ -247,7 +270,7 @@ async def transcribe_audio(
                 gc.collect()
                 gc.collect()
 
-                logger.info("WebM converted to WAV, pydub modules cleaned up")
+                logger.info("Pydub modules cleaned up from memory")
 
                 # Use WAV for transcription
                 audio_file = BytesIO(wav_bytes)
@@ -274,6 +297,10 @@ async def transcribe_audio(
         # Try verbose_json first (OpenAI standard), fallback to json if not supported
         response_format = "verbose_json" if enable_diarization else "text"
 
+        # Initialize variables for transcription results
+        transcription_text = None
+        transcription_error = None
+
         # Transcribe using Whisper via OpenAI API
         try:
             transcription_response = await client.audio.transcriptions.create(
@@ -288,21 +315,37 @@ async def transcribe_audio(
                 logger.warning(f"verbose_json not supported by vLLM, falling back to json format. Error: {error_msg}")
                 response_format = "json"
                 audio_file.seek(0)  # Reset file position
-                transcription_response = await client.audio.transcriptions.create(
-                    model=selected_model,
-                    file=audio_file,
-                    response_format=response_format
-                )
+                try:
+                    transcription_response = await client.audio.transcriptions.create(
+                        model=selected_model,
+                        file=audio_file,
+                        response_format=response_format
+                    )
+                except Exception as retry_error:
+                    # Log without traceback for expected errors (file size, etc.)
+                    if "Maximum file size exceeded" in str(retry_error) or "BadRequestError" in str(type(retry_error).__name__):
+                        logger.warning(f"Transcription failed after format fallback: {retry_error}")
+                    else:
+                        logger.error(f"Transcription failed after format fallback: {retry_error}", exc_info=True)
+                    transcription_error = str(retry_error)
+                    transcription_response = None
             else:
-                raise
+                # Log without traceback for expected errors (file size, rate limits, etc.)
+                if "Maximum file size exceeded" in error_msg or "BadRequestError" in str(type(e).__name__):
+                    logger.warning(f"Transcription API call failed: {error_msg}")
+                else:
+                    logger.error(f"Transcription API call failed: {error_msg}", exc_info=True)
+                transcription_error = error_msg
+                transcription_response = None
 
-        # Log what we got from transcription
-        logger.info(f"Transcription API call completed successfully")
-        transcription_text_preview = extract_transcription_text(transcription_response)
-        logger.info(f"Transcription text preview: '{transcription_text_preview[:200]}'")
+        # Process transcription response if we got one
+        if transcription_response is not None:
+            logger.info(f"Transcription API call completed successfully")
+            transcription_text_preview = extract_transcription_text(transcription_response)
+            logger.info(f"Transcription text preview: '{transcription_text_preview[:200]}'")
 
-        # Perform speaker diarization if enabled
-        if enable_diarization:
+        # Perform speaker diarization if enabled and transcription succeeded
+        if enable_diarization and transcription_response is not None:
             try:
                 logger.info("Starting speaker diarization...")
 
@@ -412,12 +455,17 @@ async def transcribe_audio(
                 transcription_text = extract_transcription_text(transcription_response)
                 transcription_text += "\n\n[Diarization failed - transcription only]"
         else:
-            # Extract text from response (handle different response formats)
-            transcription_text = extract_transcription_text(transcription_response)
+            # Extract text from response (handle different response formats) if we have one
+            if transcription_response is not None:
+                transcription_text = extract_transcription_text(transcription_response)
+            else:
+                # Transcription failed - save with error message
+                transcription_text = f"[TRANSCRIPTION FAILED]\n\nError: {transcription_error}\n\nThe audio recording has been saved but could not be transcribed. This may be due to:\n- File size or duration limits\n- Unsupported audio format\n- Transcription service issues\n\nPlease try re-recording with a shorter duration or contact support."
+                logger.warning(f"Saving recording without transcription due to error: {transcription_error}")
 
         logger.info(f"Transcription completed: {len(transcription_text)} characters")
 
-        # Create database record
+        # Create database record (save even if transcription failed)
         db_transcription = Transcription(
             text=transcription_text,
             audio_data=audio_bytes,
@@ -431,9 +479,13 @@ async def transcribe_audio(
         session.commit()
         session.refresh(db_transcription)
 
-        logger.info(f"Transcription saved with ID: {db_transcription.id}")
+        if transcription_error:
+            logger.warning(f"Recording saved with ID: {db_transcription.id} (transcription failed: {transcription_error})")
+        else:
+            logger.info(f"Transcription saved with ID: {db_transcription.id}")
 
         # Return public schema (without binary data)
+        # Note: If transcription failed, the text field will contain error message
         return TranscriptionPublic(
             id=db_transcription.id,
             text=db_transcription.text,
@@ -448,10 +500,11 @@ async def transcribe_audio(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error during transcription: {str(e)}", exc_info=True)
+        # Critical error that prevented even saving the recording
+        logger.error(f"Critical error during transcription processing: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Transcription failed: {str(e)}"
+            detail=f"Failed to process recording: {str(e)}"
         )
 
 
@@ -703,8 +756,8 @@ async def download_transcription(
             }
             input_format = format_mapping.get(transcription.audio_content_type, 'wav')
 
-            # Convert to WAV
-            wav_bytes = convert_audio_to_wav(transcription.audio_data, source_format=input_format)
+            # Convert to WAV (returns tuple: wav_bytes, duration)
+            wav_bytes, _ = convert_audio_to_wav(transcription.audio_data, source_format=input_format)
 
             logger.info(f"Converted audio from {input_format.upper()} to WAV format for transcription {transcription_id}")
     except Exception as e:

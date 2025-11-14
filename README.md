@@ -304,6 +304,47 @@ Once the backend is running, visit:
   - **Returns**: Success message
   - **Authorization**: User must own the transcription (403 Forbidden otherwise)
 
+## Error Handling & Debugging
+
+### Transcription Failure Handling
+
+EchoNote is designed to preserve your audio recordings even when transcription fails. This ensures you never lose your voice notes due to temporary issues.
+
+**Behavior:**
+- ✅ **Audio is always saved** - Even if transcription fails, the audio recording is stored in the database
+- 📝 **Error message in transcript** - Failed transcriptions show a detailed error message instead of text
+- 📊 **Detailed logging** - All errors are logged with full context for debugging
+
+**Common transcription failures:**
+1. **File size/duration limits** - Recording exceeds model's maximum input size
+2. **Unsupported format** - Audio format not supported by transcription service
+3. **Service unavailable** - vLLM server is down or unreachable
+4. **Model context exceeded** - Recording too long for model's context window
+
+**What gets logged:**
+
+```
+INFO: Processing audio file: recording.webm
+INFO: Original file size: 15728640 bytes (15.00 MB)
+INFO: Content type: audio/webm
+INFO: Audio duration: 540.25 seconds (9.00 minutes)
+INFO: WebM converted to WAV: 17280000 bytes (16.48 MB)
+ERROR: Transcription API call failed: Error code: 400 - Maximum file size exceeded
+WARNING: Saving recording without transcription due to error: Maximum file size exceeded
+WARNING: Recording saved with ID: 123 (transcription failed: Maximum file size exceeded)
+```
+
+**User experience:**
+- Recording appears in transcription list immediately
+- Text shows `[TRANSCRIPTION FAILED]` with error details and helpful suggestions
+- Audio file is fully playable and downloadable
+- User can retry by re-recording with shorter duration
+
+**For developers:**
+- Check backend logs for detailed file size, duration, and error information
+- Monitor for patterns (e.g., all 9+ minute recordings failing)
+- Adjust vLLM configuration or implement chunking for long recordings
+
 ## Development
 
 ### Running Backend in Development

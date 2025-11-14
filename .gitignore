@@ -93,3 +93,7 @@ docs/_build/
 site/
 
 *_USER_STORY.md
+
+# LOCAL TEST FILES ETC
+build_test.sh
+deploy_openshift.sh

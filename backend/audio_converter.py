@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def convert_audio_to_wav(audio_bytes: bytes, source_format: str = "webm") -> bytes:
+def convert_audio_to_wav(audio_bytes: bytes, source_format: str = "webm") -> tuple[bytes, float | None]:
     """
     Convert audio to WAV format in isolated subprocess.
 
@@ -36,7 +36,7 @@ def convert_audio_to_wav(audio_bytes: bytes, source_format: str = "webm") -> byt
         source_format: Source audio format (webm, mp3, etc.)
 
     Returns:
-        WAV audio data as bytes
+        Tuple of (WAV audio data as bytes, duration in seconds or None)
 
     Raises:
         Exception: If conversion fails or times out (30s timeout)
@@ -44,7 +44,8 @@ def convert_audio_to_wav(audio_bytes: bytes, source_format: str = "webm") -> byt
     Example:
         >>> with open("audio.mp3", "rb") as f:
         ...     audio_data = f.read()
-        >>> wav_data = convert_audio_to_wav(audio_data, "mp3")
+        >>> wav_data, duration = convert_audio_to_wav(audio_data, "mp3")
+        >>> print(f"Duration: {duration} seconds")
         >>> with open("audio.wav", "wb") as f:
         ...     f.write(wav_data)
     """
@@ -85,9 +86,21 @@ sys.stdout.buffer.write(wav_buffer.getvalue())
             timeout=30  # 30-second timeout for safety
         )
 
-        # Log conversion details from subprocess stderr
+        # Log conversion details from subprocess stderr and extract duration
+        duration_seconds = None
         if result.stderr:
-            logger.info(f"Subprocess output: {result.stderr.decode().strip()}")
+            stderr_output = result.stderr.decode().strip()
+            logger.info(f"Subprocess output: {stderr_output}")
+
+            # Extract duration from output: "LOADED: duration=3494ms, ..."
+            try:
+                import re
+                duration_match = re.search(r'duration=(\d+)ms', stderr_output)
+                if duration_match:
+                    duration_ms = int(duration_match.group(1))
+                    duration_seconds = duration_ms / 1000.0
+            except Exception as e:
+                logger.warning(f"Could not parse duration from subprocess output: {e}")
 
         # Get WAV data from subprocess stdout
         wav_bytes = result.stdout
@@ -96,7 +109,7 @@ sys.stdout.buffer.write(wav_buffer.getvalue())
             f"(subprocess completed and terminated)"
         )
 
-        return wav_bytes
+        return wav_bytes, duration_seconds
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode() if e.stderr else str(e)
@@ -107,7 +120,7 @@ sys.stdout.buffer.write(wav_buffer.getvalue())
         raise Exception(f"{source_format.upper()} to WAV conversion timed out")
 
 
-def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
+def convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, float | None]:
     """
     Convert WebM audio to WAV format in isolated subprocess.
 
@@ -117,7 +130,7 @@ def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
         webm_bytes: WebM audio data as bytes
 
     Returns:
-        WAV audio data as bytes
+        Tuple of (WAV audio data as bytes, duration in seconds or None)
 
     Raises:
         Exception: If conversion fails or times out (30s timeout)
@@ -125,7 +138,8 @@ def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
     Example:
         >>> with open("audio.webm", "rb") as f:
         ...     webm_data = f.read()
-        >>> wav_data = convert_webm_to_wav(webm_data)
+        >>> wav_data, duration = convert_webm_to_wav(webm_data)
+        >>> print(f"Duration: {duration} seconds")
         >>> with open("audio.wav", "wb") as f:
         ...     f.write(wav_data)
     """
