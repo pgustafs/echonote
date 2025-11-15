@@ -8,6 +8,8 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 🔐 **User Authentication** - Secure JWT-based authentication with user registration and login
 🎙️ **Audio Recording** - Record directly in the browser with one-click start/stop using the microphone button
 🤖 **AI Transcription** - Powered by Whisper (large-v3-turbo) via vLLM
+⚡ **Background Processing** - Async transcription with Celery and Redis for responsive UX and progress tracking
+🔄 **Real-time Updates** - Live status updates and progress bars without page refresh
 👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
 💾 **Persistent Storage** - Audio files and transcriptions stored in database with user ownership
 🎵 **Audio Playback** - Listen to your recordings with built-in player
@@ -25,10 +27,13 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 - **SQLModel** - SQL databases using Python type hints
 - **SQLite** - Development database (auto-created)
 - **PostgreSQL** - Production database support
+- **Celery 5.5.3** - Distributed task queue for async transcription processing
+- **Redis 7** - Message broker and result backend for Celery
 - **PyJWT** - JWT token generation and validation
 - **Passlib** - Password hashing with bcrypt
 - **OpenAI SDK** - For Whisper API calls to vLLM server
 - **pyannote.audio** - Speaker diarization (CPU-only PyTorch)
+- **pydub** - Audio chunking for long recordings (60s+ segments)
 
 ### Frontend
 - **Vite** - Next generation frontend tooling
@@ -42,16 +47,22 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 ```
 echonote/
 ├── backend/
-│   ├── Containerfile       # Backend container build (UBI 10 Python)
-│   ├── .containerignore    # Backend build exclusions
-│   ├── requirements.txt    # Python dependencies
+│   ├── Containerfile         # Backend container build (UBI 10 Python)
+│   ├── Containerfile.celery  # Celery worker container build
+│   ├── .containerignore      # Backend build exclusions
+│   ├── requirements.txt      # Python dependencies
 │   ├── __init__.py
-│   ├── main.py             # FastAPI application
-│   ├── models.py           # SQLModel database models (User, Transcription)
-│   ├── database.py         # Database configuration
-│   ├── config.py           # Application settings
-│   ├── auth.py             # Authentication utilities (JWT, password hashing)
-│   └── auth_routes.py      # Authentication endpoints (register, login)
+│   ├── main.py               # FastAPI application
+│   ├── models.py             # SQLModel database models (User, Transcription)
+│   ├── database.py           # Database configuration
+│   ├── config.py             # Application settings
+│   ├── auth.py               # Authentication utilities (JWT, password hashing)
+│   ├── auth_routes.py        # Authentication endpoints (register, login)
+│   ├── celery_app.py         # Celery application configuration
+│   ├── tasks.py              # Celery background tasks for transcription
+│   ├── audio_chunker.py      # Audio chunking for long recordings
+│   ├── transcription_merger.py  # Merge chunked transcription results
+│   └── diarization.py        # Speaker diarization service
 ├── frontend/
 │   ├── Containerfile       # Frontend container build (UBI 10 Node.js)
 │   ├── .containerignore    # Frontend build exclusions
@@ -64,6 +75,8 @@ echonote/
 │   │   │   └── Login.tsx           # Login/register page
 │   │   ├── contexts/
 │   │   │   └── AuthContext.tsx     # Authentication context
+│   │   ├── hooks/
+│   │   │   └── useTranscriptionPolling.ts  # Real-time status polling hook
 │   │   ├── App.tsx
 │   │   ├── main.tsx
 │   │   ├── api.ts          # API client with JWT token support
@@ -72,12 +85,209 @@ echonote/
 │   ├── index.html
 │   ├── vite.config.ts
 │   └── tailwind.config.js
-├── echonote-kube.yaml      # Kubernetes/Podman deployment
+├── redis/
+│   ├── Containerfile       # Redis container build
+│   └── redis.conf          # Redis configuration (no RDB persistence)
+├── echonote-kube.yaml      # Kubernetes/Podman deployment (2 containers)
+├── echonote-kube-priv.yaml # Full deployment (4 containers with Celery & Redis)
 ├── .gitignore              # Project-level git ignores
 ├── CONTAINER.md            # Container deployment guide
 ├── .env.example
 └── README.md
 ```
+
+## Background Processing Architecture
+
+EchoNote uses a distributed task queue architecture for async transcription processing, providing a responsive user experience with real-time status updates.
+
+### System Components
+
+**4-Container Architecture:**
+1. **Frontend** (`echonote-frontend`) - React/Vite SPA
+2. **Backend** (`echonote-backend`) - FastAPI REST API
+3. **Redis** (`echonote-redis`) - Message broker (db 0) & result backend (db 1)
+4. **Celery Worker** (`echonote-celery-worker`) - Background task processor
+
+### How It Works
+
+**1. User Records Audio**
+- Frontend captures audio using MediaRecorder API
+- WebM audio is sent to backend `/api/transcribe` endpoint
+
+**2. Backend Creates Task** (`backend/main.py`)
+```python
+POST /api/transcribe
+├─ Save audio to database with status="pending"
+├─ Queue Celery task: transcribe_audio_task.delay(transcription_id, model, ...)
+├─ Return immediately with transcription ID and status
+└─ User sees instant feedback (no waiting for transcription)
+```
+
+**3. Celery Worker Processes** (`backend/tasks.py`)
+```python
+transcribe_audio_task(transcription_id, model, enable_diarization, ...)
+├─ Load audio from database
+├─ Check duration: if > 60s, chunk into 60s segments
+├─ For each chunk:
+│   ├─ Update progress: 10%, 30%, 50%, etc.
+│   ├─ Call Whisper API via vLLM
+│   └─ Save partial results
+├─ Merge all chunks
+├─ Update database: status="completed", text=final_transcription
+└─ Worker reports completion
+```
+
+**4. Frontend Polls for Updates** (`frontend/src/hooks/useTranscriptionPolling.ts`)
+```typescript
+useTranscriptionPolling(pendingIds, enabled, onComplete, onStatusUpdate)
+├─ Every 2 seconds: GET /api/transcriptions/status/bulk?ids=1,2,3
+├─ Receive: [{ id: 1, status: "processing", progress: 45 }, ...]
+├─ Merge status updates into React state
+├─ UI automatically shows progress bars
+└─ When completed: fetch full transcription with text
+```
+
+**5. UI Auto-Updates**
+- Progress bar shows real-time completion percentage
+- Status changes: pending → processing → completed
+- Text appears automatically when done (no refresh needed!)
+
+### Key Features
+
+**Audio Chunking:**
+- Recordings > 60 seconds are split into chunks
+- Each chunk transcribed separately
+- Results merged intelligently with timestamps
+- Prevents API timeouts and memory issues
+
+**Speaker Diarization:**
+- Optional pyannote.audio integration
+- Chunks aligned with speaker boundaries
+- Output shows speaker timeline: "Speaker 1 (0:00-0:15): Hello..."
+
+**Error Handling:**
+- Failed chunks don't crash entire transcription
+- Partial results saved
+- Detailed error messages in UI
+- Audio always preserved even if transcription fails
+
+**Real-time Status:**
+- Polling hook updates every 2s
+- Only polls pending/processing transcriptions
+- Automatic cleanup when all complete
+- Minimal network overhead
+
+### Configuration
+
+**Redis Settings** (`.env`):
+```bash
+REDIS_URL=redis://localhost:6379/0           # Celery broker
+CELERY_BROKER_URL=redis://localhost:6379/0   # Message queue
+CELERY_RESULT_BACKEND=redis://localhost:6379/1  # Task results
+```
+
+**Chunking Settings** (`.env`):
+```bash
+CHUNK_DURATION_SECONDS=60        # Split audio into 60s chunks
+MAX_AUDIO_DURATION_SECONDS=3600  # Max 1 hour recordings
+```
+
+**Celery Worker Settings** (`backend/celery_app.py`):
+```python
+celery_app.conf.update(
+    task_serializer='json',
+    result_serializer='json',
+    accept_content=['json'],
+    timezone='UTC',
+    enable_utc=True,
+    task_track_started=True,
+    task_time_limit=3600,        # 1 hour hard limit per task
+    task_soft_time_limit=3300,   # 55 min soft limit
+)
+```
+
+### API Endpoints
+
+**Start Transcription:**
+```bash
+POST /api/transcribe
+Body: multipart/form-data (file, model, enable_diarization, num_speakers)
+Response: { id: 123, status: "pending", progress: 0, task_id: "abc-123", ... }
+```
+
+**Check Status (Single):**
+```bash
+GET /api/transcriptions/123/status
+Response: { id: 123, status: "processing", progress: 45, error_message: null }
+```
+
+**Check Status (Bulk):**
+```bash
+GET /api/transcriptions/status/bulk?ids=1,2,3
+Response: { statuses: [{ id: 1, status: "completed", progress: 100 }, ...] }
+```
+
+**Get Completed Transcription:**
+```bash
+GET /api/transcriptions/123
+Response: { id: 123, text: "Full transcription...", status: "completed", ... }
+```
+
+### Monitoring & Debugging
+
+**Check Celery Worker:**
+```bash
+podman logs echonote-celery-worker
+# Should see: "celery@echonote ready"
+```
+
+**Check Redis:**
+```bash
+podman exec echonote-redis redis-cli ping
+# Should return: PONG
+```
+
+**Monitor Tasks:**
+```bash
+# Check queued tasks
+podman exec echonote-redis redis-cli -n 0 keys "celery*"
+
+# Check task results
+podman exec echonote-redis redis-cli -n 1 keys "*"
+```
+
+**Frontend Console (Browser DevTools):**
+```javascript
+// Enable debug logging in browser console
+// You'll see detailed polling and state update logs
+[App] Pending IDs for polling: [123, 124]
+[useTranscriptionPolling] Starting poll for IDs: [123, 124]
+[useTranscriptionPolling] Poll response: { statuses: [...] }
+[App] handleStatusUpdate called with statuses: [...]
+[App] Updating transcription 123: { oldStatus: "pending", newStatus: "processing", oldProgress: 0, newProgress: 25 }
+```
+
+### Troubleshooting
+
+**Problem: UI not updating, transcriptions stuck in "pending"**
+- Check if Celery worker is running: `podman ps | grep celery`
+- Check Celery logs: `podman logs echonote-celery-worker`
+- Verify Redis connection: `podman exec echonote-redis redis-cli ping`
+
+**Problem: Transcription completes but UI doesn't show text**
+- Check browser console for polling logs
+- Verify `/api/transcriptions/{id}` returns status fields
+- Ensure frontend is polling: watch for "Starting poll for IDs" in console
+
+**Problem: Long recordings fail or timeout**
+- Check `CHUNK_DURATION_SECONDS` is set (default: 60)
+- Verify audio chunking is working in Celery logs
+- Increase `task_time_limit` if needed (default: 3600s)
+
+**Problem: Redis connection errors**
+- Ensure Redis container is running
+- Check Redis configuration in `redis/redis.conf`
+- Verify `REDIS_URL` and `CELERY_BROKER_URL` match Redis hostname
 
 ## Quick Start
 

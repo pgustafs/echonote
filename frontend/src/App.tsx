@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { getModels, getTranscriptions, transcribeAudio } from './api'
+import { getModels, getTranscriptions, transcribeAudio, getTranscription } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
 import Login from './components/Login'
@@ -12,6 +12,7 @@ import SyncIndicator from './components/SyncIndicator'
 import BottomNav from './components/BottomNav'
 import { useAuth } from './contexts/AuthContext'
 import { useOfflineRecording } from './hooks/useOfflineRecording'
+import { useTranscriptionPolling } from './hooks/useTranscriptionPolling'
 import { Priority, Transcription } from './types'
 
 function App() {
@@ -75,6 +76,12 @@ function App() {
       setError(null)
       const skip = (currentPage - 1) * pageSize
       const data = await getTranscriptions(skip, pageSize, priorityFilter, searchQuery || null)
+      console.log('[App] loadTranscriptions received data:', data.transcriptions.map(t => ({
+        id: t.id,
+        status: t.status,
+        progress: t.progress,
+        text: t.text?.substring(0, 50)
+      })))
       setTranscriptions(data.transcriptions)
       setTotalTranscriptions(data.total)
     } catch (err) {
@@ -100,7 +107,8 @@ function App() {
       if (isOnline) {
         const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
         const filename = `recording-${Date.now()}.${extension}`
-        await transcribeAudio(
+        console.log('[App] Starting transcription...')
+        const result = await transcribeAudio(
           audioBlob,
           filename,
           url,
@@ -108,10 +116,16 @@ function App() {
           enableDiarization,
           numSpeakers
         )
+        console.log('[App] Transcription created:', {
+          id: result.id,
+          status: result.status,
+          progress: result.progress
+        })
 
         // Reload transcriptions to show new item (will be on page 1)
         setCurrentPage(1)
-        loadTranscriptions()
+        console.log('[App] Calling loadTranscriptions after transcribeAudio...')
+        await loadTranscriptions()
       } else {
         // If offline, save for later sync
         await saveOfflineRecording(
@@ -139,6 +153,60 @@ function App() {
   const handleUpdate = (id: number, updated: Transcription) => {
     setTranscriptions(transcriptions.map((t) => t.id === id ? updated : t))
   }
+
+  // Handle transcription completion - fetch and update the completed transcription
+  const handleTranscriptionComplete = useCallback(async (id: number) => {
+    try {
+      const updated = await getTranscription(id)
+      setTranscriptions(prev => prev.map(t => t.id === id ? updated : t))
+    } catch (error) {
+      console.error('Error refreshing completed transcription:', error)
+    }
+  }, [])
+
+  // Handle status updates from polling - merge into transcriptions state
+  const handleStatusUpdate = useCallback((statuses: Map<number, any>) => {
+    console.log('[App] handleStatusUpdate called with statuses:', Array.from(statuses.entries()))
+    setTranscriptions(prev => {
+      console.log('[App] Previous transcriptions state:', prev)
+      const updated = prev.map(t => {
+        const statusUpdate = statuses.get(t.id)
+        if (statusUpdate) {
+          console.log(`[App] Updating transcription ${t.id}:`, {
+            oldStatus: t.status,
+            newStatus: statusUpdate.status,
+            oldProgress: t.progress,
+            newProgress: statusUpdate.progress
+          })
+          return {
+            ...t,
+            status: statusUpdate.status,
+            progress: statusUpdate.progress,
+            error_message: statusUpdate.error_message
+          }
+        }
+        return t
+      })
+      console.log('[App] Updated transcriptions state:', updated)
+      return updated
+    })
+  }, [])
+
+  // Get IDs of pending/processing transcriptions for polling
+  const pendingIds = transcriptions
+    .filter(t => t.status === 'pending' || t.status === 'processing')
+    .map(t => t.id)
+
+  console.log('[App] Pending IDs for polling:', pendingIds)
+  console.log('[App] All transcriptions:', transcriptions.map(t => ({ id: t.id, status: t.status, progress: t.progress })))
+
+  // Poll for status updates on pending/processing transcriptions
+  useTranscriptionPolling(
+    pendingIds,
+    pendingIds.length > 0,
+    handleTranscriptionComplete,
+    handleStatusUpdate
+  )
 
   const handleFilterChange = (priority: Priority | null) => {
     setPriorityFilter(priority)

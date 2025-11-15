@@ -1,0 +1,27 @@
+# Redis Container for EchoNote
+# Provides message broker and result backend for Celery task queue
+
+FROM docker.io/library/redis:7-alpine
+
+LABEL name="echonote-redis" \
+      vendor="EchoNote" \
+      version="1.0.0" \
+      summary="Redis message broker for EchoNote background tasks" \
+      description="Redis 7.x container providing message broker and result backend for Celery distributed task queue" \
+      maintainer="echonote@example.com" \
+      io.k8s.description="Redis message broker for Celery task processing" \
+      io.k8s.display-name="EchoNote Redis" \
+      io.openshift.tags="redis,celery,message-broker"
+
+# Redis runs on port 6379
+EXPOSE 6379
+
+# Copy custom Redis configuration
+COPY redis.conf /usr/local/etc/redis/redis.conf
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD redis-cli ping || exit 1
+
+# Use custom configuration file
+CMD ["redis-server", "/usr/local/etc/redis/redis.conf"]

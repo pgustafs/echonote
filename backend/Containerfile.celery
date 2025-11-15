@@ -1,0 +1,83 @@
+# Stage 1: Build dependencies
+# Use RHEL10 Python 3.12 minimal base image
+FROM registry.access.redhat.com/ubi10/python-312-minimal:latest AS builder
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy requirements file
+COPY requirements.txt .
+
+# Install dependencies (no --user flag needed for venv-based images)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime image
+# Use RHEL10 Python 3.12 minimal base image
+FROM registry.access.redhat.com/ubi10/python-312-minimal:latest
+
+# Add labels for metadata
+LABEL name="echonote-celery-worker" \
+      vendor="EchoNote" \
+      version="1.0.0" \
+      summary="EchoNote Celery Worker for Background Transcription" \
+      description="Celery worker container for processing audio transcription tasks with automatic chunking" \
+      maintainer="echonote@example.com" \
+      io.k8s.description="Celery worker for distributed transcription processing" \
+      io.k8s.display-name="EchoNote Celery Worker" \
+      io.openshift.tags="python,celery,worker,audio-processing"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH="/opt/app-root/src"
+
+# Switch to root temporarily for system package installation
+USER 0
+
+# Install audio processing libraries (required by pyannote.audio)
+# libsndfile: for audio file I/O via soundfile (alternative to torchcodec)
+RUN microdnf install -y libsndfile dnf dnf-plugins-core && microdnf clean all
+
+# Enable EPEL + RPM Fusion (until EL10 repo is live, EL9 works fine for UBI10)
+RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
+    dnf install -y https://download1.rpmfusion.org/free/el/rpmfusion-free-release-10.noarch.rpm
+
+# Install ffmpeg (pulls ffmpeg-libs and dependencies)
+RUN dnf install -y ffmpeg && \
+    dnf clean all && rm -rf /var/cache/dnf /var/tmp/*
+
+# Create directory for application and set ownership
+RUN mkdir -p /opt/app-root/src/backend && \
+    chown -R 1001:0 /opt/app-root/src && \
+    chmod -R g=u /opt/app-root/src
+
+# Switch back to non-root user
+USER 1001
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy Python dependencies from builder stage (entire venv)
+COPY --from=builder --chown=1001:0 /opt/app-root /opt/app-root
+
+# Copy backend application code (build context is backend/)
+COPY --chown=1001:0 . ./backend/
+
+# Create directory for SQLite database with proper permissions
+RUN mkdir -p /opt/app-root/src/data && \
+    chmod -R g=u /opt/app-root/src/data
+
+# Health check: verify worker can connect to broker
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A backend.celery_app inspect ping -d celery@$HOSTNAME || exit 1
+
+# Set working directory to parent so backend module can be imported
+WORKDIR /opt/app-root/src
+
+# Run Celery worker
+# -A: Application module (backend.celery_app:celery_app references the celery_app variable in backend/celery_app.py)
+# worker: Run worker node
+# --loglevel=info: Log level
+# --concurrency=2: Number of concurrent worker processes
+CMD ["celery", "-A", "backend.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2"]

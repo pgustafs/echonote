@@ -221,3 +221,59 @@ export async function downloadTranscription(id: number): Promise<void> {
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
 }
+
+// ============================================================================
+// Background Task Status APIs
+// ============================================================================
+
+export interface TranscriptionStatus {
+  id: number
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  progress: number | null
+  task_id: string | null
+  error_message: string | null
+}
+
+export interface BulkStatusResponse {
+  statuses: Array<{
+    id: number
+    status: string
+    progress: number | null
+    error_message: string | null
+  }>
+}
+
+/**
+ * Get status for a single transcription
+ */
+export async function getTranscriptionStatus(id: number): Promise<TranscriptionStatus> {
+  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}/status`, {
+    headers: getAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to get transcription status: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get status for multiple transcriptions at once
+ */
+export async function getBulkTranscriptionStatus(ids: number[]): Promise<BulkStatusResponse> {
+  if (ids.length === 0) {
+    return { statuses: [] }
+  }
+
+  const idsParam = ids.join(',')
+  const response = await fetch(`${getApiBaseUrl()}/transcriptions/status/bulk?ids=${idsParam}`, {
+    headers: getAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to get bulk status: ${response.statusText}`)
+  }
+
+  return response.json()
+}

@@ -13,6 +13,10 @@ export interface Transcription {
   duration_seconds: number | null
   priority: Priority
   url: string | null
+  task_id?: string | null
+  status?: 'pending' | 'processing' | 'completed' | 'failed'
+  progress?: number | null
+  error_message?: string | null
 }
 
 export interface TranscriptionList {

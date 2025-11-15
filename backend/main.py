@@ -165,7 +165,13 @@ async def transcribe_audio(
     session: Session = Depends(get_session)
 ):
     """
-    Transcribe an audio file and store it in the database.
+    Upload audio file and dispatch background transcription task.
+
+    This endpoint now works asynchronously:
+    1. Validates and saves audio file to database
+    2. Dispatches Celery task for transcription
+    3. Returns immediately with status="pending"
+    4. Client polls /api/transcriptions/{id}/status for updates
 
     Requires authentication. Transcription will be associated with the authenticated user.
 
@@ -175,11 +181,14 @@ async def transcribe_audio(
         model: Model name to use for transcription (defaults to DEFAULT_MODEL)
         enable_diarization: Enable speaker diarization (default: False)
         num_speakers: Number of speakers to detect (optional, auto-detect if not specified)
+        current_user: Authenticated user
         session: Database session dependency
 
     Returns:
-        TranscriptionPublic: Created transcription without binary data
+        TranscriptionPublic: Created transcription with status="pending"
     """
+    from backend.tasks import transcribe_audio_task
+
     # Determine which model to use
     selected_model = model if model else settings.DEFAULT_MODEL
 
@@ -189,6 +198,7 @@ async def transcribe_audio(
             status_code=400,
             detail=f"Invalid model: {selected_model}. Available models: {list(settings.MODELS.keys())}"
         )
+
     # Validate file type
     if file.content_type not in settings.ALLOWED_AUDIO_TYPES:
         raise HTTPException(
@@ -208,13 +218,12 @@ async def transcribe_audio(
                 detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE} bytes"
             )
 
-        logger.info(f"Processing audio file: {file.filename}")
-        logger.info(f"Original file size: {len(audio_bytes)} bytes ({original_size_mb:.2f} MB)")
+        logger.info(f"Processing audio upload: {file.filename}")
+        logger.info(f"File size: {len(audio_bytes)} bytes ({original_size_mb:.2f} MB)")
         logger.info(f"Content type: {file.content_type}")
-        logger.info(f"Using model: {selected_model}")
-        logger.info(f"Diarization enabled: {enable_diarization}")
+        logger.info(f"Model: {selected_model}, Diarization: {enable_diarization}")
 
-        # Get audio duration using soundfile (will try again after WebM conversion if this fails)
+        # Get audio duration
         duration_seconds = None
         try:
             import soundfile as sf
@@ -226,29 +235,24 @@ async def transcribe_audio(
         except Exception as e:
             logger.warning(f"Could not determine audio duration from original file: {e}")
 
-        # Get the base URL for the selected model
-        model_base_url = settings.get_model_url(selected_model)
+        # Check max duration limit
+        if duration_seconds and duration_seconds > settings.MAX_AUDIO_DURATION_SECONDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio too long. Maximum duration: {settings.MAX_AUDIO_DURATION_SECONDS} seconds ({settings.MAX_AUDIO_DURATION_SECONDS/60:.1f} minutes)"
+            )
 
-        # Create OpenAI client for this specific model
-        client = AsyncOpenAI(
-            base_url=model_base_url,
-            api_key=settings.API_KEY,
-        )
-
-        # Track actual content type (will be updated if we convert)
+        # Convert WebM to WAV if needed
         actual_content_type = file.content_type
         actual_filename = file.filename
 
-        # Convert WebM to WAV if needed (vLLM Whisper has issues with WebM)
-        # WebM conversion runs in isolated subprocess to prevent memory conflicts
         if file.content_type == "audio/webm":
             try:
                 from backend.audio_converter import convert_webm_to_wav
                 import gc
                 import sys
 
-                # Convert in isolated subprocess (see audio_converter.py)
-                # Returns tuple: (wav_bytes, duration_seconds)
+                # Convert to WAV
                 wav_bytes, converter_duration = convert_webm_to_wav(audio_bytes)
                 wav_size_mb = len(wav_bytes) / (1024 * 1024)
                 logger.info(f"WebM converted to WAV: {len(wav_bytes)} bytes ({wav_size_mb:.2f} MB)")
@@ -259,233 +263,72 @@ async def transcribe_audio(
                     duration_minutes = duration_seconds / 60
                     logger.info(f"Audio duration (from converter): {duration_seconds:.2f} seconds ({duration_minutes:.2f} minutes)")
 
-                # Clean up converter module from memory
+                # Clean up converter module
                 modules_to_remove = [m for m in sys.modules.keys() if 'pydub' in m.lower()]
                 for module_name in modules_to_remove:
                     del sys.modules[module_name]
                 del convert_webm_to_wav
-
-                # Force garbage collection to free memory
-                gc.collect()
-                gc.collect()
                 gc.collect()
 
-                logger.info("Pydub modules cleaned up from memory")
-
-                # Use WAV for transcription
-                audio_file = BytesIO(wav_bytes)
-                audio_file.name = file.filename.replace('.webm', '.wav') if file.filename else "audio.wav"
-
-                # Replace original WebM bytes with WAV bytes for storage
+                # Replace audio bytes with WAV
                 audio_bytes = wav_bytes
-
-                # Update content type and filename to reflect WAV format
                 actual_content_type = "audio/wav"
-                actual_filename = audio_file.name
+                actual_filename = file.filename.replace('.webm', '.wav') if file.filename else "audio.wav"
+
             except Exception as e:
                 logger.error(f"WebM to WAV conversion failed: {e}", exc_info=True)
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to convert WebM to WAV: {str(e)}"
                 )
-        else:
-            # Send other formats directly
-            audio_file = BytesIO(audio_bytes)
-            audio_file.name = file.filename or "audio.wav"
 
-        # Determine response format based on diarization
-        # Try verbose_json first (OpenAI standard), fallback to json if not supported
-        response_format = "verbose_json" if enable_diarization else "text"
-
-        # Initialize variables for transcription results
-        transcription_text = None
-        transcription_error = None
-
-        # Transcribe using Whisper via OpenAI API
-        try:
-            transcription_response = await client.audio.transcriptions.create(
-                model=selected_model,
-                file=audio_file,
-                response_format=response_format
-            )
-        except Exception as e:
-            # If verbose_json fails, try json format
-            error_msg = str(e)
-            if enable_diarization and ("verbose_json" in error_msg or "response_format" in error_msg):
-                logger.warning(f"verbose_json not supported by vLLM, falling back to json format. Error: {error_msg}")
-                response_format = "json"
-                audio_file.seek(0)  # Reset file position
-                try:
-                    transcription_response = await client.audio.transcriptions.create(
-                        model=selected_model,
-                        file=audio_file,
-                        response_format=response_format
-                    )
-                except Exception as retry_error:
-                    # Log without traceback for expected errors (file size, etc.)
-                    if "Maximum file size exceeded" in str(retry_error) or "BadRequestError" in str(type(retry_error).__name__):
-                        logger.warning(f"Transcription failed after format fallback: {retry_error}")
-                    else:
-                        logger.error(f"Transcription failed after format fallback: {retry_error}", exc_info=True)
-                    transcription_error = str(retry_error)
-                    transcription_response = None
-            else:
-                # Log without traceback for expected errors (file size, rate limits, etc.)
-                if "Maximum file size exceeded" in error_msg or "BadRequestError" in str(type(e).__name__):
-                    logger.warning(f"Transcription API call failed: {error_msg}")
-                else:
-                    logger.error(f"Transcription API call failed: {error_msg}", exc_info=True)
-                transcription_error = error_msg
-                transcription_response = None
-
-        # Process transcription response if we got one
-        if transcription_response is not None:
-            logger.info(f"Transcription API call completed successfully")
-            transcription_text_preview = extract_transcription_text(transcription_response)
-            logger.info(f"Transcription text preview: '{transcription_text_preview[:200]}'")
-
-        # Perform speaker diarization if enabled and transcription succeeded
-        if enable_diarization and transcription_response is not None:
-            try:
-                logger.info("Starting speaker diarization...")
-
-                # Perform diarization to identify speaker segments
-                diarization_service = get_diarization_service()
-                diarization_results = diarization_service.diarize_audio(
-                    audio_bytes,
-                    num_speakers=num_speakers
-                )
-
-                logger.info(f"Diarization found {len(diarization_results)} segments")
-
-                # Check if we have valid results
-                if not diarization_results:
-                    logger.warning("No speaker segments found in diarization")
-                    transcription_text = extract_transcription_text(transcription_response)
-                    transcription_text += "\n\n[No speakers detected in audio]"
-                else:
-                    # Split audio by speaker segments and transcribe each individually
-                    logger.info("Transcribing each speaker segment individually")
-
-                    import io
-                    import soundfile as sf
-
-                    # Load audio using soundfile
-                    audio_data, sample_rate = sf.read(io.BytesIO(audio_bytes))
-                    logger.info(f"Loaded audio: sample_rate={sample_rate}, shape={audio_data.shape}")
-
-                    # Process each speaker segment
-                    transcribed_segments = []
-
-                    for idx, seg in enumerate(diarization_results):
-                        speaker = seg['speaker']
-                        start_time = seg['start']
-                        end_time = seg['end']
-                        duration = end_time - start_time
-
-                        # Skip very short segments (< 0.5 seconds)
-                        if duration < 0.5:
-                            logger.info(f"Skipping segment {idx+1}: too short ({duration:.2f}s)")
-                            continue
-
-                        # Extract audio chunk for this segment
-                        start_sample = int(start_time * sample_rate)
-                        end_sample = int(end_time * sample_rate)
-
-                        # Handle stereo/mono audio
-                        if len(audio_data.shape) == 2:
-                            audio_chunk = audio_data[start_sample:end_sample, :]
-                        else:
-                            audio_chunk = audio_data[start_sample:end_sample]
-
-                        # Write audio chunk to WAV buffer
-                        chunk_buffer = io.BytesIO()
-                        sf.write(chunk_buffer, audio_chunk, sample_rate, format='WAV')
-                        chunk_buffer.seek(0)
-                        chunk_buffer.name = f"chunk_{idx}.wav"
-
-                        # Transcribe this segment
-                        try:
-                            logger.info(
-                                f"Transcribing segment {idx+1}/{len(diarization_results)}: "
-                                f"{speaker} ({start_time:.1f}s-{end_time:.1f}s, {duration:.1f}s)"
-                            )
-
-                            chunk_transcription = await client.audio.transcriptions.create(
-                                model=selected_model,
-                                file=chunk_buffer,
-                                response_format="text"
-                            )
-
-                            chunk_text = extract_transcription_text(chunk_transcription).strip()
-
-                            if chunk_text:
-                                transcribed_segments.append({
-                                    'speaker': speaker,
-                                    'text': chunk_text,
-                                    'start': start_time,
-                                    'end': end_time
-                                })
-                                logger.info(f"Segment {idx+1} transcribed: '{chunk_text[:50]}...'")
-                            else:
-                                logger.warning(f"Segment {idx+1} returned empty transcription")
-
-                        except Exception as e:
-                            logger.error(f"Failed to transcribe segment {idx+1}: {e}")
-                            continue
-
-                    # Format output with speaker labels
-                    if transcribed_segments:
-                        output_lines = [
-                            f"[{seg['speaker']}] {seg['text']} "
-                            f"({seg['start']:.1f}s - {seg['end']:.1f}s)"
-                            for seg in transcribed_segments
-                        ]
-                        transcription_text = "\n".join(output_lines)
-                        logger.info(f"Successfully transcribed {len(transcribed_segments)} speaker segments")
-                    else:
-                        logger.warning("No segments were successfully transcribed")
-                        transcription_text = extract_transcription_text(transcription_response)
-                        transcription_text += "\n\n[Diarization succeeded but segment transcription failed]"
-
-                logger.info("Diarization completed successfully")
-            except Exception as e:
-                logger.error(f"Diarization failed: {e}", exc_info=True)
-                # Fallback to plain text
-                transcription_text = extract_transcription_text(transcription_response)
-                transcription_text += "\n\n[Diarization failed - transcription only]"
-        else:
-            # Extract text from response (handle different response formats) if we have one
-            if transcription_response is not None:
-                transcription_text = extract_transcription_text(transcription_response)
-            else:
-                # Transcription failed - save with error message
-                transcription_text = f"[TRANSCRIPTION FAILED]\n\nError: {transcription_error}\n\nThe audio recording has been saved but could not be transcribed. This may be due to:\n- File size or duration limits\n- Unsupported audio format\n- Transcription service issues\n\nPlease try re-recording with a shorter duration or contact support."
-                logger.warning(f"Saving recording without transcription due to error: {transcription_error}")
-
-        logger.info(f"Transcription completed: {len(transcription_text)} characters")
-
-        # Create database record (save even if transcription failed)
+        # Create database record with status="pending"
         db_transcription = Transcription(
-            text=transcription_text,
+            text="",  # Will be filled by background task
             audio_data=audio_bytes,
             audio_filename=actual_filename or "audio.wav",
             audio_content_type=actual_content_type or "audio/wav",
+            duration_seconds=duration_seconds,
             url=url if url and url.strip() else None,
             user_id=current_user.id,
+            status="pending",
+            progress=0
         )
 
         session.add(db_transcription)
         session.commit()
         session.refresh(db_transcription)
 
-        if transcription_error:
-            logger.warning(f"Recording saved with ID: {db_transcription.id} (transcription failed: {transcription_error})")
-        else:
-            logger.info(f"Transcription saved with ID: {db_transcription.id}")
+        logger.info(f"Created transcription record with ID: {db_transcription.id} (status=pending)")
 
-        # Return public schema (without binary data)
-        # Note: If transcription failed, the text field will contain error message
+        # Dispatch Celery task
+        try:
+            task_result = transcribe_audio_task.delay(
+                transcription_id=db_transcription.id,
+                model=selected_model,
+                enable_diarization=enable_diarization,
+                num_speakers=num_speakers
+            )
+
+            # Save task ID
+            db_transcription.task_id = task_result.id
+            session.commit()
+
+            logger.info(f"Dispatched transcription task {task_result.id} for transcription {db_transcription.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to dispatch Celery task: {e}", exc_info=True)
+            # Update status to failed
+            db_transcription.status = "failed"
+            db_transcription.error_message = f"Failed to start background task: {str(e)}"
+            session.commit()
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start transcription task: {str(e)}"
+            )
+
+        # Return transcription with status="pending"
         return TranscriptionPublic(
             id=db_transcription.id,
             text=db_transcription.text,
@@ -495,16 +338,19 @@ async def transcribe_audio(
             duration_seconds=db_transcription.duration_seconds,
             priority=db_transcription.priority,
             url=db_transcription.url,
+            task_id=db_transcription.task_id,
+            status=db_transcription.status,
+            progress=db_transcription.progress,
+            error_message=db_transcription.error_message
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        # Critical error that prevented even saving the recording
-        logger.error(f"Critical error during transcription processing: {str(e)}", exc_info=True)
+        logger.error(f"Critical error during audio upload: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process recording: {str(e)}"
+            detail=f"Failed to process audio upload: {str(e)}"
         )
 
 
@@ -575,6 +421,10 @@ def list_transcriptions(
             duration_seconds=t.duration_seconds,
             priority=t.priority,
             url=t.url,
+            task_id=t.task_id,
+            status=t.status,
+            progress=t.progress,
+            error_message=t.error_message,
         )
         for t in transcriptions
     ]
@@ -585,6 +435,126 @@ def list_transcriptions(
         skip=skip,
         limit=limit,
     )
+
+
+@app.get("/api/transcriptions/{transcription_id}/status")
+def get_transcription_status(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get the current status of a transcription task.
+
+    This endpoint is used by the frontend to poll for transcription progress.
+    Returns current status, progress percentage, and any error messages.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user
+        session: Database session
+
+    Returns:
+        Dictionary with status information
+    """
+    from celery.result import AsyncResult
+
+    # Get transcription
+    transcription = session.query(Transcription).filter(
+        Transcription.id == transcription_id
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+
+    # Check authorization
+    if transcription.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this transcription")
+
+    # If task is still pending or processing, check Celery task status
+    if transcription.task_id and transcription.status in ["pending", "processing"]:
+        try:
+            task_result = AsyncResult(transcription.task_id)
+            celery_state = task_result.state
+
+            # Update status based on Celery state
+            if celery_state == "PENDING":
+                # Task not started yet
+                pass  # Keep database status
+            elif celery_state == "PROCESSING":
+                # Task is running, get progress from meta
+                meta = task_result.info or {}
+                if isinstance(meta, dict):
+                    transcription.progress = meta.get('progress', transcription.progress)
+            elif celery_state == "SUCCESS":
+                # Task completed, should be updated in database already
+                pass
+            elif celery_state == "FAILURE":
+                # Task failed
+                if transcription.status != "failed":
+                    transcription.status = "failed"
+                    transcription.error_message = str(task_result.info)
+                    session.commit()
+
+        except Exception as e:
+            logger.error(f"Error checking Celery task status: {e}")
+
+    return {
+        "id": transcription.id,
+        "status": transcription.status,
+        "progress": transcription.progress,
+        "task_id": transcription.task_id,
+        "error_message": transcription.error_message
+    }
+
+
+@app.get("/api/transcriptions/status/bulk")
+def get_bulk_transcription_status(
+    ids: str,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get status for multiple transcriptions at once.
+
+    This endpoint allows efficient polling of multiple transcriptions.
+    Useful for updating the transcription list view.
+
+    Args:
+        ids: Comma-separated list of transcription IDs (e.g., "1,2,3")
+        current_user: Authenticated user
+        session: Database session
+
+    Returns:
+        Dictionary with list of status objects
+    """
+    # Parse IDs
+    try:
+        id_list = [int(id_str.strip()) for id_str in ids.split(',') if id_str.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+    # Limit to 50 IDs
+    if len(id_list) > 50:
+        raise HTTPException(status_code=400, detail="Maximum 50 IDs allowed")
+
+    # Get transcriptions
+    transcriptions = session.query(Transcription).filter(
+        Transcription.id.in_(id_list),
+        Transcription.user_id == current_user.id
+    ).all()
+
+    # Build status list
+    statuses = []
+    for transcription in transcriptions:
+        statuses.append({
+            "id": transcription.id,
+            "status": transcription.status,
+            "progress": transcription.progress,
+            "error_message": transcription.error_message
+        })
+
+    return {"statuses": statuses}
 
 
 @app.get("/api/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
@@ -626,6 +596,10 @@ def get_transcription(
         duration_seconds=transcription.duration_seconds,
         priority=transcription.priority,
         url=transcription.url,
+        task_id=transcription.task_id,
+        status=transcription.status,
+        progress=transcription.progress,
+        error_message=transcription.error_message,
     )
 
 
@@ -858,6 +832,10 @@ def update_transcription_priority(
         duration_seconds=transcription.duration_seconds,
         priority=transcription.priority,
         url=transcription.url,
+        task_id=transcription.task_id,
+        status=transcription.status,
+        progress=transcription.progress,
+        error_message=transcription.error_message,
     )
 
 

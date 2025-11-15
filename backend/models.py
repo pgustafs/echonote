@@ -116,6 +116,25 @@ class Transcription(SQLModel, table=True):
         description="Optional URL associated with the voice note"
     )
 
+    # Background task tracking fields
+    task_id: Optional[str] = Field(
+        default=None,
+        index=True,
+        description="Celery task ID for tracking background processing"
+    )
+    status: str = Field(
+        default="completed",
+        description="Processing status: pending, processing, completed, failed"
+    )
+    progress: Optional[int] = Field(
+        default=None,
+        description="Processing progress percentage (0-100)"
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error message if transcription failed"
+    )
+
     # Foreign key to user
     user_id: int = Field(foreign_key="users.id", index=True)
 
@@ -144,6 +163,10 @@ class TranscriptionPublic(SQLModel):
     duration_seconds: Optional[float]
     priority: str
     url: Optional[str]
+    task_id: Optional[str] = None
+    status: str = "completed"
+    progress: Optional[int] = None
+    error_message: Optional[str] = None
 
 
 class TranscriptionList(SQLModel):

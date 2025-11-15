@@ -149,12 +149,6 @@ class DiarizationService:
 
             logger.info(f"Prepared tensor: shape={waveform_tensor.shape}, dtype={waveform_tensor.dtype}")
 
-            # Create audio dictionary for pyannote pipeline
-            audio_dict = {
-                "waveform": waveform_tensor,
-                "sample_rate": sample_rate
-            }
-
             # Configure diarization parameters
             kwargs = {}
             if num_speakers is not None:
@@ -165,8 +159,8 @@ class DiarizationService:
                 kwargs["max_speakers"] = 10
                 logger.info("Auto-detect mode: setting min_speakers=2, max_speakers=10")
 
-            # Run diarization
-            diarization = pipeline(audio_dict, **kwargs)
+            # Run diarization using file path (pyannote pipeline prefers file paths)
+            diarization = pipeline(tmp_path, **kwargs)
 
             # Parse results from pyannote.audio 3.x Annotation object
             results = []

@@ -1,0 +1,4 @@
+# Redis container build exclusions
+*.md
+.git
+.gitignore

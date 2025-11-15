@@ -1,8 +1,55 @@
 # EchoNote Container Deployment Guide
 
-This guide covers building and deploying the EchoNote backend using containers with Red Hat UBI images and Podman.
+This guide covers building and deploying EchoNote using containers with Red Hat UBI images and Podman.
 
-## Quick Start
+## Deployment Options
+
+EchoNote offers two deployment modes:
+
+### 1. Basic Deployment (2 containers)
+- **Frontend** - React/Vite SPA
+- **Backend** - FastAPI REST API with synchronous transcription
+- **Use case**: Development, testing, low-traffic deployments
+- **File**: `echonote-kube.yaml`
+
+### 2. Full Deployment (4 containers) - RECOMMENDED
+- **Frontend** - React/Vite SPA
+- **Backend** - FastAPI REST API
+- **Redis** - Message broker and result backend
+- **Celery Worker** - Async transcription processor
+- **Use case**: Production, high-traffic, responsive UX with progress tracking
+- **File**: `echonote-kube-priv.yaml`
+
+## Quick Start (Full Deployment)
+
+```bash
+# 1. Build all images
+podman build -t localhost/echonote-backend:latest backend/
+podman build -t localhost/echonote-frontend:latest frontend/
+podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
+podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
+
+# 2. Edit configuration
+vi echonote-kube-priv.yaml  # Update MODEL_URL, HF_TOKEN, and other settings
+
+# 3. Deploy
+podman kube play echonote-kube-priv.yaml
+
+# 4. Check status
+podman pod ps
+podman ps
+
+# 5. Verify services are ready
+podman logs echonote-backend          # Should see "Uvicorn running"
+podman logs echonote-celery-worker    # Should see "celery@echonote ready"
+podman exec echonote-redis redis-cli ping  # Should return "PONG"
+
+# 6. Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
+```
+
+## Quick Start (Basic Deployment)
 
 ```bash
 # 1. Build the images
@@ -31,9 +78,17 @@ podman ps
 
 ## Architecture
 
-EchoNote uses a two-container architecture with consistent build contexts:
+EchoNote offers two deployment architectures:
 
-### Backend Container (`backend/Containerfile`)
+### Basic Architecture (2 Containers)
+For development and low-traffic deployments:
+- **Frontend** - React/Vite SPA
+- **Backend** - FastAPI REST API with synchronous transcription
+
+### Full Architecture (4 Containers) - RECOMMENDED
+For production and high-traffic deployments with async processing:
+
+#### Backend Container (`backend/Containerfile`)
 - **Base Image**: UBI 10 Python 3.12 minimal
 - **Build Context**: `backend/` directory
 - **Multi-stage Build**: Builder stage installs dependencies, runtime stage is minimal
@@ -42,8 +97,9 @@ EchoNote uses a two-container architecture with consistent build contexts:
 - **Storage**: Persistent volume for SQLite database and audio files
 - **Dependencies**: `backend/requirements.txt`
 - **Exclusions**: `backend/.containerignore`
+- **Environment**: Connects to Redis for task queuing
 
-### Frontend Container (`frontend/Containerfile`)
+#### Frontend Container (`frontend/Containerfile`)
 - **Base Image**: UBI 10 Node.js 22
 - **Build Context**: `frontend/` directory
 - **Single-stage Build**: Builds the Vite app and serves with `serve` package
@@ -52,35 +108,65 @@ EchoNote uses a two-container architecture with consistent build contexts:
 - **Dependencies**: `frontend/package.json`
 - **Exclusions**: `frontend/.containerignore`
 - **Note**: Uses `serve` for lightweight static file serving
+- **Features**: Real-time polling for transcription status updates
+
+#### Redis Container (`redis/Containerfile`)
+- **Base Image**: UBI 9 with Redis 7
+- **Build Context**: `redis/` directory
+- **Configuration**: Custom `redis.conf` with RDB persistence disabled
+- **Port**: 6379
+- **Purpose**: Message broker (db 0) and result backend (db 1) for Celery
+- **Memory**: 512MB max with allkeys-lru eviction policy
+- **Health Check**: Redis CLI ping every 30s
+- **Note**: Optimized for task queuing, not data persistence
+
+#### Celery Worker Container (`backend/Containerfile.celery`)
+- **Base Image**: UBI 10 Python 3.12 minimal
+- **Build Context**: `backend/` directory
+- **Multi-stage Build**: Same dependencies as backend
+- **Purpose**: Async transcription processing worker
+- **Worker**: Single worker process with autoscale (4-1)
+- **Log Level**: INFO
+- **Environment**: Connects to Redis broker and result backend
+- **Features**: Audio chunking, speaker diarization, progress tracking
+- **Dependencies**: Same as backend plus Celery 5.5.3
 
 ## Building the Containers
 
-### Backend Container
+### Basic Deployment (2 containers)
 
 ```bash
-# Build the backend container image
+# Build backend
 podman build -t localhost/echonote-backend:latest backend/
 
-# Or with specific version tag
-podman build -t localhost/echonote-backend:1.0.0 backend/
-```
-
-### Frontend Container
-
-```bash
-# Build the frontend container image
+# Build frontend
 podman build -t localhost/echonote-frontend:latest frontend/
 
-# Or with specific version tag
+# Or with specific version tags
+podman build -t localhost/echonote-backend:1.0.0 backend/
 podman build -t localhost/echonote-frontend:1.0.0 frontend/
 ```
 
-### Build Both
+### Full Deployment (4 containers)
 
 ```bash
-# Build both images at once
-podman build -t localhost/echonote-backend:latest backend/ && \
+# Build backend
+podman build -t localhost/echonote-backend:latest backend/
+
+# Build frontend
 podman build -t localhost/echonote-frontend:latest frontend/
+
+# Build Redis
+podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
+
+# Build Celery worker
+podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
+
+# Or build all at once
+podman build -t localhost/echonote-backend:latest backend/ && \
+podman build -t localhost/echonote-frontend:latest frontend/ && \
+podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/ && \
+podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
 ```
 
 ## Running the Container
@@ -183,6 +269,8 @@ oc logs -f echonote-backend
 
 ## Environment Variables
 
+### Backend and Celery Worker
+
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `MODEL_URL` | vLLM Whisper server URL | `http://localhost:8080/v1` | Yes |
@@ -192,6 +280,21 @@ oc logs -f echonote-backend
 | `SQLITE_DB` | SQLite database path | `/opt/app-root/src/data/echonote.db` | No |
 | `CORS_ORIGINS` | Allowed CORS origins | `http://localhost:5173` | Yes |
 | `MAX_UPLOAD_SIZE` | Max file upload size in bytes | `104857600` (100MB) | No |
+| `CELERY_BROKER_URL` | Redis broker URL (full deployment) | `redis://localhost:6379/0` | Yes (full) |
+| `CELERY_RESULT_BACKEND` | Redis result backend URL (full deployment) | `redis://localhost:6379/1` | Yes (full) |
+| `HF_TOKEN` | Hugging Face token for pyannote models | - | No |
+| `CHUNK_LENGTH_MS` | Audio chunk length for processing | `30000` (30s) | No |
+| `ENABLE_DIARIZATION` | Enable speaker diarization | `false` | No |
+
+### Redis
+
+Redis configuration is set in `redis/redis.conf`:
+- **Port**: 6379
+- **Max Memory**: 512MB
+- **Eviction Policy**: allkeys-lru
+- **Persistence**: Disabled (snapshots turned off)
+- **Database 0**: Celery message broker
+- **Database 1**: Celery result backend
 
 ## Using Podman Secrets (Best Practice)
 
@@ -354,6 +457,8 @@ Look for the `STATUS` column showing `healthy` or `Up` status.
 
 ## Logs
 
+### Basic Deployment (2 containers)
+
 ```bash
 # View backend logs
 podman logs -f echonote-backend
@@ -363,10 +468,48 @@ podman logs -f echonote-frontend
 
 # View pod logs (all containers)
 podman pod logs echonote
+```
 
-# For podman run deployments
+### Full Deployment (4 containers)
+
+```bash
+# View backend API logs
 podman logs -f echonote-backend
+
+# View frontend logs
 podman logs -f echonote-frontend
+
+# View Redis logs
+podman logs -f echonote-redis
+
+# View Celery worker logs (most important for debugging transcriptions)
+podman logs -f echonote-celery-worker
+
+# Follow all logs in real-time
+podman logs -f echonote-backend &
+podman logs -f echonote-celery-worker &
+
+# View pod logs (all containers)
+podman pod logs echonote
+```
+
+### Monitoring Celery Tasks
+
+```bash
+# Check Celery worker status
+podman exec echonote-celery-worker celery -A celery_app inspect active
+
+# Check registered tasks
+podman exec echonote-celery-worker celery -A celery_app inspect registered
+
+# Check worker stats
+podman exec echonote-celery-worker celery -A celery_app inspect stats
+
+# Monitor Redis queue length
+podman exec echonote-redis redis-cli -n 0 llen celery
+
+# Check task results in Redis
+podman exec echonote-redis redis-cli -n 1 keys "celery-task-meta-*"
 ```
 
 ## Security Best Practices
@@ -422,7 +565,7 @@ Ensure volumes have correct SELinux labels. Podman kube play should handle this 
 For testing connectivity:
 ```bash
 # Enter the container
-podman exec -it echonote-backend-backend /bin/sh
+podman exec -it echonote-backend /bin/sh
 
 # Test connection (if curl is available)
 curl http://your-whisper-server:8080/v1/models
@@ -431,6 +574,77 @@ curl http://your-whisper-server:8080/v1/models
 If running locally, use host.containers.internal:
 ```yaml
 MODEL_URL: "http://host.containers.internal:8080/v1"
+```
+
+### Celery worker not processing tasks
+
+Check the worker logs and Redis connection:
+
+```bash
+# View Celery worker logs
+podman logs -f echonote-celery-worker
+
+# Check if worker is registered and active
+podman exec echonote-celery-worker celery -A celery_app inspect active
+
+# Verify Redis connectivity from worker
+podman exec echonote-celery-worker redis-cli -h echonote-redis ping
+
+# Check Redis broker database (db 0)
+podman exec echonote-redis redis-cli -n 0 info
+```
+
+Common issues:
+1. **Worker can't connect to Redis**: Ensure `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` point to the correct Redis host
+2. **Tasks not appearing**: Check backend logs to verify tasks are being submitted
+3. **Worker crashes**: Check for out-of-memory issues, increase worker memory limits
+
+### Transcriptions stuck in "pending" or "processing"
+
+This usually indicates the Celery worker is not processing tasks:
+
+```bash
+# Check worker status
+podman logs echonote-celery-worker | tail -20
+
+# Look for errors like:
+# - "Event loop is closed" (fixed in current version)
+# - Connection errors to Redis
+# - Out of memory errors
+# - Model URL connection failures
+
+# Check task queue
+podman exec echonote-redis redis-cli -n 0 llen celery
+
+# If queue length is > 0, tasks are waiting but not being processed
+# Restart the worker:
+podman restart echonote-celery-worker
+```
+
+### Redis persistence errors
+
+If you see errors like `Failed saving the DB: Permission denied`:
+
+```bash
+# This is expected and safe - we've disabled RDB persistence in redis.conf
+# Redis is configured for task queuing only, not data persistence
+# Check redis/redis.conf to verify "save ''" is set
+```
+
+### UI not showing real-time updates
+
+The frontend polls for status every 2 seconds. If updates aren't showing:
+
+```bash
+# 1. Check browser console for errors
+# 2. Verify backend /api/v1/transcriptions/status/bulk endpoint is working:
+curl http://localhost:8000/api/v1/transcriptions/status/bulk?ids=1,2,3
+
+# 3. Check backend logs for status update queries
+podman logs echonote-backend | grep "status/bulk"
+
+# 4. Ensure transcriptions have status fields in database
+# (Fixed in current version - list_transcriptions endpoint returns status fields)
 ```
 
 ### Image pull issues

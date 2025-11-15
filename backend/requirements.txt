@@ -30,3 +30,8 @@ PyJWT==2.9.0  # JWT token generation and validation
 
 # Environment and utilities
 python-dotenv==1.0.1
+
+# Background Task Processing
+celery>=5.5.3  # Distributed task queue
+redis>=5.0.1  # Redis client for Celery broker/backend
+flower==2.0.1  # Celery monitoring UI (optional)

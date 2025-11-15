@@ -125,6 +125,23 @@ export default function TranscriptionList({
     }
   }
 
+  const getStatusDisplay = (transcription: Transcription) => {
+    // Status is already updated by polling in App.tsx
+    const status = transcription.status || 'completed'
+    const progress = transcription.progress || null
+    const errorMessage = transcription.error_message || null
+
+    console.log(`[TranscriptionList] getStatusDisplay for ID ${transcription.id}:`, {
+      status,
+      progress,
+      errorMessage,
+      rawStatus: transcription.status,
+      rawProgress: transcription.progress
+    })
+
+    return { status, progress, errorMessage }
+  }
+
   return (
     <div className={isMobile ? "space-y-0" : "space-y-4 sm:space-y-6"}>
       {/* Header with count and search - unified for both mobile and desktop */}
@@ -357,6 +374,7 @@ export default function TranscriptionList({
           const isExpanded = expandedId === transcription.id
           const isPlaying = playingId === transcription.id
           const isDeleting = deletingId === transcription.id
+          const { status, progress, errorMessage } = getStatusDisplay(transcription)
 
           return (
             <div
@@ -382,9 +400,65 @@ export default function TranscriptionList({
                       {formatDate(transcription.created_at)}
                     </span>
                   </div>
-                  <p className="text-white text-base sm:text-lg leading-relaxed">
-                    {isExpanded ? transcription.text : truncateText(transcription.text)}
-                  </p>
+
+                  {/* Status Indicators */}
+                  {status === 'pending' && (
+                    <div className="mb-3 flex items-center space-x-2 text-yellow-400">
+                      <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">⏳ Queued for processing...</span>
+                    </div>
+                  )}
+
+                  {status === 'processing' && (
+                    <div className="mb-3 space-y-2">
+                      <div className="flex items-center space-x-2 text-blue-400">
+                        <div className="spinner w-4 h-4" />
+                        <span className="text-sm font-medium">
+                          🔄 Processing... {progress !== null ? `${progress}%` : ''}
+                        </span>
+                      </div>
+                      {progress !== null && (
+                        <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-blue-500 h-full transition-all duration-300 ease-out"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {status === 'failed' && (
+                    <div className="mb-3 space-y-2">
+                      <div className="flex items-center space-x-2 text-red-400">
+                        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">❌ Transcription failed</span>
+                      </div>
+                      {errorMessage && (
+                        <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                          <p className="text-xs text-red-300">{errorMessage}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Show transcription text only if completed or failed with text */}
+                  {(status === 'completed' || (status === 'failed' && transcription.text)) && transcription.text && (
+                    <p className="text-white text-base sm:text-lg leading-relaxed">
+                      {isExpanded ? transcription.text : truncateText(transcription.text)}
+                    </p>
+                  )}
+
+                  {/* Show placeholder for pending/processing without text */}
+                  {(status === 'pending' || status === 'processing') && !transcription.text && (
+                    <p className="text-slate-400 text-base sm:text-lg italic">
+                      Transcription will appear here once processing is complete...
+                    </p>
+                  )}
                 </div>
 
                 {/* Expand Icon */}

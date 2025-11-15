@@ -1281,6 +1281,426 @@ On desktop (≥ 768px), search and filter controls are also unified into a singl
 
 ---
 
+## Async Patterns & Background Processing
+
+EchoNote uses Celery for background transcription processing with real-time UI updates. This section covers the architectural patterns and React hooks that enable responsive async operations.
+
+### Background Processing Architecture
+
+#### System Flow
+
+1. **User uploads audio** → Frontend calls `/api/v1/transcriptions/` endpoint
+2. **Backend creates DB record** → Status: `pending`, returns transcription ID and task_id
+3. **Celery task queued** → Task sent to Redis broker (db 0)
+4. **Worker processes audio** → Status: `processing`, updates progress (0-100%)
+5. **Transcription completes** → Status: `completed`, text saved to database
+6. **Frontend polls for updates** → useTranscriptionPolling hook fetches status every 2 seconds
+
+#### Key Components
+
+**Backend:**
+- **FastAPI** - REST API endpoints
+- **Celery Worker** - Async task processor (backend/tasks.py)
+- **Redis** - Message broker (db 0) and result backend (db 1)
+- **PostgreSQL/SQLite** - Persistent storage
+
+**Frontend:**
+- **React Hooks** - State management and polling
+- **TypeScript** - Type-safe API contracts
+- **Polling Pattern** - Real-time status updates without WebSockets
+
+### React Polling Pattern
+
+#### useTranscriptionPolling Hook
+
+**Purpose:** Poll backend for transcription status updates in the background.
+
+**Location:** `frontend/src/hooks/useTranscriptionPolling.ts`
+
+**Usage:**
+```typescript
+const { statuses, isPolling, refreshStatuses } = useTranscriptionPolling(
+  transcriptionIds,     // IDs to poll
+  enabled,              // Enable/disable polling
+  onComplete,           // Callback when transcription completes
+  onStatusUpdate        // Callback for all status updates
+)
+```
+
+**Key Features:**
+- Polls every 2 seconds when enabled
+- Automatically stops when all transcriptions complete or fail
+- Detects status changes (pending → processing → completed)
+- Triggers callbacks for UI updates
+- Handles errors gracefully (continues polling on network failure)
+
+**Critical Implementation Details:**
+
+1. **Callback Execution Order** - Avoid React state batching issues
+```typescript
+// ❌ WRONG - Calling setState from inside setState callback
+setStatuses(prevStatuses => {
+  // ... build newStatuses ...
+  onStatusUpdate(newStatuses)  // ← This gets batched!
+  return newStatuses
+})
+
+// ✅ CORRECT - Call after setState completes
+const newStatuses = new Map<number, TranscriptionStatus>()
+setStatuses(prevStatuses => {
+  // ... build newStatuses ...
+  return newStatuses
+})
+// onStatusUpdate called AFTER setStatuses completes
+if (onStatusUpdate && newStatuses.size > 0) {
+  onStatusUpdate(newStatuses)
+}
+```
+
+2. **Dependency Arrays** - Include all callbacks
+```typescript
+// ❌ WRONG - Missing onStatusUpdate
+useEffect(() => {
+  // ... polling logic ...
+}, [pollStatuses, enabled])
+
+// ✅ CORRECT - All dependencies included
+useEffect(() => {
+  // ... polling logic ...
+}, [pollStatuses, enabled, onStatusUpdate])
+```
+
+3. **Stable Callback References** - Use useCallback
+```typescript
+// Parent component (App.tsx)
+const handleStatusUpdate = useCallback((statuses: Map<number, any>) => {
+  setTranscriptions(prev => prev.map(t => {
+    const statusUpdate = statuses.get(t.id)
+    if (statusUpdate) {
+      return { ...t, ...statusUpdate }
+    }
+    return t
+  }))
+}, [])  // ← No dependencies = stable reference
+```
+
+**File:** `frontend/src/hooks/useTranscriptionPolling.ts` (Lines 1-128)
+
+### State Management Patterns
+
+#### Single Source of Truth
+
+**Problem:** Child component (TranscriptionList) polling and updating local state, but parent (App.tsx) holds master state.
+
+**Solution:** Move polling to parent component where state lives.
+
+```tsx
+// ❌ WRONG - Polling in child component
+// TranscriptionList.tsx
+const { statuses } = useTranscriptionPolling(ids, true)
+// Local state updates, but parent doesn't know!
+
+// ✅ CORRECT - Polling in parent component
+// App.tsx
+const [transcriptions, setTranscriptions] = useState([])
+
+const handleStatusUpdate = useCallback((statuses: Map<number, any>) => {
+  setTranscriptions(prev => prev.map(t => {
+    const update = statuses.get(t.id)
+    return update ? { ...t, ...update } : t
+  }))
+}, [])
+
+useTranscriptionPolling(
+  pendingIds,
+  pendingIds.length > 0,
+  handleComplete,
+  handleStatusUpdate  // ← Updates master state
+)
+
+// TranscriptionList receives updated data via props
+<TranscriptionList transcriptions={transcriptions} />
+```
+
+**Files:**
+- `frontend/src/App.tsx` (Lines 87-111, 176-182)
+- `frontend/src/components/TranscriptionList.tsx` (Removed polling hook)
+
+#### Functional State Updates
+
+When updating state based on previous state, always use functional updates:
+
+```typescript
+// ❌ WRONG - Using stale state
+setTranscriptions(transcriptions.map(t => {
+  // ... update logic
+}))
+
+// ✅ CORRECT - Functional update
+setTranscriptions(prev => prev.map(t => {
+  // ... update logic using prev
+}))
+```
+
+**Why:** Ensures you're working with the latest state, especially in async callbacks.
+
+### API Endpoint Completeness
+
+**Critical:** All endpoints must return complete transcription objects including status fields.
+
+```python
+# ❌ WRONG - Missing status fields
+TranscriptionPublic(
+    id=t.id,
+    text=t.text,
+    audio_filename=t.audio_filename,
+    created_at=t.created_at,
+    # Missing: status, progress, error_message, task_id
+)
+
+# ✅ CORRECT - Complete object
+TranscriptionPublic(
+    id=t.id,
+    text=t.text,
+    audio_filename=t.audio_filename,
+    created_at=t.created_at,
+    status=t.status,              # ← Required for polling
+    progress=t.progress,          # ← Required for progress bars
+    error_message=t.error_message,# ← Required for error display
+    task_id=t.task_id,            # ← Required for task tracking
+)
+```
+
+**Files Updated:**
+- `backend/main.py` (Lines 414-430, 586-599, 822-835)
+
+### Progress Indicators
+
+#### Progress Bar Component
+
+Display transcription progress (0-100%) during processing:
+
+```tsx
+{status === 'processing' && progress !== null && (
+  <div className="mt-3">
+    <div className="flex justify-between text-xs mb-1">
+      <span style={{ color: '#9BA4B5' }}>Processing...</span>
+      <span style={{ color: '#9BA4B5' }}>{progress}%</span>
+    </div>
+    <div className="w-full bg-gray-700/50 rounded-full h-2">
+      <div
+        className="h-2 rounded-full transition-all duration-300"
+        style={{
+          width: `${progress}%`,
+          background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)'
+        }}
+      />
+    </div>
+  </div>
+)}
+```
+
+**File:** `frontend/src/components/TranscriptionList.tsx` (Lines 286-301)
+
+#### Status Badges
+
+Visual indicators for transcription state:
+
+```tsx
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'completed': return '#4ADE80'  // Green
+    case 'processing': return '#5C7CFA' // Blue
+    case 'pending': return '#F9A826'    // Amber
+    case 'failed': return '#E44C65'     // Red
+    default: return '#9BA4B5'           // Gray
+  }
+}
+
+<span
+  className="px-2 py-1 text-xs font-medium rounded-full"
+  style={{
+    background: `${getStatusColor(status)}20`,  // 20% opacity
+    color: getStatusColor(status),
+    border: `1px solid ${getStatusColor(status)}40`  // 40% opacity
+  }}
+>
+  {status}
+</span>
+```
+
+### Preventing Focus Loss
+
+**Problem:** Input loses focus when parent component re-renders during data fetching.
+
+**Wrong Approach:**
+```tsx
+{isLoading ? (
+  <LoadingSpinner />
+) : (
+  <TranscriptionList searchQuery={searchQuery} />
+)}
+```
+When `isLoading` changes, TranscriptionList unmounts → input loses focus.
+
+**Correct Approach:**
+```tsx
+<TranscriptionList
+  searchQuery={searchQuery}
+  isLoading={isLoading}
+  // Component stays mounted, handles loading state internally
+/>
+```
+
+**Inside TranscriptionList:**
+```tsx
+function TranscriptionList({ searchQuery, isLoading }: Props) {
+  return (
+    <div>
+      <input
+        value={searchQuery}
+        onChange={handleChange}
+        // Input stays in DOM, never unmounts
+      />
+
+      {isLoading ? (
+        <div>Loading...</div>
+      ) : (
+        <div>{/* Results */}</div>
+      )}
+    </div>
+  )
+}
+```
+
+**Files:**
+- `frontend/src/App.tsx` (Lines 486-500)
+- `frontend/src/components/TranscriptionList.tsx` (Lines 141-161)
+
+### Celery Task Implementation
+
+#### Audio Processing with Progress Updates
+
+**File:** `backend/tasks.py`
+
+```python
+@shared_task(bind=True)
+def transcribe_audio_task(self, transcription_id: int) -> str:
+    """
+    Celery task for async audio transcription.
+    Updates progress in database for real-time UI feedback.
+    """
+    # Update status to processing
+    db.query(Transcription).filter_by(id=transcription_id).update({
+        'status': 'processing',
+        'progress': 0
+    })
+    db.commit()
+
+    try:
+        # Process audio chunks
+        for i, chunk in enumerate(audio_chunks):
+            # Transcribe chunk
+            result = transcribe_chunk(chunk)
+
+            # Update progress
+            progress = int((i + 1) / len(chunks) * 100)
+            db.query(Transcription).filter_by(id=transcription_id).update({
+                'progress': progress
+            })
+            db.commit()
+
+        # Mark complete
+        db.query(Transcription).filter_by(id=transcription_id).update({
+            'status': 'completed',
+            'progress': 100,
+            'text': final_text
+        })
+        db.commit()
+
+        return final_text
+
+    except Exception as e:
+        # Mark failed
+        db.query(Transcription).filter_by(id=transcription_id).update({
+            'status': 'failed',
+            'error_message': str(e)
+        })
+        db.commit()
+        raise
+```
+
+#### Async Client Cleanup
+
+**Critical:** Always close async clients to prevent event loop errors.
+
+```python
+async def process_transcription_async(...) -> str:
+    client = AsyncOpenAI(base_url=model_url, api_key=api_key)
+    try:
+        # ... all transcription logic ...
+        return transcription_text
+    finally:
+        await client.close()  # ← Prevents "Event loop is closed" error
+```
+
+**File:** `backend/tasks.py` (Lines 423-450)
+
+### Debugging Async Issues
+
+#### Console Logging
+
+Add strategic console.logs to trace data flow:
+
+```typescript
+// Hook
+console.log('[useTranscriptionPolling] Poll response:', response)
+console.log('[useTranscriptionPolling] Calling onStatusUpdate with:', statuses)
+
+// Parent component
+console.log('[App] Pending IDs for polling:', pendingIds)
+console.log('[App] Status update received:', statuses)
+console.log('[App] Transcriptions after update:', transcriptions)
+```
+
+#### Backend Logging
+
+Monitor Celery worker and Redis:
+
+```bash
+# Celery worker logs
+podman logs -f echonote-celery-worker
+
+# Check active tasks
+podman exec echonote-celery-worker celery -A celery_app inspect active
+
+# Monitor Redis queue
+podman exec echonote-redis redis-cli -n 0 llen celery
+```
+
+#### Common Issues
+
+1. **No status updates in UI**
+   - Check: Backend endpoints returning status fields?
+   - Check: onStatusUpdate callback in useEffect dependencies?
+   - Check: Polling hook called in parent component (where state lives)?
+
+2. **Progress bars not showing**
+   - Check: Backend updating progress in database?
+   - Check: Frontend receiving progress in API response?
+   - Check: TranscriptionCard rendering progress bar component?
+
+3. **Transcriptions stuck in "pending"**
+   - Check: Celery worker running? (`podman ps`)
+   - Check: Worker logs for errors? (`podman logs echonote-celery-worker`)
+   - Check: Redis connection working? (`podman exec echonote-redis redis-cli ping`)
+
+4. **Text showing as JSON**
+   - Check: Backend parsing JSON strings in extract_transcription_text()?
+   - Check: Celery worker rebuilt after code changes?
+
+---
+
 ## Best Practices
 
 ### Interface Design Philosophy
