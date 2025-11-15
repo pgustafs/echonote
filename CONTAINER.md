@@ -4,23 +4,19 @@ This guide covers building and deploying EchoNote using containers with Red Hat 
 
 ## Deployment Options
 
-EchoNote offers two deployment modes:
+EchoNote requires a **4-container deployment** for full functionality:
 
-### 1. Basic Deployment (2 containers)
-- **Frontend** - React/Vite SPA
-- **Backend** - FastAPI REST API with synchronous transcription
-- **Use case**: Development, testing, low-traffic deployments
-- **File**: `echonote-kube.yaml`
-
-### 2. Full Deployment (4 containers) - RECOMMENDED
+### Production Deployment (4 containers) - REQUIRED
 - **Frontend** - React/Vite SPA
 - **Backend** - FastAPI REST API
 - **Redis** - Message broker and result backend
 - **Celery Worker** - Async transcription processor
-- **Use case**: Production, high-traffic, responsive UX with progress tracking
+- **Use case**: All environments (development, testing, production)
 - **File**: `echonote-kube-priv.yaml`
 
-## Quick Start (Full Deployment)
+**Note:** The application currently requires Celery and Redis for transcription processing. There is no synchronous fallback mode. All transcriptions are processed as background tasks.
+
+## Quick Start
 
 ```bash
 # 1. Build all images
@@ -49,27 +45,6 @@ podman exec echonote-redis redis-cli ping  # Should return "PONG"
 # Backend API: http://localhost:8000
 ```
 
-## Quick Start (Basic Deployment)
-
-```bash
-# 1. Build the images
-podman build -t localhost/echonote-backend:latest backend/
-podman build -t localhost/echonote-frontend:latest frontend/
-
-# 2. Edit configuration
-vi echonote-kube.yaml  # Update MODEL_URL and other settings
-
-# 3. Deploy
-podman kube play echonote-kube.yaml
-
-# 4. Check status
-podman pod ps
-podman ps
-
-# 5. Access the application
-# Frontend: http://localhost:5173
-# Backend API: http://localhost:8000
-```
 
 ## Prerequisites
 
@@ -78,15 +53,7 @@ podman ps
 
 ## Architecture
 
-EchoNote offers two deployment architectures:
-
-### Basic Architecture (2 Containers)
-For development and low-traffic deployments:
-- **Frontend** - React/Vite SPA
-- **Backend** - FastAPI REST API with synchronous transcription
-
-### Full Architecture (4 Containers) - RECOMMENDED
-For production and high-traffic deployments with async processing:
+EchoNote uses a 4-container architecture with async background processing:
 
 #### Backend Container (`backend/Containerfile`)
 - **Base Image**: UBI 10 Python 3.12 minimal
@@ -133,21 +100,7 @@ For production and high-traffic deployments with async processing:
 
 ## Building the Containers
 
-### Basic Deployment (2 containers)
-
-```bash
-# Build backend
-podman build -t localhost/echonote-backend:latest backend/
-
-# Build frontend
-podman build -t localhost/echonote-frontend:latest frontend/
-
-# Or with specific version tags
-podman build -t localhost/echonote-backend:1.0.0 backend/
-podman build -t localhost/echonote-frontend:1.0.0 frontend/
-```
-
-### Full Deployment (4 containers)
+### Build All Images
 
 ```bash
 # Build backend
@@ -180,11 +133,11 @@ This is the recommended approach as it uses standard Kubernetes YAML and works s
 podman build -t localhost/echonote-backend:latest backend/
 podman build -t localhost/echonote-frontend:latest frontend/
 
-# 2. Edit the configuration in echonote-kube.yaml
+# 2. Edit the configuration in echonote-kube-priv.yaml
 # Update the ConfigMap section with your vLLM server URL and other settings
 
 # 3. Deploy the application
-podman kube play echonote-kube.yaml
+podman kube play echonote-kube-priv.yaml
 
 # 4. Verify pods are running
 podman pod ps
@@ -195,7 +148,7 @@ podman logs echonote-backend     # Backend logs
 podman logs echonote-frontend    # Frontend logs
 ```
 
-To customize configuration before deploying, edit the ConfigMap in `echonote-kube.yaml`:
+To customize configuration before deploying, edit the ConfigMap in `echonote-kube-priv.yaml`:
 
 ```yaml
 apiVersion: v1
@@ -213,11 +166,11 @@ data:
 
 ```bash
 # Stop the deployment
-podman kube down echonote-kube.yaml
+podman kube down echonote-kube-priv.yaml
 
 # Restart after configuration changes
-podman kube down echonote-kube.yaml
-podman kube play echonote-kube.yaml
+podman kube down echonote-kube-priv.yaml
+podman kube play echonote-kube-priv.yaml
 
 # View all resources
 podman pod ps
@@ -249,14 +202,14 @@ podman run -d \
 
 ### Option 3: Deploy to OpenShift/Kubernetes
 
-The `echonote-kube.yaml` file is compatible with standard Kubernetes and OpenShift:
+The `echonote-kube-priv.yaml` file is compatible with standard Kubernetes and OpenShift:
 
 ```bash
 # For Kubernetes
-kubectl apply -f echonote-kube.yaml
+kubectl apply -f echonote-kube-priv.yaml
 
 # For OpenShift
-oc apply -f echonote-kube.yaml
+oc apply -f echonote-kube-priv.yaml
 
 # Check deployment status
 kubectl get pods
@@ -410,7 +363,7 @@ podman kube play postgres-kube.yaml
 
 ### Update EchoNote Configuration
 
-Edit `echonote-kube.yaml` and add `DATABASE_URL` to the ConfigMap:
+Edit `echonote-kube-priv.yaml` and add `DATABASE_URL` to the ConfigMap:
 
 ```yaml
 apiVersion: v1
@@ -436,8 +389,8 @@ Then update the backend pod's env section to include:
 Redeploy:
 
 ```bash
-podman kube down echonote-kube.yaml
-podman kube play echonote-kube.yaml
+podman kube down echonote-kube-priv.yaml
+podman kube play echonote-kube-priv.yaml
 ```
 
 ## Health Checks
@@ -456,21 +409,6 @@ podman inspect echonote-backend-backend | grep -A 10 Health
 Look for the `STATUS` column showing `healthy` or `Up` status.
 
 ## Logs
-
-### Basic Deployment (2 containers)
-
-```bash
-# View backend logs
-podman logs -f echonote-backend
-
-# View frontend logs
-podman logs -f echonote-frontend
-
-# View pod logs (all containers)
-podman pod logs echonote
-```
-
-### Full Deployment (4 containers)
 
 ```bash
 # View backend API logs
@@ -544,10 +482,10 @@ podman pod inspect echonote-backend
 
 ### Configuration not applied
 
-After editing `echonote-kube.yaml`, you must restart:
+After editing `echonote-kube-priv.yaml`, you must restart:
 ```bash
-podman kube down echonote-kube.yaml
-podman kube play echonote-kube.yaml
+podman kube down echonote-kube-priv.yaml
+podman kube play echonote-kube-priv.yaml
 ```
 
 ### Permission denied errors
@@ -659,7 +597,7 @@ podman login registry.access.redhat.com
 
 If you want to generate YAML from a running deployment:
 ```bash
-podman kube generate echonote-backend > my-echonote-kube.yaml
+podman kube generate echonote-backend > my-echonote-kube-priv.yaml
 ```
 
 ## Systemd Integration (Auto-start on Boot)
@@ -668,7 +606,7 @@ Podman can generate systemd unit files for automatic startup:
 
 ```bash
 # Deploy with podman kube play first
-podman kube play echonote-kube.yaml
+podman kube play echonote-kube-priv.yaml
 
 # Generate systemd service files
 podman kube generate systemd echonote-backend \

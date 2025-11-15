@@ -88,8 +88,8 @@ echonote/
 ├── redis/
 │   ├── Containerfile       # Redis container build
 │   └── redis.conf          # Redis configuration (no RDB persistence)
-├── echonote-kube.yaml      # Kubernetes/Podman deployment (2 containers)
-├── echonote-kube-priv.yaml # Full deployment (4 containers with Celery & Redis)
+├── echonote-kube.yaml      # Legacy deployment (2 containers - NOT FUNCTIONAL)
+├── echonote-kube-priv.yaml # Production deployment (4 containers - REQUIRED)
 ├── .gitignore              # Project-level git ignores
 ├── CONTAINER.md            # Container deployment guide
 ├── .env.example
@@ -778,34 +778,47 @@ EchoNote can be deployed using Podman with Red Hat Universal Base Image (UBI).
 ### Quick Container Deployment
 
 ```bash
-# Build both images
+# Build all 4 images (backend, frontend, Redis, Celery worker)
 podman build -t localhost/echonote-backend:latest backend/
 podman build -t localhost/echonote-frontend:latest frontend/
+podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
+podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
 
 # Edit configuration
-vi echonote-kube.yaml  # Update MODEL_URL and other settings
+vi echonote-kube-priv.yaml  # Update MODEL_URL, HF_TOKEN, and other settings
 
 # Deploy with Podman
-podman kube play echonote-kube.yaml
+podman kube play echonote-kube-priv.yaml
 
 # Check status
 podman pod ps
 podman ps
+
+# Verify services are ready
+podman logs echonote-backend          # Should see "Uvicorn running"
+podman logs echonote-celery-worker    # Should see "celery@echonote ready"
+podman exec echonote-redis redis-cli ping  # Should return "PONG"
 
 # Access the application
 # Frontend: http://localhost:5173
 # Backend API: http://localhost:8000
 ```
 
+**Important:** EchoNote requires all 4 containers (Backend, Frontend, Redis, Celery Worker) to function. The legacy `echonote-kube.yaml` file (2 containers only) is no longer functional as the backend now requires Celery for transcription processing.
+
 ### Container Files
 
 - **`backend/Containerfile`** - Backend multi-stage build using UBI 10 Python 3.12 minimal
+- **`backend/Containerfile.celery`** - Celery worker container build
 - **`backend/.containerignore`** - Backend container build exclusions
-- **`backend/requirements.txt`** - Python dependencies
+- **`backend/requirements.txt`** - Python dependencies (includes Celery 5.5.3)
 - **`frontend/Containerfile`** - Frontend build using UBI 10 Node.js 22 with `serve`
 - **`frontend/.containerignore`** - Frontend container build exclusions
 - **`frontend/.gitignore`** - Frontend git exclusions
-- **`echonote-kube.yaml`** - Kubernetes YAML for `podman kube play` (both frontend and backend)
+- **`redis/Containerfile`** - Redis 7 container build
+- **`redis/redis.conf`** - Custom Redis configuration (persistence disabled)
+- **`echonote-kube-priv.yaml`** - Kubernetes YAML for full 4-container deployment (REQUIRED)
+- **`echonote-kube.yaml`** - Legacy 2-container deployment (NOT FUNCTIONAL)
 - **`CONTAINER.md`** - Comprehensive container deployment guide
 
 ### Features
