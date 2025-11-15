@@ -52,9 +52,16 @@ echonote/
 │   ├── .containerignore      # Backend build exclusions
 │   ├── requirements.txt      # Python dependencies
 │   ├── __init__.py
-│   ├── main.py               # FastAPI application
-│   ├── models.py             # SQLModel database models (User, Transcription)
-│   ├── database.py           # Database configuration
+│   ├── main.py               # FastAPI application entry point (lifespan, routers)
+│   ├── routers/              # API endpoint routers (modular)
+│   │   ├── __init__.py
+│   │   ├── health.py         # Health check endpoints
+│   │   └── transcriptions.py # Transcription endpoints
+│   ├── services/             # Business logic layer
+│   │   ├── __init__.py
+│   │   └── transcription_service.py  # Transcription business logic
+│   ├── models.py             # SQLModel database models & API schemas
+│   ├── database.py           # Database configuration & session management
 │   ├── config.py             # Application settings
 │   ├── auth.py               # Authentication utilities (JWT, password hashing)
 │   ├── auth_routes.py        # Authentication endpoints (register, login)
@@ -96,6 +103,40 @@ echonote/
 └── README.md
 ```
 
+## Architecture Overview
+
+EchoNote follows modern **layered architecture** and **2025 FastAPI best practices** with clear separation of concerns:
+
+### Backend Architecture Layers
+
+**1. API Layer** (`backend/routers/`)
+- Thin controllers that handle HTTP requests/responses
+- Route registration and validation
+- Delegates business logic to service layer
+
+**2. Service Layer** (`backend/services/`)
+- Contains all business logic
+- Reusable, testable functions
+- Independent of HTTP/API concerns
+
+**3. Data Layer** (`backend/models.py`, `backend/database.py`)
+- SQLModel database models
+- API schemas (Create, Read, Update)
+- Database session management
+
+**4. Authentication** (`backend/auth.py`, `backend/auth_routes.py`)
+- JWT token generation/validation
+- Password hashing with bcrypt
+- Dependency injection for protected endpoints
+
+### Key Design Patterns
+
+✅ **Lifespan Context Manager** - Modern startup/shutdown event handling
+✅ **Dependency Injection** - FastAPI dependencies for auth, database sessions
+✅ **Service Layer Pattern** - Business logic separated from API endpoints
+✅ **Repository Pattern** - Database operations centralized
+✅ **Schema Separation** - Different models for Create/Read/Update operations
+
 ## Background Processing Architecture
 
 EchoNote uses a distributed task queue architecture for async transcription processing, providing a responsive user experience with real-time status updates.
@@ -104,7 +145,7 @@ EchoNote uses a distributed task queue architecture for async transcription proc
 
 **4-Container Architecture:**
 1. **Frontend** (`echonote-frontend`) - React/Vite SPA
-2. **Backend** (`echonote-backend`) - FastAPI REST API
+2. **Backend** (`echonote-backend`) - FastAPI REST API (modular routers + service layer)
 3. **Redis** (`echonote-redis`) - Message broker (db 0) & result backend (db 1)
 4. **Celery Worker** (`echonote-celery-worker`) - Background task processor
 
@@ -114,12 +155,17 @@ EchoNote uses a distributed task queue architecture for async transcription proc
 - Frontend captures audio using MediaRecorder API
 - WebM audio is sent to backend `/api/transcribe` endpoint
 
-**2. Backend Creates Task** (`backend/main.py`)
+**2. Backend Creates Task** (`backend/routers/transcriptions.py` → `backend/services/transcription_service.py`)
 ```python
 POST /api/transcribe
-├─ Save audio to database with status="pending"
-├─ Queue Celery task: transcribe_audio_task.delay(transcription_id, model, ...)
-├─ Return immediately with transcription ID and status
+├─ Router validates request (transcriptions.py)
+├─ Service processes audio (transcription_service.py)
+│   ├─ Validate file type and size
+│   ├─ Convert WebM to WAV if needed
+│   ├─ Extract duration
+│   └─ Save to database with status="pending"
+├─ Service dispatches Celery task
+├─ Router returns transcription with status
 └─ User sees instant feedback (no waiting for transcription)
 ```
 
@@ -1143,6 +1189,13 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+When contributing to the backend, please follow the established architecture:
+- **API endpoints** go in `backend/routers/` (organized by domain)
+- **Business logic** goes in `backend/services/`
+- **Database models and schemas** go in `backend/models.py`
+- Use type hints and comprehensive docstrings
+- Follow the service layer pattern (keep routers thin)
 
 ## Acknowledgments
 

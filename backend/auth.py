@@ -5,6 +5,7 @@ This module provides JWT token generation/validation and password hashing
 using bcrypt and PyJWT.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -17,6 +18,9 @@ from sqlmodel import Session, select
 from backend.config import settings
 from backend.database import get_session
 from backend.models import TokenData, User
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # HTTP Bearer token scheme
 security = HTTPBearer()
@@ -227,3 +231,69 @@ async def get_current_active_user(
         User: The authenticated active user
     """
     return current_user
+
+
+async def get_user_from_query_token(
+    token: Optional[str] = None,
+    session: Session = Depends(get_session)
+) -> User:
+    """
+    Dependency to authenticate user from query parameter token.
+
+    This is useful for endpoints that need authentication via query parameters,
+    such as HTML audio/video elements that cannot set Authorization headers.
+
+    Args:
+        token: JWT token from query parameter
+        session: Database session
+
+    Returns:
+        User: The authenticated user
+
+    Raises:
+        HTTPException: If token is missing, invalid, or user not found/inactive
+
+    Example:
+        @app.get("/api/audio/{id}")
+        async def get_audio(
+            id: int,
+            user: User = Depends(get_user_from_query_token)
+        ):
+            # user is now authenticated from ?token=xxx query parameter
+            pass
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token required"
+        )
+
+    try:
+        # Decode and validate token
+        token_data = decode_access_token(token)
+
+        # Get user from database
+        user = get_user_by_username(session, username=token_data.username)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or inactive user"
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or inactive user"
+            )
+
+        return user
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token"
+        )

@@ -1,0 +1,514 @@
+"""
+Transcription API Router
+
+This module defines all API endpoints related to transcription operations.
+Following the thin controller pattern, endpoints delegate business logic
+to the service layer.
+
+Endpoints:
+- POST /api/transcribe - Upload and transcribe audio
+- GET /api/transcriptions - List user's transcriptions (paginated)
+- GET /api/transcriptions/{id} - Get specific transcription
+- GET /api/transcriptions/{id}/status - Get transcription status
+- GET /api/transcriptions/status/bulk - Get multiple transcription statuses
+- GET /api/transcriptions/{id}/audio - Stream audio file
+- GET /api/transcriptions/{id}/download - Download ZIP package
+- PATCH /api/transcriptions/{id} - Update transcription (priority)
+- DELETE /api/transcriptions/{id} - Delete transcription
+"""
+
+import logging
+from typing import Annotated, Optional
+
+from celery.result import AsyncResult
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response, StreamingResponse
+from sqlmodel import Session
+
+from backend.auth import get_current_active_user, get_user_from_query_token
+from backend.config import settings
+from backend.database import get_session
+from backend.models import (
+    BulkStatusResponse,
+    Transcription,
+    TranscriptionList,
+    TranscriptionPublic,
+    TranscriptionStatusResponse,
+    TranscriptionUpdate,
+    User,
+)
+from backend.services.transcription_service import TranscriptionService
+
+# Configure logger
+logger = logging.getLogger(__name__)
+
+# Create router with common prefix and tags
+router = APIRouter(
+    prefix="/api",
+    tags=["transcriptions"],
+    responses={404: {"description": "Not found"}},
+)
+
+
+@router.post("/transcribe", response_model=TranscriptionPublic)
+async def transcribe_audio(
+    file: Annotated[UploadFile, File(description="Audio file to transcribe")],
+    url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
+    model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
+    enable_diarization: Annotated[bool, Form(description="Enable speaker diarization")] = False,
+    num_speakers: Annotated[int | None, Form(description="Number of speakers (optional)")] = None,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Upload audio file and dispatch background transcription task.
+
+    This endpoint works asynchronously:
+    1. Validates and saves audio file to database
+    2. Dispatches Celery task for transcription
+    3. Returns immediately with status="pending"
+    4. Client polls /api/transcriptions/{id}/status for updates
+
+    Authentication: Requires valid JWT token.
+    Transcription will be associated with the authenticated user.
+
+    Args:
+        file: Audio file uploaded via multipart/form-data
+        url: Optional URL associated with the voice note
+        model: Model name to use for transcription (defaults to DEFAULT_MODEL)
+        enable_diarization: Enable speaker diarization (default: False)
+        num_speakers: Number of speakers to detect (optional, auto-detect if not specified)
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionPublic: Created transcription with status="pending"
+
+    Raises:
+        HTTPException 400: Invalid file type, model, or audio too long
+        HTTPException 413: File too large
+        HTTPException 500: Processing or task dispatch failure
+    """
+    try:
+        # Determine which model to use
+        selected_model = model if model else settings.DEFAULT_MODEL
+
+        # Process audio upload (validation, conversion, duration extraction)
+        audio_bytes, content_type, filename, duration = await TranscriptionService.process_audio_upload(
+            file, selected_model
+        )
+
+        logger.info(f"Model: {selected_model}, Diarization: {enable_diarization}")
+
+        # Create database record with status="pending"
+        db_transcription = TranscriptionService.create_transcription_record(
+            session=session,
+            audio_bytes=audio_bytes,
+            audio_filename=filename,
+            audio_content_type=content_type,
+            duration_seconds=duration,
+            url=url,
+            user=current_user
+        )
+
+        # Dispatch Celery task for background processing
+        task_id = TranscriptionService.dispatch_transcription_task(
+            transcription_id=db_transcription.id,
+            model=selected_model,
+            enable_diarization=enable_diarization,
+            num_speakers=num_speakers,
+            session=session
+        )
+
+        # Return transcription with status="pending"
+        return TranscriptionService.to_public_schema(db_transcription)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Critical error during audio upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process audio upload: {str(e)}"
+        )
+
+
+@router.get("/transcriptions", response_model=TranscriptionList)
+def list_transcriptions(
+    skip: int = 0,
+    limit: int | None = None,
+    priority: str | None = None,
+    search: str | None = None,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    List user's transcriptions with pagination, optional priority filtering, and search.
+
+    Authentication: Requires valid JWT token.
+    Only returns transcriptions belonging to the authenticated user.
+
+    Args:
+        skip: Number of records to skip (offset for pagination)
+        limit: Maximum number of records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
+        priority: Optional priority filter (low, medium, high)
+        search: Optional search query (searches in transcription text, case-insensitive)
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionList: Paginated list of user's transcriptions with total count
+    """
+    # Get transcriptions from service layer
+    transcriptions, total = TranscriptionService.get_user_transcriptions(
+        session=session,
+        user=current_user,
+        skip=skip,
+        limit=limit,
+        priority=priority,
+        search=search
+    )
+
+    # Convert to public schema
+    public_transcriptions = [
+        TranscriptionService.to_public_schema(t) for t in transcriptions
+    ]
+
+    # Use actual limit (after applying defaults and max)
+    actual_limit = limit if limit else settings.DEFAULT_PAGE_SIZE
+    actual_limit = min(actual_limit, settings.MAX_PAGE_SIZE)
+
+    return TranscriptionList(
+        transcriptions=public_transcriptions,
+        total=total,
+        skip=skip,
+        limit=actual_limit,
+    )
+
+
+@router.get("/transcriptions/{transcription_id}/status", response_model=TranscriptionStatusResponse)
+def get_transcription_status(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get the current status of a transcription task.
+
+    This endpoint is used by the frontend to poll for transcription progress.
+    Returns current status, progress percentage, and any error messages.
+
+    Authentication: Requires valid JWT token.
+    Only allows access if transcription belongs to authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionStatusResponse: Status information
+
+    Raises:
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to view this transcription
+    """
+    # Get transcription (verifies ownership)
+    transcription = TranscriptionService.get_transcription_by_id(
+        session, transcription_id, current_user
+    )
+
+    # If task is still pending or processing, check Celery task status
+    if transcription.task_id and transcription.status in ["pending", "processing"]:
+        try:
+            task_result = AsyncResult(transcription.task_id)
+            celery_state = task_result.state
+
+            # Update status based on Celery state
+            if celery_state == "PENDING":
+                # Task not started yet
+                pass  # Keep database status
+            elif celery_state == "PROCESSING":
+                # Task is running, get progress from meta
+                meta = task_result.info or {}
+                if isinstance(meta, dict):
+                    transcription.progress = meta.get('progress', transcription.progress)
+            elif celery_state == "SUCCESS":
+                # Task completed, should be updated in database already
+                pass
+            elif celery_state == "FAILURE":
+                # Task failed
+                if transcription.status != "failed":
+                    transcription.status = "failed"
+                    transcription.error_message = str(task_result.info)
+                    session.commit()
+
+        except Exception as e:
+            logger.error(f"Error checking Celery task status: {e}")
+
+    return TranscriptionStatusResponse(
+        id=transcription.id,
+        status=transcription.status,
+        progress=transcription.progress,
+        task_id=transcription.task_id,
+        error_message=transcription.error_message
+    )
+
+
+@router.get("/transcriptions/status/bulk", response_model=BulkStatusResponse)
+def get_bulk_transcription_status(
+    ids: str,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get status for multiple transcriptions at once.
+
+    This endpoint allows efficient polling of multiple transcriptions.
+    Useful for updating the transcription list view.
+
+    Authentication: Requires valid JWT token.
+    Only returns status for transcriptions belonging to authenticated user.
+
+    Args:
+        ids: Comma-separated list of transcription IDs (e.g., "1,2,3")
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        BulkStatusResponse: List of status objects for requested transcriptions
+
+    Raises:
+        HTTPException 400: Invalid ID format or too many IDs (max 50)
+    """
+    # Parse IDs
+    try:
+        id_list = [int(id_str.strip()) for id_str in ids.split(',') if id_str.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+    # Limit to 50 IDs
+    if len(id_list) > 50:
+        raise HTTPException(status_code=400, detail="Maximum 50 IDs allowed")
+
+    # Get transcriptions (only those belonging to user)
+    transcriptions = session.query(Transcription).filter(
+        Transcription.id.in_(id_list),
+        Transcription.user_id == current_user.id
+    ).all()
+
+    # Build status list
+    statuses = [
+        TranscriptionStatusResponse(
+            id=t.id,
+            status=t.status,
+            progress=t.progress,
+            task_id=t.task_id,
+            error_message=t.error_message
+        )
+        for t in transcriptions
+    ]
+
+    return BulkStatusResponse(statuses=statuses)
+
+
+@router.get("/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
+def get_transcription(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Get a specific transcription by ID.
+
+    Authentication: Requires valid JWT token.
+    Only returns transcription if it belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionPublic: Transcription details (without binary audio data)
+
+    Raises:
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to access this transcription
+    """
+    transcription = TranscriptionService.get_transcription_by_id(
+        session, transcription_id, current_user
+    )
+
+    return TranscriptionService.to_public_schema(transcription)
+
+
+@router.get("/transcriptions/{transcription_id}/audio")
+async def get_audio(
+    transcription_id: int,
+    current_user: User = Depends(get_user_from_query_token),
+    session: Session = Depends(get_session)
+):
+    """
+    Stream the audio file for a specific transcription.
+
+    This endpoint uses query parameter authentication to support HTML audio elements
+    that cannot set Authorization headers.
+
+    Authentication: Requires token as query parameter (?token=xxx).
+    Only allows access if transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user from query token (injected)
+        session: Database session (injected)
+
+    Returns:
+        Response: Audio file as binary data with appropriate MIME type
+
+    Raises:
+        HTTPException 401: Token missing or invalid
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to access this transcription
+
+    Example:
+        <audio src="/api/transcriptions/123/audio?token=YOUR_JWT_TOKEN" />
+    """
+    transcription = TranscriptionService.get_transcription_by_id(
+        session, transcription_id, current_user
+    )
+
+    return Response(
+        content=transcription.audio_data,
+        media_type=transcription.audio_content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{transcription.audio_filename}"'
+        }
+    )
+
+
+@router.get("/transcriptions/{transcription_id}/download")
+async def download_transcription(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Download a transcription as a ZIP file containing:
+    - {username}.wav: Audio file in WAV format
+    - config.json: Transcription metadata and text
+
+    Authentication: Requires valid JWT token.
+    Only allows download if transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        StreamingResponse: ZIP file containing audio and config
+
+    Raises:
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to access this transcription
+        HTTPException 500: ZIP creation or audio conversion failed
+    """
+    transcription = TranscriptionService.get_transcription_by_id(
+        session, transcription_id, current_user
+    )
+
+    # Create ZIP package
+    zip_buffer = TranscriptionService.create_download_package(
+        transcription, current_user.username
+    )
+
+    # Generate a meaningful filename for the ZIP
+    zip_filename = f"transcription_{transcription_id}_{current_user.username}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename}"'
+        }
+    )
+
+
+@router.patch("/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
+def update_transcription_priority(
+    transcription_id: int,
+    priority: str,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Update the priority of a transcription.
+
+    Authentication: Requires valid JWT token.
+    Only allows update if transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription to update
+        priority: New priority value (low, medium, high)
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionPublic: Updated transcription
+
+    Raises:
+        HTTPException 400: Invalid priority value
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to update this transcription
+    """
+    transcription = TranscriptionService.update_transcription_priority(
+        session, transcription_id, priority, current_user
+    )
+
+    return TranscriptionService.to_public_schema(transcription)
+
+
+@router.delete("/transcriptions/{transcription_id}")
+def delete_transcription(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Delete a transcription and its audio file.
+
+    Authentication: Requires valid JWT token.
+    Only allows deletion if transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription to delete
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        dict: Success message
+
+    Raises:
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to delete this transcription
+    """
+    TranscriptionService.delete_transcription(session, transcription_id, current_user)
+
+    return {"message": "Transcription deleted successfully"}
+
+
+@router.get("/models")
+def get_models():
+    """
+    Get list of available transcription models.
+
+    No authentication required.
+
+    Returns:
+        dict: Available models and default model configuration
+    """
+    return {
+        "models": list(settings.MODELS.keys()),
+        "default": settings.DEFAULT_MODEL
+    }

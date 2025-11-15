@@ -169,9 +169,28 @@ class TranscriptionPublic(SQLModel):
     error_message: Optional[str] = None
 
 
+class TranscriptionUpdate(SQLModel):
+    """Schema for updating a transcription (e.g., priority)"""
+    priority: Optional[str] = None
+
+
 class TranscriptionList(SQLModel):
     """Schema for listing transcriptions with pagination"""
     transcriptions: list[TranscriptionPublic]
     total: int
     skip: int
     limit: int
+
+
+class TranscriptionStatusResponse(SQLModel):
+    """Schema for transcription status endpoint response"""
+    id: int
+    status: str
+    progress: Optional[int]
+    task_id: Optional[str]
+    error_message: Optional[str]
+
+
+class BulkStatusResponse(SQLModel):
+    """Schema for bulk status endpoint response"""
+    statuses: list[TranscriptionStatusResponse]
