@@ -279,8 +279,13 @@ async def process_transcription_async(
                 # Perform diarization
                 diarization_service = get_diarization_service()
                 diarization_results = diarization_service.diarize_audio(audio_bytes, num_speakers=num_speakers)
-        
-                logger.info(f"Diarization found {len(diarization_results)} segments")
+
+                # CRITICAL FIX: Sort segments by start time to ensure chronological order
+                # Pyannote may return segments in speaker-clustering order, not temporal order
+                # Without sorting, sentences can appear out of sequence in the final transcription
+                diarization_results = sorted(diarization_results, key=lambda x: x['start'])
+
+                logger.info(f"Diarization found {len(diarization_results)} segments (sorted chronologically)")
         
                 self.update_state(state='PROCESSING', meta={'status': 'Diarization complete', 'progress': 30})
                 db_transcription.progress = 30
