@@ -97,6 +97,7 @@ site/
 # LOCAL TEST FILES ETC
 build_test.sh
 deploy_openshift.sh
+deploy_openshift_frontend.sh
 REMAINING_IMPLEMENTATION_STEPS.md
 IMPLEMENTATION_PROGRESS.md
 background_task_todo_list.md
@@ -104,3 +105,7 @@ background_task_todo_list.md
 REFACTOR_SUMMARY.md
 REFACTOR_MAIN_TODO.md
 DIARIZATION_ANALYSIS.md
+PWA_IMPROVEMENTS_SUMMARY.md
+PWA_UI_FIXES_SUMMARY.md
+MULTI_RECORDING_SYNC_FIX.md
+SYNC_FIX_SUMMARY.md

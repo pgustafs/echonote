@@ -3,8 +3,8 @@
  * Provides offline caching, background sync, and PWA functionality
  */
 
-const CACHE_NAME = 'echonote-v3';
-const RUNTIME_CACHE = 'echonote-runtime-v3';
+const CACHE_NAME = 'echonote-v6';
+const RUNTIME_CACHE = 'echonote-runtime-v6';
 
 // Assets to cache on install (exclude index.html and hashed JS/CSS files)
 const PRECACHE_ASSETS = [

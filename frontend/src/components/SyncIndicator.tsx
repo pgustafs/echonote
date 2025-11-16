@@ -1,6 +1,10 @@
 /**
  * Sync Indicator Component
  * Shows online/offline status and pending recordings count
+ *
+ * Positioning strategy:
+ * - Desktop: Fixed to bottom-right corner (z-index: 50)
+ * - Mobile: Centered on screen above bottom navigation (z-index: 1001)
  */
 
 import { SyncStatus } from '../utils/syncManager';
@@ -10,6 +14,7 @@ interface SyncIndicatorProps {
   syncStatus: SyncStatus;
   pendingCount: number;
   onSyncClick?: () => void;
+  isMobile?: boolean;
 }
 
 export default function SyncIndicator({
@@ -17,6 +22,7 @@ export default function SyncIndicator({
   syncStatus,
   pendingCount,
   onSyncClick,
+  isMobile = false,
 }: SyncIndicatorProps) {
   // Don't show if online and no pending recordings
   if (isOnline && pendingCount === 0 && syncStatus === 'idle') {
@@ -65,10 +71,15 @@ export default function SyncIndicator({
 
   const { icon, text, color, bgColor, borderColor } = getStatusInfo();
 
+  // Determine positioning classes based on device type
+  const positionClasses = isMobile
+    ? 'fixed top-20 left-0 right-0 z-[1001] mx-4' // Top of screen on mobile, full-width with margins
+    : 'fixed bottom-4 right-4 z-50'; // Bottom-right on desktop
+
   return (
     <div
-      className={`fixed bottom-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-2xl border ${bgColor} ${borderColor} backdrop-blur-sm shadow-lg transition-all duration-300`}
-      style={{ minWidth: '150px' }}
+      className={`${positionClasses} flex items-center space-x-2 px-4 py-3 rounded-2xl border ${bgColor} ${borderColor} backdrop-blur-sm shadow-lg transition-all duration-300`}
+      style={isMobile ? {} : { minWidth: '150px' }}
     >
       {/* Status Icon */}
       <span className={`text-xl ${syncStatus === 'syncing' ? 'animate-spin' : ''}`}>

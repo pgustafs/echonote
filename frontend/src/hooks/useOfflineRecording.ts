@@ -48,6 +48,18 @@ export function useOfflineRecording() {
     const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm';
     const filename = `recording-${Date.now()}.${extension}`;
 
+    console.log('[useOfflineRecording] Saving blob to IndexedDB:', {
+      size: audioBlob.size,
+      type: audioBlob.type,
+      filename,
+    });
+
+    if (audioBlob.size === 0) {
+      console.error('[useOfflineRecording] Attempted to save an empty audio blob. Aborting.');
+      // Optionally, you could set an error state here to inform the user.
+      return;
+    }
+
     await savePendingRecording({
       blob: audioBlob,
       filename,
@@ -73,7 +85,17 @@ export function useOfflineRecording() {
    * Manually trigger sync
    */
   const triggerSync = async (): Promise<void> => {
-    await syncManager.syncPendingRecordings();
+    console.log('[useOfflineRecording] triggerSync called');
+    try {
+      await syncManager.syncPendingRecordings();
+      console.log('[useOfflineRecording] Sync completed');
+      // Update pending count after sync
+      const count = await getPendingCount();
+      setPendingCount(count);
+      console.log('[useOfflineRecording] Updated pending count:', count);
+    } catch (error) {
+      console.error('[useOfflineRecording] Sync error:', error);
+    }
   };
 
   return {

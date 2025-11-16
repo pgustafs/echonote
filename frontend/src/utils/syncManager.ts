@@ -4,10 +4,11 @@
 
 import { transcribeAudio } from '../api';
 import {
-  getPendingRecordings,
   deletePendingRecording,
   updateRecordingStatus,
   getPendingCount,
+  updateRecordingError,
+  getFirstPendingRecording,
 } from './indexedDB';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline';
@@ -22,6 +23,9 @@ export class SyncManager {
     // Listen for online/offline events
     window.addEventListener('online', () => this.handleOnline());
     window.addEventListener('offline', () => this.handleOffline());
+
+    // Listen for page visibility changes to handle mobile devices coming back online
+    document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
 
     // Set initial status
     this.syncStatus = navigator.onLine ? 'idle' : 'offline';
@@ -104,16 +108,36 @@ export class SyncManager {
   }
 
   /**
-   * Manually trigger sync of pending recordings
+   * Handle page visibility change, especially for mobile devices
+   * When app is brought to foreground, check for connectivity and sync if needed
+   */
+  private handleVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      console.log('[SyncManager] App became visible, checking network status.');
+      if (this.isOnline()) {
+        console.log('[SyncManager] App is online, triggering sync on visibility change.');
+        // Treat as an online event to ensure status is updated and sync is triggered
+        this.handleOnline();
+      }
+    }
+  }
+
+  /**
+   * Manually trigger sync of pending recordings.
+   * This function processes one recording at a time to prevent a single
+   * corrupted blob from crashing the entire sync process.
+   * Failed recordings are marked as 'failed' and skipped on subsequent syncs.
    */
   async syncPendingRecordings(): Promise<void> {
+    console.log('[SyncManager] Attempting to sync pending recordings...');
     if (this.syncInProgress) {
-      console.log('[SyncManager] Sync already in progress');
+      console.log('[SyncManager] Sync already in progress, aborting.');
       return;
     }
 
     if (!navigator.onLine) {
-      console.log('[SyncManager] Device is offline, skipping sync');
+      console.log('[SyncManager] Device is offline, skipping sync.');
+      this.handleOffline();
       return;
     }
 
@@ -121,50 +145,107 @@ export class SyncManager {
     this.syncStatus = 'syncing';
     await this.notifyListeners();
 
-    try {
-      const recordings = await getPendingRecordings();
-      console.log('[SyncManager] Syncing', recordings.length, 'pending recordings');
+    let syncedCount = 0;
+    let failedCount = 0;
 
-      for (const recording of recordings) {
-        try {
-          // Update status to syncing
-          if (recording.id) {
-            await updateRecordingStatus(recording.id, 'syncing');
-          }
-
-          // Upload recording
-          await transcribeAudio(
-            recording.blob,
-            recording.filename,
-            recording.url,
-            recording.model,
-            recording.enableDiarization,
-            recording.numSpeakers
-          );
-
-          // Delete from pending queue
-          if (recording.id) {
-            await deletePendingRecording(recording.id);
-          }
-
-          console.log('[SyncManager] Successfully synced recording');
-        } catch (error) {
-          console.error('[SyncManager] Failed to sync recording:', error);
-          // Update status to failed
-          if (recording.id) {
-            await updateRecordingStatus(recording.id, 'failed');
-          }
-        }
+    // Process recordings one by one in a loop
+    while (true) {
+      if (!navigator.onLine) {
+        console.log('[SyncManager] Went offline during sync, stopping.');
+        this.handleOffline();
+        break;
       }
 
-      this.syncStatus = 'idle';
-    } catch (error) {
-      console.error('[SyncManager] Sync error:', error);
-      this.syncStatus = 'idle';
-    } finally {
-      this.syncInProgress = false;
-      await this.notifyListeners();
+      let recording;
+      try {
+        // Fetch the next pending recording from the queue (status = 'pending')
+        // This will skip any 'failed' or 'syncing' recordings
+        recording = await getFirstPendingRecording();
+
+        // If no more pending recordings, break the loop
+        if (!recording) {
+          console.log(`[SyncManager] No more pending recordings. Synced: ${syncedCount}, Failed: ${failedCount}`);
+          break;
+        }
+
+        console.log(`[SyncManager] Processing recording ID ${recording.id} (${recording.filename})`);
+
+        // Validate blob before attempting upload
+        if (!recording.blob || recording.blob.size === 0) {
+          console.error(`[SyncManager] Recording ID ${recording.id} has empty or missing blob - deleting corrupted recording`);
+          await deletePendingRecording(recording.id!);
+          failedCount++;
+          console.warn(`[SyncManager] ✗ Deleted corrupted recording ID ${recording.id} (${failedCount} failed total)`);
+          continue; // Skip to next recording
+        }
+
+        // Try to read the blob to ensure it's not corrupted
+        try {
+          await recording.blob.arrayBuffer();
+        } catch (blobError) {
+          console.error(`[SyncManager] Recording ID ${recording.id} has corrupted blob - deleting`, blobError);
+          await deletePendingRecording(recording.id!);
+          failedCount++;
+          console.warn(`[SyncManager] ✗ Deleted corrupted recording ID ${recording.id} (${failedCount} failed total)`);
+          continue; // Skip to next recording
+        }
+
+        // Try to update status - if blob is corrupted, this might fail
+        try {
+          await updateRecordingStatus(recording.id!, 'syncing');
+        } catch (statusError) {
+          console.error(`[SyncManager] Failed to update status for recording ID ${recording.id} - blob may be corrupted, deleting`, statusError);
+          await deletePendingRecording(recording.id!);
+          failedCount++;
+          console.warn(`[SyncManager] ✗ Deleted corrupted recording ID ${recording.id} (${failedCount} failed total)`);
+          continue; // Skip to next recording
+        }
+
+        // Upload the recording
+        await transcribeAudio(
+          recording.blob,
+          recording.filename,
+          recording.url,
+          recording.model,
+          recording.enableDiarization,
+          recording.numSpeakers
+        );
+
+        // If successful, delete from the queue
+        await deletePendingRecording(recording.id!);
+        syncedCount++;
+        console.log(`[SyncManager] ✓ Successfully synced recording ID ${recording.id} (${syncedCount} synced total)`);
+
+      } catch (error) {
+        failedCount++;
+        console.error(`[SyncManager] ✗ Failed to sync recording ID ${recording?.id}:`, error);
+
+        if (recording && recording.id) {
+          // If any error occurs (Network, Blob, Unknown), mark the recording as permanently failed
+          // This prevents a corrupted recording from blocking the queue forever
+          // Next sync will skip this recording and process the next pending one
+          const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+          await updateRecordingError(
+            recording.id,
+            `Sync failed: ${errorMessage}`
+          );
+          console.warn(`[SyncManager] Marked recording ${recording.id} as 'failed' - will be skipped on next sync`);
+        } else {
+          // If the error happened before we could even get a recording, stop the sync
+          console.error('[SyncManager] Error fetching a recording from the database, stopping sync.');
+          break;
+        }
+      } finally {
+        // Notify listeners after each attempt to keep the UI count updated
+        await this.notifyListeners();
+      }
     }
+
+    // Once the loop is finished, reset the status
+    this.syncStatus = 'idle';
+    this.syncInProgress = false;
+    await this.notifyListeners();
+    console.log(`[SyncManager] Sync completed. Total synced: ${syncedCount}, Total failed: ${failedCount}`);
   }
 
   /**

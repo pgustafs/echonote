@@ -1,8 +1,4 @@
-/**
- * Audio recording component with modern UI
- */
-
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 // Logging utility for debugging audio recording issues
 const log = {
@@ -19,9 +15,6 @@ interface AudioRecorderProps {
   isMobile?: boolean
 }
 
-// WAV conversion functions removed - we send WebM directly like production apps
-// This avoids conversion overhead and potential quality issues
-
 export default function AudioRecorder({ onRecordingComplete, isTranscribing, availableModels, defaultModel, isMobile = false }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
@@ -37,12 +30,6 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const stopPromiseRef = useRef<{
-    resolve: (blob: Blob) => void
-    reject: (error: Error) => void
-  } | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
   const isStoppingRef = useRef<boolean>(false)
 
   // Update selected model when default changes
@@ -52,47 +39,92 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
     }
   }, [defaultModel, selectedModel])
 
+  // Define the onstop handler using useCallback for stability and to prevent re-creation
+  const handleRecordingStop = useCallback(async () => {
+    if (!mediaRecorderRef.current) {
+      log.warn('onstop called but mediaRecorderRef is null');
+      return;
+    }
+
+    log.info('MediaRecorder stopped', {
+      totalChunks: chunksRef.current.length,
+      chunkSizes: chunksRef.current.map(c => c.size)
+    });
+
+    const normalizedMimeType = (mediaRecorderRef.current.mimeType || 'audio/webm').split(';')[0];
+    const audioBlob = new Blob(chunksRef.current, { type: normalizedMimeType });
+
+    log.info('Created blob from chunks', {
+      size: audioBlob.size,
+      type: audioBlob.type,
+    });
+
+    if (audioBlob.size === 0) {
+      log.error('CRITICAL: Final blob is empty! No audio was recorded.');
+      alert('Recording failed: No audio data captured. Please check microphone permissions and try again.');
+
+      // Clear chunks and reset state even on empty blob
+      chunksRef.current = [];
+      setIsRecording(false);
+      setIsPaused(false);
+      setIsStopping(false);
+      isStoppingRef.current = false;
+      mediaRecorderRef.current = null;
+      return;
+    }
+
+    try {
+      // CRITICAL FIX: Force blob to read and materialize its data BEFORE clearing chunks
+      // This ensures the blob data is copied into memory, not just referenced
+      log.info('Materializing blob data to prevent corruption...');
+      await audioBlob.arrayBuffer(); // This forces the blob to read and store its data
+      log.info('Blob data materialized successfully');
+
+      const finalUrl = includeUrl && url.trim() ? url.trim() : undefined;
+
+      // Now it's safe to call onRecordingComplete - the blob has its own copy of the data
+      onRecordingComplete(audioBlob, finalUrl, selectedModel, enableDiarization, numSpeakers);
+
+      // CRITICAL: Only clear chunks AFTER the blob data has been materialized
+      chunksRef.current = [];
+      log.info('Cleared chunks array after blob materialization');
+
+    } catch (error) {
+      log.error('Error materializing blob data:', error);
+      alert('Recording failed: Could not process audio data. Please try again.');
+    }
+
+    // --- State Cleanup ---
+    setIsRecording(false);
+    setIsPaused(false);
+    setIsStopping(false);
+    isStoppingRef.current = false;
+    mediaRecorderRef.current = null; // Release the old recorder instance
+
+    log.info('Recorder state has been reset for the next recording.');
+  }, [onRecordingComplete, includeUrl, url, selectedModel, enableDiarization, numSpeakers]);
+
+  // Cleanup stream on component unmount
   useEffect(() => {
     return () => {
-      log.info('Component unmounting, cleaning up...')
-
-      // Clean up timer
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-
-      // Stop recorder if still recording
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        log.warn('Stopping active recorder on unmount')
-        mediaRecorderRef.current.stop()
-      }
-
-      // Stop all tracks
+      log.info('Component unmounting, cleaning up media stream...');
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => {
-          log.info('Stopping track on unmount:', track.kind)
-          track.stop()
-        })
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
       }
     }
-  }, [])
+  }, []);
 
   const startRecording = async () => {
     try {
-      log.info('Starting recording...')
-
-      // Reuse existing stream if available (prevents intermittent silence bug)
-      // Only request new stream on first recording or if stream was lost
-      let stream = streamRef.current
-
-      if (!stream || !stream.active || stream.getTracks().length === 0 || stream.getTracks()[0].readyState !== 'live') {
-        log.info('Requesting new microphone stream (first recording or stream lost)')
-
-        // Based on production app research (RecordRTC, react-mic, opus-media-recorder):
-        // - echoCancellation: reduces feedback, safe to enable
-        // - noiseSuppression: reduces background noise, safe to enable
-        // - autoGainControl: disabled to prevent volume fluctuations
-        // - channelCount: 1 (mono) for voice notes - smaller file size
+      log.info('Starting recording...');
+      
+      // 1. GET OR REUSE MEDIASTREAM (Best Practice)
+      let stream = streamRef.current;
+      if (!stream || !stream.active || stream.getTracks().every(t => t.readyState !== 'live')) {
+        log.info('Requesting new microphone stream (or stream was inactive)');
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -100,324 +132,104 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             autoGainControl: false,
             channelCount: 1
           }
-        })
-        streamRef.current = stream
+        });
+        streamRef.current = stream;
       } else {
-        log.info('Reusing existing microphone stream (prevents intermittent silence)')
+        log.info('Reusing existing active microphone stream');
       }
 
-      log.info('MediaStream obtained', {
-        tracks: stream.getTracks().length,
-        audioTracks: stream.getAudioTracks().map(t => ({
-          kind: t.kind,
-          label: t.label,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        }))
-      })
+      // 2. CREATE A NEW MEDIARECORDER INSTANCE (Best Practice)
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'audio/webm;codecs=opus';
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 });
+      
+      // 3. RESET CHUNKS AND BIND EVENT HANDLERS
+      chunksRef.current = [];
 
-      // Store stream reference for cleanup
-      streamRef.current = stream
-
-      // Check track health
-      const audioTrack = stream.getAudioTracks()[0]
-      if (!audioTrack) {
-        throw new Error('No audio track available')
-      }
-
-      if (audioTrack.readyState !== 'live') {
-        log.error('Audio track is not live!', audioTrack.readyState)
-        throw new Error(`Audio track state is ${audioTrack.readyState}`)
-      }
-
-      // Create audio analyzer for real-time monitoring
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-        const analyser = audioContext.createAnalyser()
-        const microphone = audioContext.createMediaStreamSource(stream)
-
-        analyser.fftSize = 256
-        analyser.smoothingTimeConstant = 0.8
-        microphone.connect(analyser)
-
-        audioContextRef.current = audioContext
-        analyserRef.current = analyser
-
-        // Start monitoring audio levels
-        const dataArray = new Uint8Array(analyser.frequencyBinCount)
-        let maxLevelSeen = 0
-        let samplesChecked = 0
-
-        const checkAudioLevel = () => {
-          if (!analyserRef.current || !isRecording) return
-
-          analyser.getByteFrequencyData(dataArray)
-          const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-          const normalized = average / 255
-
-          maxLevelSeen = Math.max(maxLevelSeen, normalized)
-          samplesChecked++
-
-          // Log every 2 seconds
-          if (samplesChecked % 60 === 0) {
-            log.info('Audio level check', {
-              current: normalized.toFixed(3),
-              max: maxLevelSeen.toFixed(3),
-              samples: samplesChecked
-            })
-
-            if (maxLevelSeen < 0.01 && samplesChecked > 120) {
-              log.warn('Very low audio levels detected - microphone may not be working!')
-            }
-          }
-
-          requestAnimationFrame(checkAudioLevel)
-        }
-
-        checkAudioLevel()
-        log.info('Audio level monitoring started')
-      } catch (error) {
-        log.warn('Could not create audio analyzer:', error)
-        // Continue anyway - monitoring is optional
-      }
-
-      // Detect supported MIME types
-      const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4'
-      ]
-
-      let mimeType = 'audio/webm;codecs=opus' // default
-      for (const type of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(type)) {
-          mimeType = type
-          log.info('Selected MIME type:', type)
-          break
-        }
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType,
-        audioBitsPerSecond: 128000 // Good quality for speech
-      })
-
-      log.info('MediaRecorder created', {
-        mimeType: mediaRecorder.mimeType,
-        state: mediaRecorder.state,
-        audioBitsPerSecond: 128000
-      })
-
-      // Reset chunks
-      chunksRef.current = []
-
-      // Handle data available with logging
       mediaRecorder.ondataavailable = (event) => {
-        log.info('dataavailable event', {
-          size: event.data.size,
-          type: event.data.type,
-          timestamp: event.timeStamp
-        })
-
         if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
-          log.info('Chunk added, total chunks:', chunksRef.current.length)
-        } else {
-          log.warn('Received empty chunk (size: 0)')
+          chunksRef.current.push(event.data);
         }
-      }
+      };
 
-      // Handle errors
       mediaRecorder.onerror = (event: any) => {
-        log.error('MediaRecorder error:', event.error)
-        if (stopPromiseRef.current) {
-          stopPromiseRef.current.reject(event.error)
-          stopPromiseRef.current = null
-        }
-      }
+        log.error('MediaRecorder error:', event.error);
+      };
 
-      // Handle stop event
-      mediaRecorder.onstop = async () => {
-        log.info('MediaRecorder stopped', {
-          totalChunks: chunksRef.current.length,
-          chunkSizes: chunksRef.current.map(c => c.size)
-        })
+      mediaRecorder.onstop = handleRecordingStop; // Assign the stable, component-level handler
 
-        // Normalize MIME type for backend (remove codecs parameter)
-        // Backend expects "audio/webm" not "audio/webm;codecs=opus"
-        const normalizedMimeType = mimeType.split(';')[0]
+      // 4. STORE THE NEW INSTANCE AND START
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(250); // Use timeslice for better responsiveness
 
-        const audioBlob = new Blob(chunksRef.current, { type: normalizedMimeType })
-        log.info('Created blob from chunks', {
-          size: audioBlob.size,
-          type: audioBlob.type,
-          originalMimeType: mimeType
-        })
+      // 5. UPDATE UI STATE
+      setIsRecording(true);
+      setIsPaused(false);
+      setRecordingTime(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = window.setInterval(() => setRecordingTime(prev => prev + 1), 1000);
 
-        // Resolve the promise if waiting
-        if (stopPromiseRef.current) {
-          stopPromiseRef.current.resolve(audioBlob)
-          stopPromiseRef.current = null
-        }
-
-        // Get the URL if checkbox is checked
-        const finalUrl = includeUrl && url.trim() ? url.trim() : undefined
-
-        // Check if blob has data
-        if (audioBlob.size === 0) {
-          log.error('CRITICAL: Final blob is empty! No audio was recorded.')
-          alert('Recording failed: No audio data captured. Please try again.')
-          return
-        }
-
-        // Send WebM directly - like all modern production apps
-        // No conversion needed - backend supports audio/webm natively
-        log.info('Sending WebM blob directly to backend', {
-          size: audioBlob.size,
-          type: audioBlob.type
-        })
-        onRecordingComplete(audioBlob, finalUrl, selectedModel, enableDiarization, numSpeakers)
-
-        // IMPORTANT: Keep stream alive for next recording (prevents intermittent silence bug)
-        // Stream will be cleaned up only on component unmount
-        log.info('Keeping microphone stream alive for next recording')
-
-        // Close audio context (will be recreated on next recording)
-        if (audioContextRef.current) {
-          audioContextRef.current.close()
-          audioContextRef.current = null
-          analyserRef.current = null
-        }
-      }
-
-      mediaRecorderRef.current = mediaRecorder
-
-      // Start recording with a timeslice to ensure regular data events
-      // This helps avoid the "no data" issue on quick stop
-      mediaRecorder.start(250) // Fire dataavailable every 250ms
-      log.info('MediaRecorder.start(250) called')
-
-      setIsRecording(true)
-      setRecordingTime(0)
-
-      // Start timer
-      timerRef.current = window.setInterval(() => {
-        setRecordingTime((prev) => prev + 1)
-      }, 1000)
-
-      log.info('Recording started successfully')
+      log.info('Recording started successfully with a new MediaRecorder instance.');
     } catch (error) {
-      log.error('Error starting recording:', error)
-      alert('Could not access microphone. Please check your permissions.')
+      log.error('Error starting recording:', error);
+      alert('Could not access microphone. Please check your permissions.');
     }
-  }
+  };
 
   const stopRecording = async () => {
-    if (!mediaRecorderRef.current || !isRecording) {
-      log.warn('stopRecording called but not recording')
-      return
+    if (!mediaRecorderRef.current || isStoppingRef.current) {
+      log.warn('stopRecording called but not in a valid state to stop', { 
+        hasRecorder: !!mediaRecorderRef.current, 
+        isStopping: isStoppingRef.current 
+      });
+      return;
     }
 
-    // Prevent multiple simultaneous stop calls
-    if (isStoppingRef.current) {
-      log.warn('stopRecording already in progress, ignoring duplicate call')
-      return
+    isStoppingRef.current = true;
+    setIsStopping(true);
+    log.info('Stopping recording...', { state: mediaRecorderRef.current.state });
+
+    if (mediaRecorderRef.current.state === 'recording' || mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.stop(); // This will trigger the `onstop` handler
+    } else {
+      // If already inactive, manually trigger cleanup just in case
+      handleRecordingStop();
     }
-
-    // Mark that we're stopping
-    isStoppingRef.current = true
-    setIsStopping(true)
-
-    log.info('Stopping recording...', {
-      state: mediaRecorderRef.current.state,
-      chunksCollected: chunksRef.current.length
-    })
-
-    // Create a promise to wait for the final dataavailable + onstop
-    const waitForStop = new Promise<Blob>((resolve, reject) => {
-      stopPromiseRef.current = { resolve, reject }
-
-      // Timeout after 5 seconds to prevent hanging
-      setTimeout(() => {
-        if (stopPromiseRef.current) {
-          log.error('Stop timeout - forcing resolution')
-          const audioBlob = new Blob(chunksRef.current, {
-            type: mediaRecorderRef.current?.mimeType || 'audio/webm'
-          })
-          stopPromiseRef.current.resolve(audioBlob)
-          stopPromiseRef.current = null
-        }
-      }, 5000)
-    })
-
-    try {
-      // Request final data and stop
-      if (mediaRecorderRef.current.state !== 'inactive') {
-        // Request any buffered data before stopping
-        if (mediaRecorderRef.current.state === 'paused') {
-          log.info('Resuming before stop to capture final data')
-          mediaRecorderRef.current.resume()
-        }
-
-        mediaRecorderRef.current.stop()
-        log.info('MediaRecorder.stop() called, waiting for onstop event...')
-
-        // Wait for the onstop event to fire and process the blob
-        await waitForStop
-        log.info('Stop completed successfully')
-      }
-    } catch (error) {
-      log.error('Error during stop:', error)
-      // On error, still reset states
-      setIsRecording(false)
-      setIsPaused(false)
-      setIsStopping(false)
-      isStoppingRef.current = false
-      return
-    }
-
-    setIsRecording(false)
-    setIsPaused(false)
-    setIsStopping(false)
 
     if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-
-    // Reset stopping flag
-    isStoppingRef.current = false
-  }
+  };
 
   const togglePause = () => {
     if (!mediaRecorderRef.current) {
-      log.warn('togglePause called but no mediaRecorder')
-      return
+      log.warn('togglePause called but no mediaRecorder');
+      return;
     }
 
     if (isPaused) {
-      log.info('Resuming recording')
-      mediaRecorderRef.current.resume()
+      log.info('Resuming recording');
+      mediaRecorderRef.current.resume();
       timerRef.current = window.setInterval(() => {
-        setRecordingTime((prev) => prev + 1)
-      }, 1000)
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
     } else {
-      log.info('Pausing recording')
-      mediaRecorderRef.current.pause()
+      log.info('Pausing recording');
+      mediaRecorderRef.current.pause();
       if (timerRef.current) {
-        clearInterval(timerRef.current)
+        clearInterval(timerRef.current);
       }
     }
-    setIsPaused(!isPaused)
-  }
+    setIsPaused(!isPaused);
+  };
 
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className={isMobile ? "enterprise-card-dark p-6 relative overflow-hidden" : "enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden"}>

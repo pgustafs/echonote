@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { getModels, getTranscriptions, transcribeAudio, getTranscription } from './api'
+import { getModels, getTranscriptions, transcribeAudio, getTranscription, isNetworkError } from './api'
 import AudioRecorder from './components/AudioRecorder'
 import TranscriptionList from './components/TranscriptionList'
 import Login from './components/Login'
@@ -18,6 +18,9 @@ import { Priority, Transcription } from './types'
 function App() {
   const { user, logout, isLoading: authLoading } = useAuth()
   const { isOnline, syncStatus, pendingCount, saveOfflineRecording, triggerSync } = useOfflineRecording()
+
+  // Track previous pending count to detect sync completion
+  const [prevPendingCount, setPrevPendingCount] = useState(pendingCount)
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -58,6 +61,15 @@ function App() {
       loadTranscriptions()
     }
   }, [priorityFilter, searchQuery, currentPage, user])
+
+  // Reload transcriptions when sync completes (pending count goes from >0 to 0)
+  useEffect(() => {
+    if (user && prevPendingCount > 0 && pendingCount === 0) {
+      console.log('[App] Sync completed - reloading transcriptions')
+      loadTranscriptions()
+    }
+    setPrevPendingCount(pendingCount)
+  }, [pendingCount, prevPendingCount, user])
 
   const loadModels = async () => {
     try {
@@ -103,43 +115,63 @@ function App() {
     setError(null)
 
     try {
-      // If online, transcribe immediately
-      if (isOnline) {
-        const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
-        const filename = `recording-${Date.now()}.${extension}`
-        console.log('[App] Starting transcription...')
-        const result = await transcribeAudio(
-          audioBlob,
-          filename,
-          url,
-          model,
-          enableDiarization,
-          numSpeakers
-        )
-        console.log('[App] Transcription created:', {
-          id: result.id,
-          status: result.status,
-          progress: result.progress
-        })
+      // Always attempt online transcription first, regardless of navigator.onLine
+      // This is more reliable than navigator.onLine which only checks local network
+      const extension = audioBlob.type.includes('wav') ? 'wav' : 'webm'
+      const filename = `recording-${Date.now()}.${extension}`
+      console.log('[App] Attempting online transcription...')
 
-        // Reload transcriptions to show new item (will be on page 1)
-        setCurrentPage(1)
-        console.log('[App] Calling loadTranscriptions after transcribeAudio...')
-        await loadTranscriptions()
-      } else {
-        // If offline, save for later sync
-        await saveOfflineRecording(
-          audioBlob,
-          url,
-          model,
-          enableDiarization,
-          numSpeakers
-        )
-        console.log('[App] Recording saved offline for later sync')
-      }
+      const result = await transcribeAudio(
+        audioBlob,
+        filename,
+        url,
+        model,
+        enableDiarization,
+        numSpeakers
+      )
+
+      console.log('[App] Transcription created:', {
+        id: result.id,
+        status: result.status,
+        progress: result.progress
+      })
+
+      // Reload transcriptions to show new item (will be on page 1)
+      setCurrentPage(1)
+      console.log('[App] Calling loadTranscriptions after transcribeAudio...')
+      await loadTranscriptions()
+
     } catch (err) {
       console.error('Error transcribing audio:', err)
-      setError(err instanceof Error ? err.message : 'Transcription failed')
+
+      // Check if this is a network error (server unreachable)
+      if (isNetworkError(err)) {
+        console.log('[App] Network error detected - saving recording offline')
+        // Save recording for later sync
+        try {
+          await saveOfflineRecording(
+            audioBlob,
+            url,
+            model,
+            enableDiarization,
+            numSpeakers
+          )
+          console.log('[App] Recording saved offline for later sync')
+          // Don't show error popup - sync indicator already shows offline status
+          // setError('Server unreachable - recording saved offline and will sync when connection is restored')
+        } catch (saveErr) {
+          console.error('[App] Failed to save recording offline:', saveErr)
+          // Check if the error is due to corrupted/empty blob
+          if (saveErr instanceof Error && saveErr.message.includes('empty or corrupted')) {
+            setError('Recording failed - audio data is empty or corrupted. Please try again.')
+          } else {
+            setError('Failed to save recording offline')
+          }
+        }
+      } else {
+        // API error (4xx, 5xx) - show error to user
+        setError(err instanceof Error ? err.message : 'Transcription failed')
+      }
     } finally {
       setIsTranscribing(false)
     }
@@ -503,6 +535,7 @@ function App() {
         syncStatus={syncStatus}
         pendingCount={pendingCount}
         onSyncClick={triggerSync}
+        isMobile={isMobile}
       />
     </div>
   )

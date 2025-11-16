@@ -18,7 +18,38 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 📱 **Responsive Design** - Works seamlessly on desktop and mobile with dedicated mobile layout
 🌓 **Dark Mode Ready** - Beautiful UI in both light and dark themes
 🎨 **Format Conversion** - Server-side WebM to WAV conversion with FFmpeg (isolated subprocess)
-📴 **PWA Support** - Install as app, offline recording, background sync
+📴 **Progressive Web App** - Full PWA with offline recording, automatic sync, and installable app
+
+## Progressive Web App Features
+
+EchoNote is a **fully functional Progressive Web App** with comprehensive offline capabilities:
+
+### Offline Capabilities
+
+- **📴 Offline Recording** - Record voice messages even when offline
+- **💾 Local Storage** - Recordings saved to IndexedDB until sync
+- **🔄 Automatic Sync** - Auto-sync when connection is restored
+- **📊 Sync Status** - Real-time sync indicator with pending count
+- **🛡️ Blob Validation** - Three-layer corruption detection and prevention
+- **🔁 Queue Management** - Sequential sync with error handling
+
+### Installable App
+
+- **📱 Add to Home Screen** - Install on mobile (iOS/Android)
+- **🖥️ Desktop App** - Standalone window on desktop
+- **🎨 Custom Icons** - Native app icons and splash screens
+- **⚡ Instant Loading** - Cached app shell for instant start
+
+### Smart Caching
+
+- **🌐 Network-First Strategy** - Always try for latest data
+- **💨 Cache Fallback** - Offline UI access when disconnected
+- **🔄 Auto-Update** - Service worker updates every minute
+- **📦 Strategic Caching** - Assets cached, API network-first
+
+For complete PWA documentation, see **[PWA_IMPLEMENTATION.md](PWA_IMPLEMENTATION.md)**.
+
+---
 
 ## Tech Stack
 
@@ -41,6 +72,9 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 - **TypeScript** - Type-safe JavaScript
 - **Tailwind CSS** - Utility-first CSS framework
 - **MediaRecorder API** - Browser-native audio recording
+- **Service Worker** - PWA offline functionality and caching
+- **IndexedDB** - Client-side storage for offline recordings
+- **Background Sync** - Automatic upload retry when online
 
 ## Project Structure
 
@@ -669,6 +703,45 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 **Railway/Render/Heroku**:
 - Set `DATABASE_URL` to your PostgreSQL connection string
 - These platforms usually auto-detect and convert `postgres://` to `postgresql://`
+
+## PWA Installation
+
+### Install as App
+
+**Mobile (Android)**:
+1. Open EchoNote in Chrome/Edge
+2. Tap menu (⋮) → "Install app" or "Add to Home screen"
+3. App appears on home screen with custom icon
+
+**Mobile (iOS)**:
+1. Open EchoNote in Safari
+2. Tap Share (⬆) → "Add to Home Screen"
+3. Tap "Add"
+
+**Desktop**:
+1. Look for install icon (⊕) in browser address bar
+2. Click "Install"
+3. App opens in standalone window
+
+### Offline Mode
+
+**Recording Offline**:
+1. Record voice messages even without internet
+2. Recordings are saved to local IndexedDB
+3. Sync indicator shows "X pending"
+
+**Automatic Sync**:
+- When online, recordings automatically sync
+- Manual sync: Click "Sync now" on sync indicator
+- Failed recordings are skipped, not blocking queue
+
+**Sync Status**:
+- **Green checkmark**: All synced
+- **Yellow syncing**: Upload in progress
+- **Red offline**: Device is offline
+- **Number badge**: Pending recordings count
+
+---
 
 ## Usage
 

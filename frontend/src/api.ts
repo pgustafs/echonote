@@ -7,15 +7,101 @@ import { Priority, Transcription, TranscriptionList } from './types'
 // Get API URL from runtime config (injected via ConfigMap) or fallback to env var or localhost
 // This function is called on every API request to ensure config is loaded
 const getApiBaseUrl = (): string => {
+  let apiUrl: string | undefined;
+
+  // Try runtime config first (for Kubernetes deployments)
   // @ts-ignore - window.APP_CONFIG is injected at runtime
   if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.API_URL) {
     // @ts-ignore
-    return window.APP_CONFIG.API_URL
+    apiUrl = window.APP_CONFIG.API_URL;
+    console.log('[API] Using runtime config API_URL:', apiUrl);
   }
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+
+  // Fallback to environment variable
+  if (!apiUrl) {
+    apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl) {
+      console.log('[API] Using VITE_API_URL:', apiUrl);
+    }
+  }
+
+  // Final fallback: construct from current location
+  if (!apiUrl) {
+    // For PWA, use current origin + /api
+    const origin = window.location.origin;
+    apiUrl = `${origin}/api`;
+    console.log('[API] Using origin-based URL:', apiUrl);
+  }
+
+  // Validate URL
+  try {
+    new URL(apiUrl);
+    console.log('[API] Final API URL:', apiUrl);
+    return apiUrl;
+  } catch (error) {
+    console.error('[API] Invalid API URL:', apiUrl, error);
+    // Last resort fallback
+    const fallback = 'http://localhost:8000/api';
+    console.warn('[API] Using fallback URL:', fallback);
+    return fallback;
+  }
 }
 
 const TOKEN_KEY = 'echonote_token'
+
+/**
+ * Custom error class for network failures
+ * Used to distinguish server unreachable errors from API errors
+ */
+export class NetworkError extends Error {
+  constructor(message: string = 'Network request failed - server may be unreachable') {
+    super(message)
+    this.name = 'NetworkError'
+  }
+}
+
+/**
+ * Custom error class for invalid Blob data from IndexedDB
+ * Used to identify recordings that have been corrupted
+ */
+export class InvalidBlobError extends Error {
+  constructor(message: string = 'Audio data is invalid or corrupted') {
+    super(message)
+    this.name = 'InvalidBlobError'
+  }
+}
+
+/**
+ * Check if an error is a network error (server unreachable)
+ *
+ * Network errors occur when:
+ * - Server is unreachable
+ * - DNS resolution fails
+ * - Connection is refused
+ * - CORS issues prevent request
+ *
+ * This is different from API errors (4xx, 5xx status codes)
+ */
+export function isNetworkError(error: unknown): boolean {
+  if (error instanceof NetworkError) {
+    return true
+  }
+
+  // Fetch throws TypeError for network failures
+  if (error instanceof TypeError) {
+    const message = error.message.toLowerCase()
+    // Common network error messages across browsers
+    return (
+      message.includes('failed to fetch') ||
+      message.includes('network error') ||
+      message.includes('networkerror') ||
+      message.includes('load failed') ||
+      message.includes('network request failed')
+    )
+  }
+
+  return false
+}
 
 /**
  * Get authorization headers with JWT token if available
@@ -62,7 +148,15 @@ export async function transcribeAudio(
   numSpeakers?: number
 ): Promise<Transcription> {
   const formData = new FormData()
-  formData.append('file', audioBlob, filename)
+
+  try {
+    // This can fail if the Blob data is corrupted (e.g., on mobile after PWA resumes)
+    formData.append('file', audioBlob, filename)
+  } catch (error) {
+    console.error('[API] Error appending Blob to FormData:', error)
+    // Throw a specific error to indicate corrupted local data
+    throw new InvalidBlobError('Failed to read audio data; it may be corrupted.')
+  }
 
   if (url) {
     formData.append('url', url)
@@ -80,18 +174,34 @@ export async function transcribeAudio(
     formData.append('num_speakers', numSpeakers.toString())
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/transcribe`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: formData,
-  })
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/transcribe`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    })
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.detail || 'Transcription failed')
+    if (!response.ok) {
+      // Check if the response is JSON before trying to parse it
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP error ${response.status}`);
+      } else {
+        // Handle non-JSON errors (e.g., 500 from server crash)
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      }
+    }
+
+    return response.json()
+  } catch (error) {
+    // If fetch itself failed (network error), wrap it
+    if (error instanceof TypeError) {
+      throw new NetworkError('Unable to reach server - recording will be saved offline')
+    }
+    // Re-throw API, InvalidBlobError, or the new HTTP error
+    throw error
   }
-
-  return response.json()
 }
 
 /**
