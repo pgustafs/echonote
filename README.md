@@ -51,6 +51,92 @@ For complete PWA documentation, see **[PWA_IMPLEMENTATION.md](PWA_IMPLEMENTATION
 
 ---
 
+## Enhanced Logging and Security (Phase 1)
+
+EchoNote implements enterprise-grade logging and user permission management for secure multi-user environments.
+
+### Structured JSON Logging
+
+**Production-Ready Logging System:**
+- **JSON Structured Logs** - Machine-readable logs with `python-json-logger`
+- **Log Rotation** - Automatic rotation at 10MB with 5 backup files
+- **Multiple Log Streams** - Separate logs for app, errors, and security events
+- **Audit Trail** - Comprehensive middleware for tracking all authenticated API requests
+
+**Log Files** (`backend/logs/`):
+- `app.log` - General application events (INFO level)
+- `error.log` - Errors and exceptions (ERROR level)
+- `security.log` - Authentication and authorization events
+- Automatic rotation: `app.log.1`, `app.log.2`, etc.
+
+**Security Audit Logging:**
+Every authenticated API request is automatically logged with:
+- User ID, username, email
+- HTTP method, path, query parameters
+- IP address, user agent
+- Response status code and duration
+- Sensitive data (passwords, tokens) automatically sanitized
+
+**Example Log Entry:**
+```json
+{
+  "timestamp": "2025-11-17T10:30:45.123Z",
+  "level": "INFO",
+  "event_type": "api_request",
+  "user_id": 42,
+  "username": "alice",
+  "method": "POST",
+  "path": "/api/transcribe",
+  "status_code": 200,
+  "duration_ms": 1234,
+  "ip_address": "192.168.1.100"
+}
+```
+
+### User Permissions and Quotas
+
+**Role-Based Access Control (RBAC):**
+- **User Role** - Standard users with daily AI action quotas
+- **Admin Role** - Unlimited access, bypass all quota checks
+
+**Daily AI Action Quotas:**
+- Default quota: **100 AI actions per day** for standard users
+- Automatic reset at midnight UTC via Celery Beat scheduler
+- Actions tracked: transcriptions, AI summaries, AI actions
+- Quota costs configurable per action type (e.g., transcription = 1, summary = 2)
+
+**Quota Management:**
+- Real-time quota checking before processing requests
+- Automatic usage tracking and increment
+- Detailed usage statistics API
+- Admin users bypass all quota limits
+- Premium users get higher quotas (configurable)
+
+**API Quota Information:**
+- `GET /api/auth/me` returns quota status:
+  ```json
+  {
+    "id": 42,
+    "username": "alice",
+    "role": "user",
+    "is_premium": false,
+    "ai_action_quota_daily": 100,
+    "ai_action_count_today": 23,
+    "quota_reset_date": "2025-11-18"
+  }
+  ```
+
+**Enforcement Decorators:**
+```python
+@require_quota(cost=1)  # Check quota before processing
+@require_role("admin")  # Restrict to admin users only
+@track_usage(action_type="transcription")  # Track usage
+```
+
+For detailed documentation on roles, quotas, and permissions, see **[ROLES_AND_QUOTAS.md](ROLES_AND_QUOTAS.md)**.
+
+---
+
 ## Tech Stack
 
 ### Backend
@@ -83,8 +169,10 @@ echonote/
 ├── backend/
 │   ├── Containerfile         # Backend container build (UBI 10 Python)
 │   ├── Containerfile.celery  # Celery worker container build
+│   ├── Containerfile.celery-beat  # Celery Beat scheduler container build
 │   ├── .containerignore      # Backend build exclusions
-│   ├── requirements.txt      # Python dependencies
+│   ├── requirements.txt      # Python dependencies (full)
+│   ├── requirements-beat.txt # Minimal dependencies for Beat scheduler
 │   ├── __init__.py
 │   ├── main.py               # FastAPI application entry point (lifespan, routers)
 │   ├── routers/              # API endpoint routers (modular)
@@ -93,17 +181,33 @@ echonote/
 │   │   └── transcriptions.py # Transcription endpoints
 │   ├── services/             # Business logic layer
 │   │   ├── __init__.py
-│   │   └── transcription_service.py  # Transcription business logic
+│   │   ├── transcription_service.py  # Transcription business logic
+│   │   └── permission_service.py     # Quota management & role checking
+│   ├── middleware/           # Request/response middleware
+│   │   ├── __init__.py
+│   │   ├── audit_logger.py   # Security audit logging middleware
+│   │   └── quota_checker.py  # Quota enforcement decorators
 │   ├── models.py             # SQLModel database models & API schemas
 │   ├── database.py           # Database configuration & session management
 │   ├── config.py             # Application settings
 │   ├── auth.py               # Authentication utilities (JWT, password hashing)
 │   ├── auth_routes.py        # Authentication endpoints (register, login)
+│   ├── logging_config.py     # Structured JSON logging configuration
 │   ├── celery_app.py         # Celery application configuration
-│   ├── tasks.py              # Celery background tasks for transcription
+│   ├── tasks.py              # Celery background tasks (transcription, quota reset)
 │   ├── audio_chunker.py      # Audio chunking for long recordings
 │   ├── transcription_merger.py  # Merge chunked transcription results
-│   └── diarization.py        # Speaker diarization service
+│   ├── diarization.py        # Speaker diarization service
+│   ├── alembic/              # Database migrations
+│   │   ├── versions/
+│   │   │   ├── 001_initial_schema.py
+│   │   │   ├── 002_add_authentication.py
+│   │   │   └── 003_add_user_quotas_and_permissions.py
+│   │   └── env.py
+│   └── logs/                 # Application logs (auto-created, gitignored)
+│       ├── app.log           # General application logs
+│       ├── error.log         # Error logs
+│       └── security.log      # Security audit logs
 ├── frontend/
 │   ├── Containerfile       # Frontend container build (UBI 10 Node.js)
 │   ├── .containerignore    # Frontend build exclusions
@@ -177,11 +281,19 @@ EchoNote uses a distributed task queue architecture for async transcription proc
 
 ### System Components
 
-**4-Container Architecture:**
+**5-Container Architecture:**
 1. **Frontend** (`echonote-frontend`) - React/Vite SPA
 2. **Backend** (`echonote-backend`) - FastAPI REST API (modular routers + service layer)
 3. **Redis** (`echonote-redis`) - Message broker (db 0) & result backend (db 1)
-4. **Celery Worker** (`echonote-celery-worker`) - Background task processor
+4. **Celery Worker** (`echonote-celery-worker`) - Background task processor for transcriptions
+5. **Celery Beat** (`echonote-celery-beat`) - Scheduler for periodic tasks (daily quota reset)
+
+**Celery Beat Scheduler:**
+- Lightweight scheduler container with minimal dependencies (~400MB vs worker's ~2GB)
+- Sends scheduled tasks to Redis queue at specified times (e.g., midnight UTC for quota reset)
+- Does not execute tasks - only schedules them
+- Proper separation following official Celery best practices
+- See [CELERY_ARCHITECTURE.md](CELERY_ARCHITECTURE.md) for detailed architecture documentation
 
 ### How It Works
 
@@ -897,11 +1009,12 @@ EchoNote can be deployed using Podman with Red Hat Universal Base Image (UBI).
 ### Quick Container Deployment
 
 ```bash
-# Build all 4 images (backend, frontend, Redis, Celery worker)
+# Build all 5 images (backend, frontend, Redis, Celery worker, Celery beat)
 podman build -t localhost/echonote-backend:latest backend/
 podman build -t localhost/echonote-frontend:latest frontend/
 podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
 podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
+podman build -t localhost/echonote-celery-beat:latest -f backend/Containerfile.celery-beat backend/
 
 # Edit configuration
 vi echonote-kube-priv.yaml  # Update MODEL_URL, HF_TOKEN, and other settings
@@ -916,6 +1029,7 @@ podman ps
 # Verify services are ready
 podman logs echonote-backend          # Should see "Uvicorn running"
 podman logs echonote-celery-worker    # Should see "celery@echonote ready"
+podman logs echonote-celery-beat      # Should see "beat: Starting..."
 podman exec echonote-redis redis-cli ping  # Should return "PONG"
 
 # Access the application
@@ -923,22 +1037,25 @@ podman exec echonote-redis redis-cli ping  # Should return "PONG"
 # Backend API: http://localhost:8000
 ```
 
-**Important:** EchoNote requires all 4 containers (Backend, Frontend, Redis, Celery Worker) to function. The legacy `echonote-kube.yaml` file (2 containers only) is no longer functional as the backend now requires Celery for transcription processing.
+**Important:** EchoNote requires all 5 containers (Backend, Frontend, Redis, Celery Worker, Celery Beat) to function. The legacy `echonote-kube.yaml` file (2 containers only) is no longer functional as the backend now requires Celery for transcription processing and Celery Beat for scheduled tasks (quota reset).
 
 ### Container Files
 
 - **`backend/Containerfile`** - Backend multi-stage build using UBI 10 Python 3.12 minimal
-- **`backend/Containerfile.celery`** - Celery worker container build
+- **`backend/Containerfile.celery`** - Celery worker container build (full dependencies)
+- **`backend/Containerfile.celery-beat`** - Celery Beat scheduler container build (minimal dependencies)
 - **`backend/.containerignore`** - Backend container build exclusions
-- **`backend/requirements.txt`** - Python dependencies (includes Celery 5.5.3)
+- **`backend/requirements.txt`** - Python dependencies (full - includes Celery 5.5.3, audio/ML libs)
+- **`backend/requirements-beat.txt`** - Minimal dependencies for Beat scheduler (no audio/ML libs)
 - **`frontend/Containerfile`** - Frontend build using UBI 10 Node.js 22 with `serve`
 - **`frontend/.containerignore`** - Frontend container build exclusions
 - **`frontend/.gitignore`** - Frontend git exclusions
 - **`redis/Containerfile`** - Redis 7 container build
 - **`redis/redis.conf`** - Custom Redis configuration (persistence disabled)
-- **`echonote-kube-priv.yaml`** - Kubernetes YAML for full 4-container deployment (REQUIRED)
+- **`echonote-kube-priv.yaml`** - Kubernetes YAML for full 5-container deployment (REQUIRED)
 - **`echonote-kube.yaml`** - Legacy 2-container deployment (NOT FUNCTIONAL)
 - **`CONTAINER.md`** - Comprehensive container deployment guide
+- **`CELERY_ARCHITECTURE.md`** - Celery Beat/Worker separation architecture documentation
 
 ### Features
 

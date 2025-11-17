@@ -21,8 +21,10 @@ from backend.auth import (
 from backend.config import settings
 from backend.database import get_session
 from backend.models import Token, User, UserCreate, UserLogin, UserPublic
+from backend.logging_config import get_logger, get_security_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+security_logger = get_security_logger()
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -71,13 +73,27 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
     session.refresh(db_user)
 
     logger.info(f"New user registered: {db_user.username}")
+    security_logger.info(
+        "User registered",
+        extra={
+            "event_type": "user_registered",
+            "user_id": db_user.id,
+            "username": db_user.username,
+            "email": db_user.email,
+        }
+    )
 
     return UserPublic(
         id=db_user.id,
         username=db_user.username,
         email=db_user.email,
         created_at=db_user.created_at,
-        is_active=db_user.is_active
+        is_active=db_user.is_active,
+        role=db_user.role,
+        is_premium=db_user.is_premium,
+        ai_action_quota_daily=db_user.ai_action_quota_daily,
+        ai_action_count_today=db_user.ai_action_count_today,
+        quota_reset_date=db_user.quota_reset_date
     )
 
 
@@ -98,6 +114,13 @@ def login(user_data: UserLogin, session: Session = Depends(get_session)):
     """
     user = authenticate_user(session, user_data.username, user_data.password)
     if not user:
+        security_logger.warning(
+            "Failed login attempt",
+            extra={
+                "event_type": "login_failed",
+                "username": user_data.username,
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -112,6 +135,14 @@ def login(user_data: UserLogin, session: Session = Depends(get_session)):
     )
 
     logger.info(f"User logged in: {user.username}")
+    security_logger.info(
+        "User logged in successfully",
+        extra={
+            "event_type": "login_success",
+            "user_id": user.id,
+            "username": user.username,
+        }
+    )
 
     return Token(access_token=access_token, token_type="bearer")
 
@@ -134,5 +165,10 @@ async def get_current_user_info(
         username=current_user.username,
         email=current_user.email,
         created_at=current_user.created_at,
-        is_active=current_user.is_active
+        is_active=current_user.is_active,
+        role=current_user.role,
+        is_premium=current_user.is_premium,
+        ai_action_quota_daily=current_user.ai_action_quota_daily,
+        ai_action_count_today=current_user.ai_action_count_today,
+        quota_reset_date=current_user.quota_reset_date
     )

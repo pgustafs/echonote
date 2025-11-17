@@ -31,13 +31,45 @@ from backend.auth_routes import router as auth_router
 from backend.config import settings
 from backend.database import create_db_and_tables
 from backend.routers import health, transcriptions
+from backend.logging_config import setup_logging, get_logger
+from backend.middleware.audit_logger import AuditLoggerMiddleware
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Configure enhanced logging
+setup_logging(log_dir="backend/logs", log_level=os.getenv("LOG_LEVEL", "INFO"))
+logger = get_logger(__name__)
+
+
+def validate_configuration():
+    """
+    Validate critical configuration on startup
+
+    Raises:
+        RuntimeError: If critical configuration is insecure or invalid
+    """
+    # Check JWT secret is not default
+    default_secrets = [
+        "your-secret-key-here",
+        "change-me",
+        "default",
+        "secret",
+    ]
+
+    if settings.JWT_SECRET_KEY in default_secrets:
+        logger.error("CRITICAL: JWT_SECRET_KEY is using a default/insecure value!")
+        logger.error("Set JWT_SECRET_KEY environment variable to a secure random string")
+        raise RuntimeError("Insecure JWT configuration - JWT_SECRET_KEY must be changed from default")
+
+    # Check JWT secret strength
+    if len(settings.JWT_SECRET_KEY) < 32:
+        logger.warning(
+            f"JWT_SECRET_KEY is too short ({len(settings.JWT_SECRET_KEY)} characters). "
+            f"Recommended: 64+ characters for production security"
+        )
+
+    # Create logs directory if it doesn't exist
+    os.makedirs("backend/logs", exist_ok=True)
+
+    logger.info("Configuration validation successful")
 
 
 @asynccontextmanager
@@ -63,6 +95,11 @@ async def lifespan(app: FastAPI):
     """
     # ========== Startup ==========
     logger.info("Starting EchoNote API...")
+
+    # Validate critical configuration
+    logger.info("Validating configuration...")
+    validate_configuration()
+    logger.info("Configuration validation passed")
 
     # Initialize database
     logger.info("Creating database tables...")
@@ -107,6 +144,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add audit logging middleware
+app.add_middleware(AuditLoggerMiddleware)
 
 # Include routers
 # Note: Order matters for route matching. More specific routes should come first.

@@ -20,6 +20,7 @@ Usage:
 
 import logging
 from celery import Celery
+from celery.schedules import crontab
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -72,17 +73,21 @@ celery_app.conf.update(
 
     # Event settings (for monitoring with Flower)
     worker_send_task_events=True,
+
+    # Beat schedule (for periodic tasks)
+    beat_schedule={
+        'reset-daily-quotas': {
+            'task': 'reset_daily_quotas',
+            'schedule': crontab(hour=0, minute=0),  # Every day at midnight UTC
+        },
+    },
 )
 
-# Import tasks to register them with Celery
-# This must be done after celery_app is configured
-try:
-    from backend import tasks  # noqa: F401
-    logger.info("Celery tasks registered successfully")
-except ImportError as e:
-    logger.warning(f"Could not import tasks module: {e}")
-except Exception as e:
-    logger.error(f"Error registering Celery tasks: {e}")
+# Task discovery configuration
+# IMPORTANT: We do NOT import tasks here to keep celery_app.py lightweight
+# - Beat scheduler: Only needs task names as strings in beat_schedule (no imports needed)
+# - Workers: Will import tasks using --include flag at startup (see Containerfile.celery CMD)
+# This allows Beat container to have minimal dependencies (no audio/ML packages)
 
 # Task routes (optional: route specific tasks to specific queues)
 # celery_app.conf.task_routes = {

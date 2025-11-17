@@ -35,3 +35,6 @@ python-dotenv==1.0.1
 celery>=5.5.3  # Distributed task queue
 redis>=5.0.1  # Redis client for Celery broker/backend
 flower==2.0.1  # Celery monitoring UI (optional)
+
+# Logging
+python-json-logger==2.0.7  # Structured JSON logging

@@ -68,11 +68,14 @@ frontend/package-lock.json
 
 # Logs
 *.log
+*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+backend/logs/
+logs/
 
 # Temporary files
 *.tmp
@@ -109,3 +112,6 @@ PWA_IMPROVEMENTS_SUMMARY.md
 PWA_UI_FIXES_SUMMARY.md
 MULTI_RECORDING_SYNC_FIX.md
 SYNC_FIX_SUMMARY.md
+AI.md
+AI_PLAN.md
+AI_PLAN_PROGRESS.md

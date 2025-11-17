@@ -1,0 +1,71 @@
+# Stage 1: Build dependencies
+# Use RHEL10 Python 3.12 minimal base image
+FROM registry.access.redhat.com/ubi10/python-312-minimal:latest AS builder
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy minimal requirements file for Beat scheduler (no audio/ML packages)
+COPY requirements-beat.txt .
+
+# Install only necessary dependencies for Beat scheduler
+RUN pip install --no-cache-dir -r requirements-beat.txt
+
+# Stage 2: Runtime image
+# Use RHEL10 Python 3.12 minimal base image
+FROM registry.access.redhat.com/ubi10/python-312-minimal:latest
+
+# Add labels for metadata
+LABEL name="echonote-celery-beat" \
+      vendor="EchoNote" \
+      version="1.0.0" \
+      summary="EchoNote Celery Beat Sceduler" \
+      description="Celery Beat Scheduler container for sending tasks to the queue on a schedule" \
+      maintainer="echonote@example.com" \
+      io.k8s.description="Celery beat for sending tasks to the queue on a schedule" \
+      io.k8s.display-name="EchoNote Celery Beat" \
+      io.openshift.tags="python,celery,beat,scheduler"
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH="/opt/app-root/src"
+
+# Switch to root temporarily for directory setup
+USER 0
+
+# Create directory for application and set ownership
+# Beat scheduler doesn't need audio processing libraries
+RUN mkdir -p /opt/app-root/src/backend && \
+    chown -R 1001:0 /opt/app-root/src && \
+    chmod -R g=u /opt/app-root/src
+
+# Switch back to non-root user
+USER 1001
+
+# Set working directory
+WORKDIR /opt/app-root/src
+
+# Copy Python dependencies from builder stage (entire venv)
+COPY --from=builder --chown=1001:0 /opt/app-root /opt/app-root
+
+# Copy backend application code (build context is backend/)
+COPY --chown=1001:0 . ./backend/
+
+# Create directory for SQLite database with proper permissions
+RUN mkdir -p /opt/app-root/src/data && \
+    chmod -R g=u /opt/app-root/src/data
+
+# Health check: verify beat can connect to Redis broker
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A backend.celery_app inspect ping --timeout=5 || exit 1
+
+# Set working directory to parent so backend module can be imported
+WORKDIR /opt/app-root/src
+
+# Run Celery Beat Scheduler
+# -A: Application module (backend.celery_app:celery_app references the celery_app variable in backend/celery_app.py)
+# beat: Run beat scheduler (sends scheduled tasks to queue)
+# --loglevel=info: Log level
+CMD ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info"]

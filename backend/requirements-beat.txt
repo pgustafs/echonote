@@ -1,0 +1,24 @@
+# Minimal requirements for Celery Beat Scheduler
+# This container ONLY schedules tasks (sends messages to queue with task names)
+# It does NOT import or execute tasks, so no audio/ML dependencies needed
+
+# FastAPI (needed for importing config/models in celery_app.py)
+fastapi==0.115.0
+
+# Database (needed for models that celery_app might reference)
+sqlmodel==0.0.22
+alembic==1.13.1  # Database migrations
+
+# Authentication (needed for models)
+passlib[bcrypt]==1.7.4  # Password hashing
+PyJWT==2.9.0  # JWT tokens
+
+# Environment and utilities
+python-dotenv==1.0.1
+
+# Celery and Redis (core requirement)
+celery>=5.5.3  # Task scheduler
+redis>=5.0.1  # Redis client for broker/backend
+
+# Logging
+python-json-logger==2.0.7  # Structured JSON logging

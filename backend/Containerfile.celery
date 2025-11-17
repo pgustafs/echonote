@@ -78,6 +78,7 @@ WORKDIR /opt/app-root/src
 # Run Celery worker
 # -A: Application module (backend.celery_app:celery_app references the celery_app variable in backend/celery_app.py)
 # worker: Run worker node
+# --include: Import task modules (backend.tasks contains all task definitions)
 # --loglevel=info: Log level
 # --concurrency=2: Number of concurrent worker processes
-CMD ["celery", "-A", "backend.celery_app:celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+CMD ["celery", "-A", "backend.celery_app:celery_app", "worker", "--include=backend.tasks", "--loglevel=info", "--concurrency=2"]

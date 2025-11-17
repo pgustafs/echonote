@@ -453,3 +453,48 @@ async def process_transcription_async(
     finally:
         # Properly close the async client before event loop closes
         await client.close()
+
+
+# ============================================================================
+# Scheduled Tasks
+# ============================================================================
+
+@celery_app.task(name="reset_daily_quotas")
+def reset_daily_quotas_task():
+    """
+    Reset all users' daily quotas at midnight UTC.
+
+    This task runs on a schedule (configured in celery_app.py) to reset
+    the daily AI action quota for all users.
+
+    Returns:
+        dict: Summary of reset operation
+    """
+    from backend.services.permission_service import PermissionService
+    from backend.logging_config import get_logger, get_security_logger
+
+    logger = get_logger(__name__)
+    security_logger = get_security_logger()
+
+    logger.info("Starting daily quota reset task")
+
+    try:
+        with get_session() as session:
+            count = PermissionService.reset_daily_quotas(session)
+            logger.info(f"Daily quota reset completed for {count} users")
+
+            return {
+                "status": "success",
+                "users_reset": count,
+                "timestamp": __import__('datetime').datetime.utcnow().isoformat()
+            }
+    except Exception as e:
+        logger.error(f"Error resetting daily quotas: {str(e)}", exc_info=True)
+        security_logger.error(
+            "Daily quota reset failed",
+            extra={
+                "event_type": "quota_reset_failed",
+                "error": str(e)
+            }
+        )
+        raise

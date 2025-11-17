@@ -5,7 +5,7 @@ This module defines the database schema for storing voice transcriptions
 with their associated audio files and user authentication.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import Optional
 
@@ -41,6 +41,23 @@ class User(SQLModel, table=True):
     )
     is_active: bool = Field(default=True, description="Whether user account is active")
 
+    # Role-Based Access Control
+    role: str = Field(default="user", max_length=20, index=True, description="User role (user, admin)")
+
+    # Premium Features
+    is_premium: bool = Field(default=False, description="Whether user has premium status")
+
+    # Quota Management
+    ai_action_quota_daily: int = Field(default=100, description="Daily AI action quota limit")
+    ai_action_count_today: int = Field(default=0, description="AI actions used today")
+    quota_reset_date: date = Field(
+        default_factory=lambda: datetime.utcnow().date(),
+        description="Date when quota was last reset"
+    )
+
+    # Updated timestamp
+    updated_at: Optional[datetime] = Field(default=None, description="Timestamp when user was last updated")
+
     # Relationship to transcriptions
     transcriptions: list["Transcription"] = Relationship(back_populates="user")
 
@@ -59,6 +76,11 @@ class UserPublic(SQLModel):
     email: str
     created_at: datetime
     is_active: bool
+    role: str
+    is_premium: bool
+    ai_action_quota_daily: int
+    ai_action_count_today: int
+    quota_reset_date: date
 
 
 class UserLogin(SQLModel):

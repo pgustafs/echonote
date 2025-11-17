@@ -4,17 +4,18 @@ This guide covers building and deploying EchoNote using containers with Red Hat 
 
 ## Deployment Options
 
-EchoNote requires a **4-container deployment** for full functionality:
+EchoNote requires a **5-container deployment** for full functionality:
 
-### Production Deployment (4 containers) - REQUIRED
+### Production Deployment (5 containers) - REQUIRED
 - **Frontend** - React/Vite SPA
 - **Backend** - FastAPI REST API
 - **Redis** - Message broker and result backend
 - **Celery Worker** - Async transcription processor
+- **Celery Beat** - Scheduled task scheduler (daily quota reset)
 - **Use case**: All environments (development, testing, production)
 - **File**: `echonote-kube-priv.yaml`
 
-**Note:** The application currently requires Celery and Redis for transcription processing. There is no synchronous fallback mode. All transcriptions are processed as background tasks.
+**Note:** The application currently requires Celery and Redis for transcription processing. There is no synchronous fallback mode. All transcriptions are processed as background tasks. Celery Beat is required for scheduled tasks like daily quota resets.
 
 ## Quick Start
 
@@ -24,6 +25,7 @@ podman build -t localhost/echonote-backend:latest backend/
 podman build -t localhost/echonote-frontend:latest frontend/
 podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
 podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
+podman build -t localhost/echonote-celery-beat:latest -f backend/Containerfile.celery-beat backend/
 
 # 2. Edit configuration
 vi echonote-kube-priv.yaml  # Update MODEL_URL, HF_TOKEN, and other settings
@@ -38,6 +40,7 @@ podman ps
 # 5. Verify services are ready
 podman logs echonote-backend          # Should see "Uvicorn running"
 podman logs echonote-celery-worker    # Should see "celery@echonote ready"
+podman logs echonote-celery-beat      # Should see "beat: Starting..."
 podman exec echonote-redis redis-cli ping  # Should return "PONG"
 
 # 6. Access the application
@@ -53,7 +56,7 @@ podman exec echonote-redis redis-cli ping  # Should return "PONG"
 
 ## Architecture
 
-EchoNote uses a 4-container architecture with async background processing:
+EchoNote uses a 5-container architecture with async background processing and scheduled tasks:
 
 #### Backend Container (`backend/Containerfile`)
 - **Base Image**: UBI 10 Python 3.12 minimal
@@ -92,11 +95,32 @@ EchoNote uses a 4-container architecture with async background processing:
 - **Build Context**: `backend/` directory
 - **Multi-stage Build**: Same dependencies as backend
 - **Purpose**: Async transcription processing worker
-- **Worker**: Single worker process with autoscale (4-1)
+- **Worker**: Single worker process with concurrency 2
 - **Log Level**: INFO
 - **Environment**: Connects to Redis broker and result backend
 - **Features**: Audio chunking, speaker diarization, progress tracking
-- **Dependencies**: Same as backend plus Celery 5.5.3
+- **Dependencies**: Full `requirements.txt` (includes Celery 5.5.3, audio/ML libraries)
+- **Image Size**: ~2GB+ (includes PyTorch, ffmpeg, audio processing libraries)
+
+#### Celery Beat Container (`backend/Containerfile.celery-beat`)
+- **Base Image**: UBI 10 Python 3.12 minimal
+- **Build Context**: `backend/` directory
+- **Multi-stage Build**: Minimal dependencies for scheduler only
+- **Purpose**: Scheduled task scheduler (sends tasks to queue at specified times)
+- **Scheduled Tasks**: Daily quota reset at midnight UTC
+- **Log Level**: INFO
+- **Environment**: Connects to Redis broker and database
+- **Dependencies**: Minimal `requirements-beat.txt` (Celery, Redis, FastAPI, SQLModel - NO audio/ML libs)
+- **Image Size**: ~400MB (80% smaller than worker)
+- **Architecture**: Proper Beat/Worker separation following official Celery best practices
+- **Documentation**: See [CELERY_ARCHITECTURE.md](CELERY_ARCHITECTURE.md) for detailed architecture
+
+**Key Difference - Beat vs Worker:**
+- **Beat** = Scheduler (lightweight, only knows task **names** as strings)
+- **Worker** = Executor (heavyweight, imports and runs actual task **code**)
+- Beat sends "execute task named X" to Redis at scheduled times
+- Worker picks up task from Redis and executes the Python function
+- This separation allows minimal dependencies for Beat (no PyTorch, ffmpeg, etc.)
 
 ## Building the Containers
 
@@ -115,11 +139,15 @@ podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/
 # Build Celery worker
 podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
 
+# Build Celery beat scheduler
+podman build -t localhost/echonote-celery-beat:latest -f backend/Containerfile.celery-beat backend/
+
 # Or build all at once
 podman build -t localhost/echonote-backend:latest backend/ && \
 podman build -t localhost/echonote-frontend:latest frontend/ && \
 podman build -t localhost/echonote-redis:latest -f redis/Containerfile redis/ && \
-podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/
+podman build -t localhost/echonote-celery:latest -f backend/Containerfile.celery backend/ && \
+podman build -t localhost/echonote-celery-beat:latest -f backend/Containerfile.celery-beat backend/
 ```
 
 ## Running the Container
@@ -238,6 +266,28 @@ oc logs -f echonote-backend
 | `HF_TOKEN` | Hugging Face token for pyannote models | - | No |
 | `CHUNK_LENGTH_MS` | Audio chunk length for processing | `30000` (30s) | No |
 | `ENABLE_DIARIZATION` | Enable speaker diarization | `false` | No |
+| `JWT_SECRET_KEY` | JWT signing secret | - | Yes |
+| `JWT_ALGORITHM` | JWT algorithm | `HS256` | No |
+| `ACCESS_TOKEN_EXPIRE_DAYS` | JWT token expiration in days | `30` | No |
+
+### Celery Beat
+
+Celery Beat requires minimal environment variables (does not execute tasks, only schedules them):
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SQLITE_DB` | SQLite database path (for quota reset task) | `/opt/app-root/src/data/echonote.db` | Yes |
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379` | Yes |
+| `CELERY_BROKER_URL` | Redis broker URL | `redis://localhost:6379/0` | Yes |
+| `CELERY_RESULT_BACKEND` | Redis result backend URL | `redis://localhost:6379/1` | Yes |
+| `JWT_SECRET_KEY` | JWT signing secret (for config validation) | - | Yes |
+| `JWT_ALGORITHM` | JWT algorithm | `HS256` | No |
+
+**Note:** Beat does NOT need:
+- `MODEL_URL`, `API_KEY` (no transcription)
+- `HF_TOKEN` (no diarization)
+- `CORS_ORIGINS` (no HTTP server)
+- Audio processing environment variables
 
 ### Redis
 
@@ -423,15 +473,35 @@ podman logs -f echonote-redis
 # View Celery worker logs (most important for debugging transcriptions)
 podman logs -f echonote-celery-worker
 
+# View Celery beat scheduler logs (for scheduled tasks)
+podman logs -f echonote-celery-beat
+
 # Follow all logs in real-time
 podman logs -f echonote-backend &
 podman logs -f echonote-celery-worker &
+podman logs -f echonote-celery-beat &
 
 # View pod logs (all containers)
 podman pod logs echonote
 ```
 
 ### Monitoring Celery Tasks
+
+**Check Beat Scheduler:**
+```bash
+# Verify beat is running and sending scheduled tasks
+podman logs echonote-celery-beat 2>&1 | grep "beat: Starting"
+# Should show: [INFO/MainProcess] beat: Starting...
+
+# Check beat schedule configuration
+podman logs echonote-celery-beat 2>&1 | grep "reset-daily-quotas"
+# Note: Schedule only shows at DEBUG level, not INFO
+
+# Manually trigger scheduled task for testing (from worker container)
+podman exec echonote-celery-worker celery -A backend.celery_app call reset_daily_quotas
+```
+
+**Check Celery Worker:**
 
 ```bash
 # Check Celery worker status
