@@ -137,6 +137,230 @@ For detailed documentation on roles, quotas, and permissions, see **[ROLES_AND_Q
 
 ---
 
+## AI Actions API (Phase 2)
+
+EchoNote provides 18 AI-powered action endpoints to transform, analyze, and enhance your transcriptions. All endpoints enforce quota limits and track usage.
+
+### Categories and Endpoints
+
+**1. Analyze (1 endpoint, cost: 1 quota)**
+- `POST /api/v1/actions/analyze` - Analyze transcription to extract summary, tasks, and next actions
+
+**2. Create (4 endpoints, cost: 2 quota each)**
+- `POST /api/v1/actions/create/linkedin-post` - Generate a LinkedIn post from transcription
+- `POST /api/v1/actions/create/email-draft` - Generate an email draft from transcription
+- `POST /api/v1/actions/create/blog-post` - Generate a blog post from transcription
+- `POST /api/v1/actions/create/social-media-caption` - Generate social media captions
+
+**3. Improve/Transform (7 endpoints, cost: 1 quota each)**
+- `POST /api/v1/actions/improve/summarize` - Create a concise summary
+- `POST /api/v1/actions/improve/summarize-bullets` - Create a bullet-point summary
+- `POST /api/v1/actions/improve/rewrite-formal` - Rewrite in formal tone
+- `POST /api/v1/actions/improve/rewrite-friendly` - Rewrite in friendly, casual tone
+- `POST /api/v1/actions/improve/rewrite-simple` - Simplify for better accessibility
+- `POST /api/v1/actions/improve/expand` - Expand with more detail and context
+- `POST /api/v1/actions/improve/shorten` - Condense while preserving key points
+
+**4. Translate (3 endpoints, cost: 1 quota each)**
+- `POST /api/v1/actions/translate/to-english` - Translate to English
+- `POST /api/v1/actions/translate/to-swedish` - Translate to Swedish
+- `POST /api/v1/actions/translate/to-czech` - Translate to Czech
+
+**5. Voice-Specific Utilities (3 endpoints, cost: 1 quota each)**
+- `POST /api/v1/actions/voice/clean-filler-words` - Remove filler words (um, uh, like, etc.)
+- `POST /api/v1/actions/voice/fix-grammar` - Correct grammatical errors
+- `POST /api/v1/actions/voice/convert-spoken-to-written` - Convert spoken language to written prose
+
+### Request/Response Format
+
+**Request Body** (all endpoints):
+```json
+{
+  "transcription_id": 123,
+  "options": {
+    "key": "value"
+  }
+}
+```
+
+**Response Format** (Phase 2 - work in progress):
+```json
+{
+  "action_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "work_in_progress",
+  "message": "endpoint analyze - work in progress to implement this functionality\n\nTranscription text: [full transcription text here]",
+  "quota_remaining": 99,
+  "quota_reset_date": "2025-11-19",
+  "result": null,
+  "error": null,
+  "created_at": "2025-11-18T08:00:00",
+  "completed_at": null
+}
+```
+
+**Response includes:**
+- `action_id`: Unique UUID for tracking this AI action
+- `status`: Current status (work_in_progress, completed, failed)
+- `message`: Status message including the transcription text for verification
+- `quota_remaining`: How many actions the user has left today
+- `quota_reset_date`: When quota resets (midnight UTC)
+- `result`: AI-generated result (null in Phase 2)
+- `error`: Error message if failed (null if successful)
+- `created_at`: When action was initiated
+- `completed_at`: When action completed (null if still processing)
+
+### Usage Examples
+
+**1. Analyze a transcription:**
+```bash
+TOKEN="your_jwt_token"
+TRANSCRIPTION_ID=123
+
+curl -X POST "http://localhost:8000/api/v1/actions/analyze" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {\"analysis_type\": \"summary\"}}" | python3 -m json.tool
+```
+
+**2. Create a LinkedIn post:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/actions/create/linkedin-post" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {\"tone\": \"professional\", \"include_hashtags\": true}}" | python3 -m json.tool
+```
+
+**3. Summarize with bullet points:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/actions/improve/summarize-bullets" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {\"max_bullets\": 5}}" | python3 -m json.tool
+```
+
+**4. Translate to Swedish:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/actions/translate/to-swedish" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {}}" | python3 -m json.tool
+```
+
+**5. Clean filler words:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/actions/voice/clean-filler-words" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {\"aggressiveness\": \"moderate\"}}" | python3 -m json.tool
+```
+
+### Quota Enforcement
+
+All AI action endpoints:
+- ✅ Check user quota before processing using `@require_quota(cost=N)` decorator
+- ✅ Track usage automatically with `@track_usage(action_type="...")` decorator
+- ✅ Return quota information in every response
+- ✅ Admins bypass all quota checks
+- ✅ Premium users can have higher quotas (configurable)
+
+**Quota costs by category:**
+- Analyze: 1 action
+- Create (LinkedIn, email, blog, caption): 2 actions each
+- Improve (summarize, rewrite, expand, shorten): 1 action each
+- Translate: 1 action each
+- Voice utilities: 1 action each
+
+### Database Schema
+
+**AI Actions Table** (`ai_actions`):
+```sql
+CREATE TABLE ai_actions (
+    id INTEGER PRIMARY KEY,
+    action_id VARCHAR(36) UNIQUE NOT NULL,  -- UUID v4
+    user_id INTEGER NOT NULL,               -- Foreign key to users
+    transcription_id INTEGER NOT NULL,      -- Foreign key to transcriptions
+    action_type VARCHAR(100) NOT NULL,      -- e.g., 'analyze', 'create/linkedin-post'
+    status VARCHAR(20) DEFAULT 'work_in_progress',
+    request_params TEXT DEFAULT '{}',       -- JSON as TEXT
+    result_data TEXT,                       -- JSON as TEXT (nullable)
+    error_message VARCHAR(500),             -- Error details if failed
+    quota_cost INTEGER DEFAULT 1,           -- How many actions this cost
+    created_at DATETIME NOT NULL,
+    completed_at DATETIME,                  -- When processing finished
+    processing_duration_ms INTEGER,         -- Processing time in milliseconds
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE CASCADE
+);
+
+-- Indexes for performance
+CREATE INDEX idx_ai_actions_action_id ON ai_actions(action_id);
+CREATE INDEX idx_ai_actions_user_id ON ai_actions(user_id);
+CREATE INDEX idx_ai_actions_transcription_id ON ai_actions(transcription_id);
+CREATE INDEX idx_ai_actions_action_type ON ai_actions(action_type);
+CREATE INDEX idx_ai_actions_status ON ai_actions(status);
+CREATE INDEX idx_ai_actions_created_at ON ai_actions(created_at);
+```
+
+**Migration:** Database migration `004_add_ai_actions.py` creates the `ai_actions` table with all indexes.
+
+### Architecture
+
+**Service Layer** (`backend/services/ai_action_service.py`):
+- `create_action_record()` - Create AI action with UUID
+- `get_user_actions()` - Paginated list with filters
+- `get_action_by_id()` - Retrieve with ownership verification
+- `verify_transcription_access()` - Check user owns transcription
+- `get_action_statistics()` - Usage stats by type and time period
+
+**Router** (`backend/routers/actions.py`):
+- All 18 endpoints with standardized structure
+- Quota enforcement via decorators
+- Permission verification (user must own transcription)
+- Standardized error handling
+- Returns transcription text in response for verification
+
+**Current Status (Phase 2):**
+- ✅ Database schema implemented
+- ✅ Service layer complete
+- ✅ All 18 endpoints functional
+- ✅ Quota enforcement active
+- ✅ Permission checks working
+- ✅ Returns dummy responses with transcription text
+- ⏳ AI processing implementation (Phase 3)
+
+**Testing:**
+```bash
+# 1. Register and login
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser","email":"test@example.com","password":"Test1234"}'
+
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser","password":"Test1234"}'
+
+# 2. Get your transcriptions
+TOKEN="your_token_here"
+curl -X GET "http://localhost:8000/api/transcriptions" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Test an AI action
+TRANSCRIPTION_ID=1
+curl -X POST "http://localhost:8000/api/v1/actions/analyze" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {}}"
+
+# 4. Check your quota
+curl -X GET http://localhost:8000/api/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+For complete API testing documentation, see **[API_TEST_CURL.md](API_TEST_CURL.md)**.
+
+---
+
 ## Tech Stack
 
 ### Backend
@@ -178,11 +402,13 @@ echonote/
 │   ├── routers/              # API endpoint routers (modular)
 │   │   ├── __init__.py
 │   │   ├── health.py         # Health check endpoints
-│   │   └── transcriptions.py # Transcription endpoints
+│   │   ├── transcriptions.py # Transcription endpoints
+│   │   └── actions.py        # AI Actions endpoints (18 endpoints)
 │   ├── services/             # Business logic layer
 │   │   ├── __init__.py
 │   │   ├── transcription_service.py  # Transcription business logic
-│   │   └── permission_service.py     # Quota management & role checking
+│   │   ├── permission_service.py     # Quota management & role checking
+│   │   └── ai_action_service.py      # AI Actions business logic
 │   ├── middleware/           # Request/response middleware
 │   │   ├── __init__.py
 │   │   ├── audit_logger.py   # Security audit logging middleware
@@ -202,7 +428,8 @@ echonote/
 │   │   ├── versions/
 │   │   │   ├── 001_initial_schema.py
 │   │   │   ├── 002_add_authentication.py
-│   │   │   └── 003_add_user_quotas_and_permissions.py
+│   │   │   ├── 003_add_user_quotas_and_permissions.py
+│   │   │   └── 004_add_ai_actions.py
 │   │   └── env.py
 │   └── logs/                 # Application logs (auto-created, gitignored)
 │       ├── app.log           # General application logs
