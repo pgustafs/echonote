@@ -5,6 +5,6 @@ This package contains all API routers, organized by domain.
 """
 
 # Expose routers for easy importing
-from backend.routers import health, transcriptions
+from backend.routers import health, transcriptions, actions
 
-__all__ = ["health", "transcriptions"]
+__all__ = ["health", "transcriptions", "actions"]

@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.auth_routes import router as auth_router
 from backend.config import settings
 from backend.database import create_db_and_tables
-from backend.routers import health, transcriptions
+from backend.routers import health, transcriptions, actions
 from backend.logging_config import setup_logging, get_logger
 from backend.middleware.audit_logger import AuditLoggerMiddleware
 
@@ -159,6 +159,9 @@ app.include_router(auth_router)
 
 # Transcription router (main API endpoints)
 app.include_router(transcriptions.router)
+
+# AI Actions router (AI-powered operations on transcriptions)
+app.include_router(actions.router)
 
 logger.info("Routers registered successfully")
 

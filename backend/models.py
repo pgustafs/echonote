@@ -8,8 +8,10 @@ with their associated audio files and user authentication.
 from datetime import datetime, date
 from enum import Enum
 from typing import Optional
+import uuid
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, Column, Text
+from sqlalchemy import Column as SAColumn, Text as SAText
 
 
 class Priority(str, Enum):
@@ -216,3 +218,120 @@ class TranscriptionStatusResponse(SQLModel):
 class BulkStatusResponse(SQLModel):
     """Schema for bulk status endpoint response"""
     statuses: list[TranscriptionStatusResponse]
+
+
+# ============================================================================
+# AI Action Models
+# ============================================================================
+
+class AIAction(SQLModel, table=True):
+    """
+    Database model for tracking AI actions performed on transcriptions.
+
+    Stores request parameters, results, and metadata for AI-powered operations
+    like summarization, translation, content generation, etc.
+    """
+    __tablename__ = "ai_actions"
+
+    # Primary Key
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Unique Action ID (UUID v4 for API responses)
+    action_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        index=True,
+        unique=True,
+        description="Unique identifier for this action"
+    )
+
+    # Foreign Keys
+    user_id: int = Field(foreign_key="users.id", index=True, description="User who requested this action")
+    transcription_id: int = Field(foreign_key="transcriptions.id", index=True, description="Transcription this action operates on")
+
+    # Action Details
+    action_type: str = Field(
+        max_length=100,
+        index=True,
+        description="Type of AI action (e.g., 'analyze', 'create/linkedin-post')"
+    )
+    status: str = Field(
+        default="work_in_progress",
+        max_length=20,
+        index=True,
+        description="Status: pending, processing, completed, failed, work_in_progress"
+    )
+
+    # Request/Response Data (JSON stored as text)
+    request_params: str = Field(
+        default="{}",
+        sa_column=SAColumn(SAText),
+        description="JSON string of request parameters"
+    )
+    result_data: Optional[str] = Field(
+        default=None,
+        sa_column=SAColumn(SAText, nullable=True),
+        description="JSON string of result data"
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Error message if action failed"
+    )
+
+    # Quota Tracking
+    quota_cost: int = Field(default=1, description="Quota cost for this action")
+
+    # Timestamps
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When the action was created"
+    )
+    completed_at: Optional[datetime] = Field(
+        default=None,
+        description="When the action was completed"
+    )
+
+    # Performance Metrics
+    processing_duration_ms: Optional[int] = Field(
+        default=None,
+        description="Processing duration in milliseconds"
+    )
+
+
+class AIActionRequest(SQLModel):
+    """Base schema for AI action requests"""
+    transcription_id: int = Field(gt=0, description="ID of the transcription to process")
+    options: dict = Field(default_factory=dict, description="Action-specific options")
+
+
+class AIActionResponse(SQLModel):
+    """Base schema for AI action responses"""
+    action_id: str = Field(description="Unique identifier for this action")
+    status: str = Field(description="Current status of the action")
+    message: str = Field(description="Human-readable message about the action")
+    quota_remaining: int = Field(description="User's remaining quota after this action")
+    quota_reset_date: str = Field(description="Date when quota will reset")
+    result: Optional[dict] = Field(default=None, description="Action result data")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    created_at: datetime = Field(description="When the action was created")
+    completed_at: Optional[datetime] = Field(default=None, description="When the action was completed")
+
+
+class AIActionPublic(SQLModel):
+    """Public schema for listing AI actions (without full request/response data)"""
+    id: int
+    action_id: str
+    action_type: str
+    status: str
+    quota_cost: int
+    created_at: datetime
+    completed_at: Optional[datetime]
+    error_message: Optional[str]
+
+
+class AIActionList(SQLModel):
+    """Schema for listing AI actions with pagination"""
+    actions: list[AIActionPublic]
+    total: int
+    skip: int
+    limit: int

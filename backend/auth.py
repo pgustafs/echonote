@@ -123,7 +123,8 @@ def decode_access_token(token: str) -> TokenData:
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.JWTError:
+    except (jwt.InvalidTokenError, jwt.DecodeError, Exception) as e:
+        logger.warning(f"JWT decode error: {e}")
         raise credentials_exception
 
 
