@@ -327,7 +327,7 @@ CREATE INDEX idx_ai_actions_created_at ON ai_actions(created_at);
 - ✅ Quota enforcement active
 - ✅ Permission checks working
 - ✅ Returns dummy responses with transcription text
-- ⏳ AI processing implementation (Phase 3)
+- ✅ Phase 3 supporting infrastructure complete
 
 **Testing:**
 ```bash
@@ -358,6 +358,374 @@ curl -X GET http://localhost:8000/api/auth/me \
 ```
 
 For complete API testing documentation, see **[API_TEST_CURL.md](API_TEST_CURL.md)**.
+
+---
+
+## Admin & Monitoring (Phase 3)
+
+Phase 3 provides comprehensive administrative and monitoring capabilities for managing users, tracking system health, and automating maintenance tasks.
+
+### Admin Endpoints
+
+All admin endpoints require admin role authentication (`role="admin"`).
+
+**Base Path**: `/api/admin`
+
+#### User Management
+
+**List All Users**
+```bash
+GET /api/admin/users?skip=0&limit=20&role=user&search=john
+```
+- Pagination with skip/limit
+- Filter by role (user, admin)
+- Filter by premium status
+- Search by username or email
+- Returns user counts (transcriptions, AI actions)
+
+**Get User Details**
+```bash
+GET /api/admin/users/{user_id}
+```
+- Complete user information
+- Transcription statistics (total, this month)
+- AI action statistics (total, this month, today, by type)
+
+**Adjust User Quota**
+```bash
+PATCH /api/admin/users/{user_id}/quota
+Content-Type: application/json
+
+{
+  "ai_action_quota_daily": 500
+}
+```
+
+**Change User Role**
+```bash
+PATCH /api/admin/users/{user_id}/role
+Content-Type: application/json
+
+{
+  "role": "admin"  # "user" or "admin"
+}
+```
+
+**Toggle Premium Status**
+```bash
+PATCH /api/admin/users/{user_id}/premium
+Content-Type: application/json
+
+{
+  "is_premium": true
+}
+```
+- Automatically adjusts quota (1000 for premium, 100 for free)
+
+**Activate/Deactivate User**
+```bash
+PATCH /api/admin/users/{user_id}/active
+Content-Type: application/json
+
+{
+  "is_active": false
+}
+```
+
+#### AI Actions Monitoring
+
+**List All AI Actions**
+```bash
+GET /api/admin/actions?skip=0&limit=50&user_id=5&action_type=analyze&status=completed
+```
+- Filter by user, action type, status
+- Filter by date range (date_from, date_to in ISO format)
+- Ordered by creation date (newest first)
+
+**System Statistics**
+```bash
+GET /api/admin/stats
+```
+
+Returns comprehensive system-wide statistics:
+```json
+{
+  "users": {
+    "total": 1000,
+    "active": 950,
+    "premium": 50,
+    "admins": 2,
+    "new_this_month": 100
+  },
+  "transcriptions": {
+    "total": 50000,
+    "this_month": 5000,
+    "today": 200
+  },
+  "ai_actions": {
+    "total": 250000,
+    "this_month": 30000,
+    "today": 1200,
+    "by_type": {
+      "analyze": 50000,
+      "create/*": 40000,
+      "improve/*": 100000,
+      "translate/*": 40000,
+      "voice/*": 20000
+    },
+    "by_status": {
+      "completed": 240000,
+      "failed": 5000,
+      "work_in_progress": 5000
+    }
+  },
+  "quotas": {
+    "total_allocated": 100000,
+    "used_today": 1200,
+    "average_per_user": 12
+  }
+}
+```
+
+### User Usage Endpoints
+
+Available to all authenticated users for tracking their own usage.
+
+**Get Usage Statistics**
+```bash
+GET /api/auth/me/usage
+Authorization: Bearer {token}
+```
+
+Returns:
+```json
+{
+  "quota": {
+    "daily_limit": 100,
+    "used_today": 45,
+    "remaining_today": 55,
+    "reset_date": "2025-11-19",
+    "is_premium": false
+  },
+  "usage_history": {
+    "total_actions": 450,
+    "this_month": 120,
+    "this_week": 35,
+    "today": 45
+  },
+  "breakdown_by_type": {
+    "analyze": 10,
+    "create/linkedin-post": 5,
+    "improve/summarize": 20,
+    "translate/to-english": 10
+  }
+}
+```
+
+**List My AI Actions**
+```bash
+GET /api/auth/me/actions?skip=0&limit=20&action_type=analyze&status=completed
+Authorization: Bearer {token}
+```
+- Filter by action type, status
+- Filter by date range (date_from, date_to in ISO format)
+- Ordered by creation date (newest first)
+
+**Get Specific Action Result**
+```bash
+GET /api/auth/me/actions/{action_id}
+Authorization: Bearer {token}
+```
+
+Returns complete action details:
+```json
+{
+  "action_id": "uuid-here",
+  "action_type": "analyze",
+  "status": "work_in_progress",
+  "message": "endpoint analyze - work in progress...",
+  "transcription_id": 123,
+  "quota_cost": 1,
+  "created_at": "2025-11-18T10:00:00Z",
+  "completed_at": null,
+  "result": null,
+  "error": null
+}
+```
+
+### Scheduled Maintenance Tasks
+
+Celery Beat runs three automated maintenance tasks:
+
+#### 1. Daily Quota Reset
+**Task**: `reset_daily_quotas`
+**Schedule**: Every day at 00:00 UTC
+**Purpose**: Reset all users' `ai_action_count_today` to 0
+
+```python
+# Resets quota for all users
+# Updates quota_reset_date
+# Logs number of users reset
+```
+
+#### 2. Log Cleanup
+**Task**: `cleanup_old_logs`
+**Schedule**: Sunday at 02:00 UTC (weekly)
+**Purpose**:
+- Compress logs older than 90 days → `logs/archive/*.gz`
+- Delete archived logs older than 180 days
+- Saves disk space while maintaining audit trail
+
+```bash
+# Log directory structure
+logs/
+├── app.log
+├── app.log.1, app.log.2, ...
+├── security.log
+├── security.log.1, security.log.2, ...
+├── error.log
+├── error.log.1, error.log.2, ...
+└── archive/
+    ├── app.log.1.gz
+    └── security.log.1.gz
+```
+
+#### 3. AI Actions Cleanup
+**Task**: `cleanup_old_ai_actions`
+**Schedule**: Sunday at 03:00 UTC (weekly)
+**Purpose**: Delete AI actions older than 30 days with status `completed` or `work_in_progress`
+
+- Failed actions are kept for debugging
+- Reduces database size
+- Maintains recent history for analytics
+
+### Default Admin User
+
+On first startup, EchoNote automatically creates a default admin user:
+
+```
+Username: admin
+Password: Admin1234
+Email: admin@echonote.local
+Role: admin
+```
+
+⚠️ **SECURITY WARNING**: Change this password immediately in production!
+
+**Automatic Creation**:
+- Created only if no admin users exist
+- Runs during database initialization
+- Logged to console on creation
+- Has unlimited quota (999999 actions/day)
+
+### Testing Admin Endpoints
+
+**1. Login as Default Admin**
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Admin1234"}' | python3 -m json.tool
+```
+
+**3. Test Admin Endpoints**
+```bash
+ADMIN_TOKEN="your_admin_token"
+
+# List all users
+curl -X GET "http://localhost:8000/api/admin/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | python3 -m json.tool
+
+# Get system statistics
+curl -X GET "http://localhost:8000/api/admin/stats" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | python3 -m json.tool
+
+# View user details
+curl -X GET "http://localhost:8000/api/admin/users/2" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | python3 -m json.tool
+
+# Adjust user quota
+curl -X PATCH "http://localhost:8000/api/admin/users/2/quota" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ai_action_quota_daily": 500}' | python3 -m json.tool
+
+# Toggle premium status
+curl -X PATCH "http://localhost:8000/api/admin/users/2/premium" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_premium": true}' | python3 -m json.tool
+
+# List all AI actions
+curl -X GET "http://localhost:8000/api/admin/actions?limit=10" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | python3 -m json.tool
+```
+
+**4. Test User Usage Endpoints**
+```bash
+USER_TOKEN="your_user_token"
+
+# Get my usage statistics
+curl -X GET "http://localhost:8000/api/auth/me/usage" \
+  -H "Authorization: Bearer $USER_TOKEN" | python3 -m json.tool
+
+# List my AI actions
+curl -X GET "http://localhost:8000/api/auth/me/actions?limit=10" \
+  -H "Authorization: Bearer $USER_TOKEN" | python3 -m json.tool
+
+# Get specific action result
+curl -X GET "http://localhost:8000/api/auth/me/actions/{action_id}" \
+  -H "Authorization: Bearer $USER_TOKEN" | python3 -m json.tool
+```
+
+### Permission Model
+
+**Role Hierarchy:**
+- `admin`: Full access to all endpoints (bypasses quota checks)
+- `user`: Standard user with quota limits
+
+**Admin Capabilities:**
+- View all users and their statistics
+- Modify user quotas, roles, and status
+- View all AI actions across all users
+- Access system-wide statistics
+- **Bypass** all quota checks
+- All admin actions logged to security.log
+
+**User Capabilities:**
+- View own usage statistics
+- View own AI actions
+- Subject to daily quota limits
+- Cannot access other users' data
+
+### Architecture Notes
+
+**Service Layer**:
+- Admin operations logged to `security.log` with admin user context
+- All admin actions include audit trail
+- Permission checks at dependency level (`require_admin_role`)
+
+**Database Queries**:
+- Optimized joins for user/action listings
+- Aggregation queries for statistics
+- Proper indexing on user_id, action_type, created_at
+
+**Scheduled Tasks**:
+- Celery Beat schedule defined in `celery_app.py`
+- Task names as strings (no imports needed for Beat)
+- Workers import tasks at runtime
+- Logging for all task executions
+
+**Current Status (Phase 3):**
+- ✅ Admin router with 9 endpoints
+- ✅ User usage endpoints (3 endpoints)
+- ✅ System statistics dashboard
+- ✅ Celery scheduled tasks (3 tasks)
+- ✅ Comprehensive audit logging
+- ✅ Role-based access control
+- ✅ Default admin user auto-creation
+- ⏳ AI processing implementation (Phase 4)
+
+**For complete Phase 3 testing instructions, see [PHASE3_TESTING.md](PHASE3_TESTING.md)**.
 
 ---
 
@@ -403,7 +771,8 @@ echonote/
 │   │   ├── __init__.py
 │   │   ├── health.py         # Health check endpoints
 │   │   ├── transcriptions.py # Transcription endpoints
-│   │   └── actions.py        # AI Actions endpoints (18 endpoints)
+│   │   ├── actions.py        # AI Actions endpoints (18 endpoints)
+│   │   └── admin.py          # Admin endpoints (9 endpoints) - Phase 3
 │   ├── services/             # Business logic layer
 │   │   ├── __init__.py
 │   │   ├── transcription_service.py  # Transcription business logic
@@ -414,13 +783,13 @@ echonote/
 │   │   ├── audit_logger.py   # Security audit logging middleware
 │   │   └── quota_checker.py  # Quota enforcement decorators
 │   ├── models.py             # SQLModel database models & API schemas
-│   ├── database.py           # Database configuration & session management
+│   ├── database.py           # Database config, session mgmt & default admin creation
 │   ├── config.py             # Application settings
 │   ├── auth.py               # Authentication utilities (JWT, password hashing)
-│   ├── auth_routes.py        # Authentication endpoints (register, login)
+│   ├── auth_routes.py        # Auth endpoints (register, login, user usage) - Phase 3
 │   ├── logging_config.py     # Structured JSON logging configuration
-│   ├── celery_app.py         # Celery application configuration
-│   ├── tasks.py              # Celery background tasks (transcription, quota reset)
+│   ├── celery_app.py         # Celery app config & Beat schedule - Phase 3
+│   ├── tasks.py              # Celery tasks (transcription, quota, cleanup) - Phase 3
 │   ├── audio_chunker.py      # Audio chunking for long recordings
 │   ├── transcription_merger.py  # Merge chunked transcription results
 │   ├── diarization.py        # Speaker diarization service
@@ -464,6 +833,10 @@ echonote/
 ├── echonote-kube-priv.yaml # Production deployment (4 containers - REQUIRED)
 ├── .gitignore              # Project-level git ignores
 ├── CONTAINER.md            # Container deployment guide
+├── AI_PLAN.md              # AI Actions implementation plan (Phases 1-4)
+├── ROLES_AND_QUOTAS.md     # User roles and quota system documentation
+├── API_TEST_CURL.md        # API testing examples with curl
+├── PHASE3_TESTING.md       # Complete Phase 3 testing guide - NEW
 ├── .env.example
 └── README.md
 ```
@@ -478,21 +851,26 @@ EchoNote follows modern **layered architecture** and **2025 FastAPI best practic
 - Thin controllers that handle HTTP requests/responses
 - Route registration and validation
 - Delegates business logic to service layer
+- **Routers**: `health`, `transcriptions`, `actions` (18 endpoints), `admin` (9 endpoints)
 
 **2. Service Layer** (`backend/services/`)
 - Contains all business logic
 - Reusable, testable functions
 - Independent of HTTP/API concerns
+- **Services**: `TranscriptionService`, `PermissionService`, `AIActionService`
 
 **3. Data Layer** (`backend/models.py`, `backend/database.py`)
 - SQLModel database models
 - API schemas (Create, Read, Update)
 - Database session management
+- **Auto-initialization**: Default admin user creation on first startup
 
-**4. Authentication** (`backend/auth.py`, `backend/auth_routes.py`)
+**4. Authentication & Authorization** (`backend/auth.py`, `backend/auth_routes.py`)
 - JWT token generation/validation
 - Password hashing with bcrypt
 - Dependency injection for protected endpoints
+- **Role-based access control**: admin vs user permissions
+- **User usage endpoints**: Self-service quota monitoring (Phase 3)
 
 ### Key Design Patterns
 
@@ -513,11 +891,15 @@ EchoNote uses a distributed task queue architecture for async transcription proc
 2. **Backend** (`echonote-backend`) - FastAPI REST API (modular routers + service layer)
 3. **Redis** (`echonote-redis`) - Message broker (db 0) & result backend (db 1)
 4. **Celery Worker** (`echonote-celery-worker`) - Background task processor for transcriptions
-5. **Celery Beat** (`echonote-celery-beat`) - Scheduler for periodic tasks (daily quota reset)
+5. **Celery Beat** (`echonote-celery-beat`) - Scheduler for periodic maintenance tasks (Phase 3)
 
-**Celery Beat Scheduler:**
+**Celery Beat Scheduler (Phase 3):**
 - Lightweight scheduler container with minimal dependencies (~400MB vs worker's ~2GB)
-- Sends scheduled tasks to Redis queue at specified times (e.g., midnight UTC for quota reset)
+- Sends scheduled tasks to Redis queue at specified times
+- **Scheduled Tasks**:
+  - Daily quota reset (00:00 UTC) - Resets all users' daily quotas
+  - Log cleanup (Sunday 02:00 UTC) - Archives old logs, deletes ancient archives
+  - AI actions cleanup (Sunday 03:00 UTC) - Removes old completed actions
 - Does not execute tasks - only schedules them
 - Proper separation following official Celery best practices
 - See [CELERY_ARCHITECTURE.md](CELERY_ARCHITECTURE.md) for detailed architecture documentation

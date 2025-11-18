@@ -498,3 +498,135 @@ def reset_daily_quotas_task():
             }
         )
         raise
+
+
+@celery_app.task(name="cleanup_old_logs")
+def cleanup_old_logs_task():
+    """
+    Archive audit logs older than 90 days.
+
+    This task runs weekly (configured in celery_app.py) to:
+    1. Compress logs older than 90 days
+    2. Move them to logs/archive/
+    3. Delete archived logs older than 180 days
+
+    Returns:
+        dict: Summary of cleanup operation
+    """
+    from backend.logging_config import get_logger
+    import os
+    import gzip
+    import shutil
+    from datetime import datetime, timedelta
+    from pathlib import Path
+
+    logger = get_logger(__name__)
+
+    logger.info("Starting log cleanup task")
+
+    try:
+        logs_dir = Path("logs")
+        archive_dir = logs_dir / "archive"
+        archive_dir.mkdir(exist_ok=True)
+
+        # Cutoff dates
+        archive_cutoff = datetime.utcnow() - timedelta(days=90)
+        delete_cutoff = datetime.utcnow() - timedelta(days=180)
+
+        archived_count = 0
+        deleted_count = 0
+
+        # Process log files
+        for log_file in logs_dir.glob("*.log.*"):
+            if log_file.is_file():
+                # Get file modification time
+                mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+
+                # Archive old logs
+                if mtime < archive_cutoff:
+                    # Compress and move to archive
+                    archive_path = archive_dir / f"{log_file.name}.gz"
+
+                    with open(log_file, 'rb') as f_in:
+                        with gzip.open(archive_path, 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+
+                    # Delete original
+                    log_file.unlink()
+                    archived_count += 1
+                    logger.debug(f"Archived log file: {log_file.name}")
+
+        # Delete very old archived logs
+        for archived_file in archive_dir.glob("*.gz"):
+            if archived_file.is_file():
+                mtime = datetime.fromtimestamp(archived_file.stat().st_mtime)
+
+                if mtime < delete_cutoff:
+                    archived_file.unlink()
+                    deleted_count += 1
+                    logger.debug(f"Deleted old archive: {archived_file.name}")
+
+        logger.info(f"Log cleanup completed: {archived_count} files archived, {deleted_count} files deleted")
+
+        return {
+            "status": "success",
+            "files_archived": archived_count,
+            "files_deleted": deleted_count,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error during log cleanup: {str(e)}", exc_info=True)
+        raise
+
+
+@celery_app.task(name="cleanup_old_ai_actions")
+def cleanup_old_ai_actions_task():
+    """
+    Delete completed AI actions older than 30 days.
+
+    This task runs weekly (configured in celery_app.py) to remove old
+    completed AI action records from the database to save space.
+
+    Only actions with status="completed" or status="work_in_progress" are deleted.
+    Failed actions are kept for debugging.
+
+    Returns:
+        dict: Summary of cleanup operation
+    """
+    from backend.logging_config import get_logger
+    from backend.models import AIAction
+    from datetime import datetime, timedelta
+    from sqlmodel import select, delete
+
+    logger = get_logger(__name__)
+
+    logger.info("Starting AI actions cleanup task")
+
+    try:
+        with get_session() as session:
+            cutoff_date = datetime.utcnow() - timedelta(days=30)
+
+            # Delete old completed actions
+            delete_stmt = delete(AIAction).where(
+                AIAction.status.in_(["completed", "work_in_progress"]),
+                AIAction.created_at < cutoff_date
+            )
+
+            result = session.execute(delete_stmt)
+            deleted_count = result.rowcount
+
+            session.commit()
+
+            logger.info(f"AI actions cleanup completed: {deleted_count} records deleted")
+
+            return {
+                "status": "success",
+                "deleted_count": deleted_count,
+                "cutoff_date": cutoff_date.isoformat(),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+    except Exception as e:
+        logger.error(f"Error during AI actions cleanup: {str(e)}", exc_info=True)
+        raise

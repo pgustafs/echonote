@@ -80,6 +80,14 @@ celery_app.conf.update(
             'task': 'reset_daily_quotas',
             'schedule': crontab(hour=0, minute=0),  # Every day at midnight UTC
         },
+        'cleanup-old-logs': {
+            'task': 'cleanup_old_logs',
+            'schedule': crontab(hour=2, minute=0, day_of_week=0),  # Sunday at 02:00 UTC
+        },
+        'cleanup-old-ai-actions': {
+            'task': 'cleanup_old_ai_actions',
+            'schedule': crontab(hour=3, minute=0, day_of_week=0),  # Sunday at 03:00 UTC
+        },
     },
 )
 

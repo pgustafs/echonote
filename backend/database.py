@@ -56,8 +56,52 @@ engine = create_engine(
 
 
 def create_db_and_tables():
-    """Create all database tables."""
+    """
+    Create all database tables and initialize default admin user.
+
+    Creates a default admin user on first run:
+    - Username: admin
+    - Email: admin@echonote.local
+    - Password: Admin1234 (CHANGE THIS IN PRODUCTION!)
+    - Role: admin
+    """
+    from backend.models import User
+    from backend.auth import get_password_hash
+    from sqlmodel import select
+
+    # Create tables
     SQLModel.metadata.create_all(engine)
+
+    # Check if any admin users exist
+    with Session(engine) as session:
+        admin_exists = session.exec(
+            select(User).where(User.role == "admin")
+        ).first()
+
+        if not admin_exists:
+            # Create default admin user
+            default_admin = User(
+                username="admin",
+                email="admin@echonote.local",
+                hashed_password=get_password_hash("Admin1234"),
+                role="admin",
+                is_active=True,
+                is_premium=True,
+                ai_action_quota_daily=999999  # Unlimited for admin
+            )
+            session.add(default_admin)
+            session.commit()
+
+            # Log creation (using print since logging may not be initialized yet)
+            print("=" * 60)
+            print("DEFAULT ADMIN USER CREATED")
+            print("=" * 60)
+            print("Username: admin")
+            print("Password: Admin1234")
+            print("Email: admin@echonote.local")
+            print("")
+            print("⚠️  SECURITY WARNING: Change this password immediately!")
+            print("=" * 60)
 
 
 def get_session() -> Generator[Session, None, None]:
