@@ -6,7 +6,7 @@ import { Priority, Transcription, TranscriptionList } from './types'
 
 // Get API URL from runtime config (injected via ConfigMap) or fallback to env var or localhost
 // This function is called on every API request to ensure config is loaded
-const getApiBaseUrl = (): string => {
+export const getApiBaseUrl = (): string => {
   let apiUrl: string | undefined;
 
   // Try runtime config first (for Kubernetes deployments)
@@ -48,6 +48,19 @@ const getApiBaseUrl = (): string => {
 }
 
 const TOKEN_KEY = 'echonote_token'
+const REFRESH_TOKEN_KEY = 'echonote_refresh_token'
+
+let isRefreshing = false
+let refreshSubscribers: Array<(token: string) => void> = []
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+  refreshSubscribers.push(cb)
+}
+
+function onTokenRefreshed(token: string) {
+  refreshSubscribers.forEach(cb => cb(token))
+  refreshSubscribers = []
+}
 
 /**
  * Custom error class for network failures
@@ -104,6 +117,40 @@ export function isNetworkError(error: unknown): boolean {
 }
 
 /**
+ * Refresh the access token using the refresh token
+ */
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+  if (!refreshToken) {
+    return null
+  }
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${refreshToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+      return null
+    }
+
+    const data = await response.json()
+    const newAccessToken = data.access_token
+
+    localStorage.setItem(TOKEN_KEY, newAccessToken)
+    return newAccessToken
+  } catch (error) {
+    console.error('Error refreshing token:', error)
+    return null
+  }
+}
+
+/**
  * Get authorization headers with JWT token if available
  */
 function getAuthHeaders(): HeadersInit {
@@ -116,6 +163,53 @@ function getAuthHeaders(): HeadersInit {
   return {}
 }
 
+/**
+ * Fetch wrapper that automatically handles token refresh on 401 errors
+ */
+async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const makeRequest = async (token?: string) => {
+    const headers = {
+      ...options.headers,
+    }
+
+    if (token) {
+      Object.assign(headers, { Authorization: `Bearer ${token}` })
+    } else {
+      Object.assign(headers, getAuthHeaders())
+    }
+
+    return fetch(url, { ...options, headers })
+  }
+
+  const response = await makeRequest()
+
+  if (response.status === 401) {
+    if (isRefreshing) {
+      return new Promise((resolve) => {
+        subscribeTokenRefresh((token: string) => {
+          resolve(makeRequest(token))
+        })
+      })
+    }
+
+    isRefreshing = true
+
+    const newToken = await refreshAccessToken()
+
+    isRefreshing = false
+
+    if (newToken) {
+      onTokenRefreshed(newToken)
+      return makeRequest(newToken)
+    } else {
+      window.location.href = '/'
+      throw new Error('Session expired. Please login again.')
+    }
+  }
+
+  return response
+}
+
 export interface ModelsResponse {
   models: string[]
   default: string
@@ -125,9 +219,7 @@ export interface ModelsResponse {
  * Get available transcription models
  */
 export async function getModels(): Promise<ModelsResponse> {
-  const response = await fetch(`${getApiBaseUrl()}/models`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/models`)
 
   if (!response.ok) {
     throw new Error('Failed to fetch models')
@@ -175,9 +267,8 @@ export async function transcribeAudio(
   }
 
   try {
-    const response = await fetch(`${getApiBaseUrl()}/transcribe`, {
+    const response = await fetchWithAuth(`${getApiBaseUrl()}/transcribe`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: formData,
     })
 
@@ -221,9 +312,7 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
     params.append('search', search.trim())
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions?${params}`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions?${params}`)
 
   if (!response.ok) {
     throw new Error('Failed to fetch transcriptions')
@@ -236,9 +325,7 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
  * Get a specific transcription by ID
  */
 export async function getTranscription(id: number): Promise<Transcription> {
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}`)
 
   if (!response.ok) {
     throw new Error('Transcription not found')
@@ -267,9 +354,8 @@ export async function updateTranscriptionPriority(id: number, priority: Priority
     priority: priority,
   })
 
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}?${params}`, {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}?${params}`, {
     method: 'PATCH',
-    headers: getAuthHeaders(),
   })
 
   if (!response.ok) {
@@ -284,9 +370,8 @@ export async function updateTranscriptionPriority(id: number, priority: Priority
  * Delete a transcription
  */
 export async function deleteTranscription(id: number): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}`, {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}`, {
     method: 'DELETE',
-    headers: getAuthHeaders(),
   })
 
   if (!response.ok) {
@@ -298,9 +383,7 @@ export async function deleteTranscription(id: number): Promise<void> {
  * Download a transcription as ZIP containing WAV audio and config.json
  */
 export async function downloadTranscription(id: number): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}/download`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}/download`)
 
   if (!response.ok) {
     throw new Error('Failed to download transcription')
@@ -357,9 +440,7 @@ export interface BulkStatusResponse {
  * Get status for a single transcription
  */
 export async function getTranscriptionStatus(id: number): Promise<TranscriptionStatus> {
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/${id}/status`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}/status`)
 
   if (!response.ok) {
     throw new Error(`Failed to get transcription status: ${response.statusText}`)
@@ -377,12 +458,52 @@ export async function getBulkTranscriptionStatus(ids: number[]): Promise<BulkSta
   }
 
   const idsParam = ids.join(',')
-  const response = await fetch(`${getApiBaseUrl()}/transcriptions/status/bulk?ids=${idsParam}`, {
-    headers: getAuthHeaders(),
-  })
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/status/bulk?ids=${idsParam}`)
 
   if (!response.ok) {
     throw new Error(`Failed to get bulk status: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+// ============================================================================
+// AI Actions APIs
+// ============================================================================
+
+import type { AIActionRequest, AIActionResponse } from './types'
+
+/**
+ * Execute an AI action on a transcription
+ */
+export async function executeAIAction(
+  endpoint: string,
+  request: AIActionRequest
+): Promise<AIActionResponse> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/v1/actions${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Failed to execute AI action: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get current user information
+ */
+export async function getCurrentUser(): Promise<any> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/auth/me`)
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch user')
   }
 
   return response.json()

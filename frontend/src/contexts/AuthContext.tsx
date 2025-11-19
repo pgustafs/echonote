@@ -4,6 +4,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { getApiBaseUrl, getCurrentUser } from '../api'
 
 export interface User {
   id: number
@@ -18,23 +19,15 @@ interface AuthContextType {
   token: string | null
   login: (username: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
+  refreshToken: () => Promise<boolean>
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Get API URL from runtime config (injected via ConfigMap) or fallback to env var or localhost
-const getApiBaseUrl = (): string => {
-  // @ts-ignore - window.APP_CONFIG is injected at runtime
-  if (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.API_URL) {
-    // @ts-ignore
-    return window.APP_CONFIG.API_URL
-  }
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-}
-
 const TOKEN_KEY = 'echonote_token'
+const REFRESH_TOKEN_KEY = 'echonote_refresh_token'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -47,31 +40,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (storedToken) {
       setToken(storedToken)
       // Fetch current user info
-      fetchCurrentUser(storedToken)
+      fetchCurrentUser()
     } else {
       setIsLoading(false)
     }
   }, [])
 
-  const fetchCurrentUser = async (authToken: string) => {
+  const fetchCurrentUser = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch user')
-      }
-
-      const userData = await response.json()
+      const userData = await getCurrentUser()
       setUser(userData)
     } catch (error) {
       console.error('Error fetching user:', error)
-      // Token might be invalid, clear it
-      localStorage.removeItem(TOKEN_KEY)
-      setToken(null)
+      // Only clear tokens if it's not a session expired error (which already redirected)
+      if (error instanceof Error && !error.message.includes('Session expired')) {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
+        setToken(null)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -93,13 +79,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json()
     const accessToken = data.access_token
+    const refreshToken = data.refresh_token
 
-    // Store token
+    // Store both tokens
     localStorage.setItem(TOKEN_KEY, accessToken)
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    }
     setToken(accessToken)
 
     // Fetch user info
-    await fetchCurrentUser(accessToken)
+    await fetchCurrentUser()
   }
 
   const register = async (username: string, email: string, password: string) => {
@@ -120,8 +110,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(username, password)
   }
 
-  const logout = () => {
+  const refreshToken = async (): Promise<boolean> => {
+    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (!storedRefreshToken) {
+      return false
+    }
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${storedRefreshToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        // Refresh token is invalid or expired
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
+        setToken(null)
+        setUser(null)
+        return false
+      }
+
+      const data = await response.json()
+      const newAccessToken = data.access_token
+
+      // Update access token
+      localStorage.setItem(TOKEN_KEY, newAccessToken)
+      setToken(newAccessToken)
+
+      return true
+    } catch (error) {
+      console.error('Error refreshing token:', error)
+      return false
+    }
+  }
+
+  const logout = async () => {
+    const currentToken = token || localStorage.getItem(TOKEN_KEY)
+
+    // Call logout endpoint to blacklist the token
+    if (currentToken) {
+      try {
+        await fetch(`${getApiBaseUrl()}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+          },
+        })
+      } catch (error) {
+        console.error('Error during logout:', error)
+        // Continue with local logout even if API call fails
+      }
+    }
+
+    // Clear tokens and state
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
     setToken(null)
     setUser(null)
   }
@@ -134,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        refreshToken,
         isLoading,
       }}
     >

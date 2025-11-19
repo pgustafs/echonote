@@ -26,6 +26,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from backend.auth_routes import router as auth_router
 from backend.config import settings
@@ -33,6 +34,7 @@ from backend.database import create_db_and_tables
 from backend.routers import health, transcriptions, actions, admin
 from backend.logging_config import setup_logging, get_logger
 from backend.middleware.audit_logger import AuditLoggerMiddleware
+from backend.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 
 # Configure enhanced logging
 setup_logging(log_dir="backend/logs", log_level=os.getenv("LOG_LEVEL", "INFO"))
@@ -43,33 +45,120 @@ def validate_configuration():
     """
     Validate critical configuration on startup
 
+    Phase 4: Security Hardening - Enhanced configuration validation
+
     Raises:
         RuntimeError: If critical configuration is insecure or invalid
     """
+    errors = []
+    warnings = []
+
+    # ===== JWT Security Validation =====
+
     # Check JWT secret is not default
     default_secrets = [
         "your-secret-key-here",
+        "your-secret-key-change-this-in-production",  # Phase 4.1: Security fix
         "change-me",
         "default",
         "secret",
+        "CHANGE_THIS_TO_SECURE_RANDOM_STRING_MINIMUM_64_CHARACTERS_IN_PRODUCTION",
+        "CHANGE_THIS_TO_SECURE_RANDOM_STRING_IN_PRODUCTION",
     ]
 
     if settings.JWT_SECRET_KEY in default_secrets:
-        logger.error("CRITICAL: JWT_SECRET_KEY is using a default/insecure value!")
-        logger.error("Set JWT_SECRET_KEY environment variable to a secure random string")
-        raise RuntimeError("Insecure JWT configuration - JWT_SECRET_KEY must be changed from default")
+        errors.append(
+            "JWT_SECRET_KEY is using a default/insecure value! "
+            "Generate a secure key with: python3 -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        )
 
     # Check JWT secret strength
     if len(settings.JWT_SECRET_KEY) < 32:
-        logger.warning(
+        warnings.append(
             f"JWT_SECRET_KEY is too short ({len(settings.JWT_SECRET_KEY)} characters). "
             f"Recommended: 64+ characters for production security"
         )
+    elif len(settings.JWT_SECRET_KEY) < 64:
+        warnings.append(
+            f"JWT_SECRET_KEY could be stronger ({len(settings.JWT_SECRET_KEY)} characters). "
+            f"Recommended: 64+ characters"
+        )
+
+    # ===== CORS Validation =====
+
+    # Check CORS origins
+    if "*" in settings.CORS_ORIGINS:
+        warnings.append(
+            "CORS_ORIGINS includes '*' which allows all origins. "
+            "This should only be used in development, not production!"
+        )
+
+    # Check if running with production database
+    database_url = os.getenv("DATABASE_URL", "")
+    sqlite_db = os.getenv("SQLITE_DB", "")
+
+    if sqlite_db and not database_url:
+        warnings.append(
+            "Using SQLite database. "
+            "For production, please use PostgreSQL (set DATABASE_URL environment variable)"
+        )
+
+    # ===== File System Checks =====
 
     # Create logs directory if it doesn't exist
-    os.makedirs("backend/logs", exist_ok=True)
+    logs_dir = os.path.join("backend", "logs")
+    try:
+        os.makedirs(logs_dir, exist_ok=True)
+        # Test write permissions
+        test_file = os.path.join(logs_dir, ".write_test")
+        with open(test_file, "w") as f:
+            f.write("test")
+        os.remove(test_file)
+    except Exception as e:
+        errors.append(f"Cannot write to logs directory: {e}")
 
-    logger.info("Configuration validation successful")
+    # Create data directory if it doesn't exist
+    data_dir = "data"
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+    except Exception as e:
+        warnings.append(f"Cannot create data directory: {e}")
+
+    # ===== Environment Validation =====
+
+    # Check if running in development mode (DEBUG)
+    if os.getenv("DEBUG", "").lower() in ["true", "1", "yes"]:
+        warnings.append("DEBUG mode is enabled. Disable in production!")
+
+    # Check log level
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    if log_level == "DEBUG":
+        warnings.append("LOG_LEVEL is set to DEBUG. Use INFO or WARNING in production.")
+
+    # ===== Report Results =====
+
+    if errors:
+        logger.error("=" * 70)
+        logger.error("CONFIGURATION VALIDATION FAILED")
+        logger.error("=" * 70)
+        for error in errors:
+            logger.error(f"ERROR: {error}")
+        logger.error("=" * 70)
+        logger.error("Application cannot start with these configuration errors!")
+        logger.error("=" * 70)
+        raise RuntimeError(f"Configuration validation failed: {len(errors)} error(s) found")
+
+    if warnings:
+        logger.warning("=" * 70)
+        logger.warning("CONFIGURATION WARNINGS")
+        logger.warning("=" * 70)
+        for warning in warnings:
+            logger.warning(f"WARNING: {warning}")
+        logger.warning("=" * 70)
+        logger.warning("Application starting despite warnings. Review configuration for production.")
+        logger.warning("=" * 70)
+
+    logger.info("Configuration validation completed successfully")
 
 
 @asynccontextmanager
@@ -135,6 +224,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Configure rate limiting
+# Phase 4: Security Hardening - Add rate limiting to prevent abuse
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Configure CORS
 app.add_middleware(

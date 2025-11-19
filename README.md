@@ -6,6 +6,7 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 
 ✨ **Modern UI** - Beautiful, responsive interface built with React and Tailwind CSS with streamlined single-button control
 🔐 **User Authentication** - Secure JWT-based authentication with user registration and login
+🛡️ **Security Hardening** - Production-ready security with rate limiting, password complexity, input sanitization, and brute force protection
 🎙️ **Audio Recording** - Record directly in the browser with one-click start/stop using the microphone button
 🤖 **AI Transcription** - Powered by Whisper (large-v3-turbo) via vLLM
 ⚡ **Background Processing** - Async transcription with Celery and Redis for responsive UX and progress tracking
@@ -729,6 +730,205 @@ curl -X GET "http://localhost:8000/api/auth/me/actions/{action_id}" \
 
 ---
 
+## Security Hardening (Phase 4)
+
+Phase 4 implements comprehensive security hardening for production deployment, protecting against common attack vectors and enforcing security best practices.
+
+### Security Features Implemented
+
+**1. Configuration Validation** (`backend/main.py`)
+- Startup validation prevents deployment with insecure settings
+- **Blocks startup** if JWT_SECRET_KEY uses default values
+- **Warns** about weak secrets, SQLite usage, CORS wildcards, DEBUG mode
+- Tests file system permissions for logs/data directories
+- Detailed error messages with actionable guidance
+
+**2. Password Complexity** (`backend/models.py`)
+Enhanced `UserCreate` with Pydantic validators:
+- ✅ Minimum 8 characters
+- ✅ Requires uppercase letter (A-Z)
+- ✅ Requires lowercase letter (a-z)
+- ✅ Requires digit (0-9)
+- ✅ Email format validation (auto-converts to lowercase)
+- ✅ Username format validation (alphanumeric + hyphens/underscores only)
+
+**3. Rate Limiting** (`backend/middleware/rate_limiter.py`)
+Redis-backed rate limiting to prevent abuse:
+- **Login**: 5 attempts per 15 minutes per IP
+- **Registration**: 3 attempts per hour per IP
+- **Transcription**: 10 requests per minute per user
+- **AI Actions**: 30 requests per minute per user
+- Automatic retry-after headers in 429 responses
+- Per-IP limiting for unauthenticated, per-user for authenticated
+
+**4. Input Sanitization** (`backend/utils/sanitization.py`)
+Comprehensive protection against injection attacks:
+- `sanitize_text_input()` - XSS prevention with bleach
+- `sanitize_filename()` - Path traversal prevention
+- `sanitize_url()` - Dangerous protocol rejection (javascript:, data:)
+- `sanitize_username()` & `sanitize_email()` - Format validation
+
+**5. Failed Login Tracking** (`backend/services/auth_security_service.py`)
+Account lockout to prevent brute force attacks:
+- Tracks failed attempts per username (thread-safe, in-memory)
+- **Locks account** after 5 failed attempts for 15 minutes
+- Progressive warning messages ("4 attempts remaining...")
+- Automatic unlock after timeout
+- Clears attempts on successful login
+- Detailed security logging
+
+### Security Best Practices Enforced
+
+**Environment Security**:
+```bash
+# .env.example template with security documentation
+- JWT_SECRET_KEY must be changed (errors if default)
+- PostgreSQL recommended over SQLite (warns if SQLite)
+- CORS wildcard detection (warns if "*")
+- DEBUG mode detection (warns if enabled)
+```
+
+**Authentication Security**:
+```python
+# Strong password requirements
+Password: "Test123"     # ✅ Valid (uppercase, lowercase, digit)
+Password: "password"    # ❌ Rejected (no uppercase or digit)
+Password: "PASSWORD1"   # ❌ Rejected (no lowercase)
+Password: "Test"        # ❌ Rejected (too short)
+
+# Account lockout after failed attempts
+Attempt 1-4: "Incorrect password. X attempts remaining..."
+Attempt 5:   "Account locked for 15 minutes"
+Locked:      "Account temporarily locked. Try again in X minutes."
+```
+
+**Rate Limiting**:
+```bash
+# Login brute force protection
+POST /api/auth/login (6th attempt in 15min)
+→ 429 Too Many Requests
+→ { "detail": "Rate limit exceeded", "retry_after": 900 }
+
+# Registration spam prevention
+POST /api/auth/register (4th attempt in 1 hour)
+→ 429 Too Many Requests
+```
+
+**Input Sanitization**:
+```python
+# XSS attack prevention
+Input:  "<script>alert('XSS')</script>Hello"
+Output: "Hello"  # Script tag removed
+
+# Path traversal prevention
+Input:  "../../../etc/passwd"
+Output: "etcpasswd"  # Path separators removed
+
+# URL protocol validation
+Input:  "javascript:alert('XSS')"
+Output: None  # Rejected (dangerous protocol)
+```
+
+### Security Logging
+
+All security events are logged to `backend/logs/security.log`:
+
+```json
+{
+  "timestamp": "2025-11-18T10:30:00.123Z",
+  "level": "WARNING",
+  "message": "Failed login attempt for 'testuser' (3/5)",
+  "event_type": "failed_login",
+  "username": "testuser",
+  "attempts": 3,
+  "attempts_remaining": 2
+}
+```
+
+**Events Logged**:
+- User registration
+- Login success/failure
+- Failed login attempts with counter
+- Account lockouts and unlocks
+- Configuration validation warnings/errors
+- Rate limit violations
+
+### Production Deployment Checklist
+
+Before deploying to production:
+
+- [ ] Generate secure JWT secret: `python3 -c "import secrets; print(secrets.token_urlsafe(64))"`
+- [ ] Set `JWT_SECRET_KEY` in `.env` (minimum 64 characters)
+- [ ] Configure PostgreSQL (not SQLite): `DATABASE_URL=postgresql://...`
+- [ ] Set CORS to production domains only: `CORS_ORIGINS=https://yourdomain.com`
+- [ ] Set `LOG_LEVEL=INFO` or `WARNING` (not DEBUG)
+- [ ] Ensure Redis is running for rate limiting
+- [ ] Set `DB_ECHO=false` (disable SQL query logging)
+- [ ] Remove `DEBUG=true` from environment
+- [ ] Test failed login lockout behavior
+- [ ] Verify password complexity requirements
+- [ ] Review and test rate limits for your use case
+- [ ] Set up HTTPS/TLS at reverse proxy level
+
+### Testing Security Features
+
+**Quick Security Test**:
+```bash
+# Test password complexity
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","email":"test@test.com","password":"weak"}'
+# Expected: Error "Password must be at least 8 characters long"
+
+# Test rate limiting (run 6 times rapidly)
+for i in {1..6}; do
+  curl -X POST http://localhost:8000/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"username":"admin","password":"wrong"}' \
+    -w "\nHTTP: %{http_code}\n"
+done
+# Expected: Attempts 1-5 return 401, attempt 6 returns 429
+
+# Test account lockout (5 failed attempts)
+# After 5 failures, even correct password returns 403 for 15 minutes
+```
+
+### Dependencies Added
+
+```python
+# backend/requirements.txt
+slowapi==0.1.9   # Rate limiting for FastAPI
+bleach==6.0.0    # HTML sanitization to prevent XSS attacks
+```
+
+### Documentation
+
+- **[PHASE4_SECURITY_TESTING.md](PHASE4_SECURITY_TESTING.md)** - Comprehensive testing guide with 20+ test scenarios
+- **[PHASE4_IMPLEMENTATION_SUMMARY.md](PHASE4_IMPLEMENTATION_SUMMARY.md)** - Complete implementation documentation
+- **[backend/.env.example](backend/.env.example)** - Environment template with security documentation
+
+### Security Improvements Summary
+
+| Security Risk | Before Phase 4 | After Phase 4 |
+|---------------|----------------|---------------|
+| Brute Force Attacks | ⚠️ No protection | ✅ Rate limiting + account lockout |
+| XSS Attacks | ⚠️ No sanitization | ✅ Bleach HTML sanitization |
+| Path Traversal | ⚠️ No validation | ✅ Filename sanitization |
+| Weak Passwords | ⚠️ No requirements | ✅ Complexity validation |
+| Insecure Deployment | ⚠️ No validation | ✅ Startup configuration checks |
+| API Abuse | ⚠️ No rate limits | ✅ Comprehensive rate limiting |
+
+**Current Status (Phase 4):**
+- ✅ Configuration validation with startup checks
+- ✅ Password complexity enforcement
+- ✅ Rate limiting (login, registration, API endpoints)
+- ✅ Input sanitization (XSS, path traversal, URL validation)
+- ✅ Failed login tracking with account lockout
+- ✅ Comprehensive security logging
+- ✅ Production-ready security posture
+
+---
+
 ## Tech Stack
 
 ### Backend
@@ -740,6 +940,8 @@ curl -X GET "http://localhost:8000/api/auth/me/actions/{action_id}" \
 - **Redis 7** - Message broker and result backend for Celery
 - **PyJWT** - JWT token generation and validation
 - **Passlib** - Password hashing with bcrypt
+- **slowapi** - Rate limiting for FastAPI (Phase 4: Security)
+- **bleach** - HTML sanitization to prevent XSS attacks (Phase 4: Security)
 - **OpenAI SDK** - For Whisper API calls to vLLM server
 - **pyannote.audio** - Speaker diarization (CPU-only PyTorch)
 - **pydub** - Audio chunking for long recordings (60s+ segments)
@@ -763,30 +965,35 @@ echonote/
 │   ├── Containerfile.celery  # Celery worker container build
 │   ├── Containerfile.celery-beat  # Celery Beat scheduler container build
 │   ├── .containerignore      # Backend build exclusions
-│   ├── requirements.txt      # Python dependencies (full)
+│   ├── .env.example          # Environment template with security docs - Phase 4
+│   ├── requirements.txt      # Python dependencies (full, includes slowapi + bleach)
 │   ├── requirements-beat.txt # Minimal dependencies for Beat scheduler
 │   ├── __init__.py
-│   ├── main.py               # FastAPI application entry point (lifespan, routers)
+│   ├── main.py               # FastAPI app (lifespan, routers, config validation - Phase 4)
 │   ├── routers/              # API endpoint routers (modular)
 │   │   ├── __init__.py
 │   │   ├── health.py         # Health check endpoints
-│   │   ├── transcriptions.py # Transcription endpoints
-│   │   ├── actions.py        # AI Actions endpoints (18 endpoints)
+│   │   ├── transcriptions.py # Transcription endpoints (rate limited - Phase 4)
+│   │   ├── actions.py        # AI Actions endpoints (18 endpoints, rate limited - Phase 4)
 │   │   └── admin.py          # Admin endpoints (9 endpoints) - Phase 3
 │   ├── services/             # Business logic layer
 │   │   ├── __init__.py
-│   │   ├── transcription_service.py  # Transcription business logic
-│   │   ├── permission_service.py     # Quota management & role checking
-│   │   └── ai_action_service.py      # AI Actions business logic
+│   │   ├── transcription_service.py     # Transcription business logic
+│   │   ├── permission_service.py        # Quota management & role checking
+│   │   ├── ai_action_service.py         # AI Actions business logic
+│   │   └── auth_security_service.py     # Failed login tracking - Phase 4
 │   ├── middleware/           # Request/response middleware
 │   │   ├── __init__.py
 │   │   ├── audit_logger.py   # Security audit logging middleware
-│   │   └── quota_checker.py  # Quota enforcement decorators
-│   ├── models.py             # SQLModel database models & API schemas
+│   │   ├── quota_checker.py  # Quota enforcement decorators
+│   │   └── rate_limiter.py   # Rate limiting middleware - Phase 4
+│   ├── utils/                # Utility functions
+│   │   └── sanitization.py   # Input sanitization (XSS, path traversal) - Phase 4
+│   ├── models.py             # SQLModel models & schemas (password validators - Phase 4)
 │   ├── database.py           # Database config, session mgmt & default admin creation
 │   ├── config.py             # Application settings
 │   ├── auth.py               # Authentication utilities (JWT, password hashing)
-│   ├── auth_routes.py        # Auth endpoints (register, login, user usage) - Phase 3
+│   ├── auth_routes.py        # Auth endpoints (register, login, usage, rate limited - Phase 4)
 │   ├── logging_config.py     # Structured JSON logging configuration
 │   ├── celery_app.py         # Celery app config & Beat schedule - Phase 3
 │   ├── tasks.py              # Celery tasks (transcription, quota, cleanup) - Phase 3
@@ -803,7 +1010,7 @@ echonote/
 │   └── logs/                 # Application logs (auto-created, gitignored)
 │       ├── app.log           # General application logs
 │       ├── error.log         # Error logs
-│       └── security.log      # Security audit logs
+│       └── security.log      # Security audit logs (login attempts, lockouts - Phase 4)
 ├── frontend/
 │   ├── Containerfile       # Frontend container build (UBI 10 Node.js)
 │   ├── .containerignore    # Frontend build exclusions
@@ -836,7 +1043,9 @@ echonote/
 ├── AI_PLAN.md              # AI Actions implementation plan (Phases 1-4)
 ├── ROLES_AND_QUOTAS.md     # User roles and quota system documentation
 ├── API_TEST_CURL.md        # API testing examples with curl
-├── PHASE3_TESTING.md       # Complete Phase 3 testing guide - NEW
+├── PHASE3_TESTING.md       # Complete Phase 3 testing guide
+├── PHASE4_SECURITY_TESTING.md        # Phase 4 security testing guide - NEW
+├── PHASE4_IMPLEMENTATION_SUMMARY.md  # Phase 4 implementation docs - NEW
 ├── .env.example
 └── README.md
 ```

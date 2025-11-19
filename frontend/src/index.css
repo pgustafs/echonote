@@ -315,4 +315,35 @@
   .elevation-3 {
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
+
+  /* AI Actions Drawer/Modal Animations */
+  .animate-slide-up {
+    animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .animate-slide-left {
+    animation: slide-left 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-left {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
 }

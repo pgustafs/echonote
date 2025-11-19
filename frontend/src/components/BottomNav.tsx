@@ -16,7 +16,7 @@ export default function BottomNav({ onLogout }: BottomNavProps) {
         backgroundColor: 'rgba(255, 255, 255, 0.02)',
         backdropFilter: 'blur(12px)',
         borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-        zIndex: 1000,
+        zIndex: 30,
         display: 'flex',
         justifyContent: 'space-around',
         alignItems: 'center',

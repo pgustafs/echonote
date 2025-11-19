@@ -12,7 +12,7 @@ All endpoints return standardized "work in progress" responses until implemented
 """
 
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlmodel import Session
 
 from backend.auth import get_current_active_user
@@ -21,6 +21,7 @@ from backend.models import User, AIActionRequest, AIActionResponse
 from backend.services.ai_action_service import AIActionService
 from backend.services.permission_service import PermissionService
 from backend.middleware.quota_checker import require_quota, track_usage
+from backend.middleware.rate_limiter import ai_action_rate_limit
 from backend.logging_config import get_logger, get_security_logger
 
 logger = get_logger(__name__)
@@ -53,7 +54,7 @@ def create_dummy_response(
     Returns:
         AIActionResponse with work-in-progress status and quota information
     """
-    # Calculate quota remaining
+    # Calculate quota remaining (user.ai_action_count_today is already incremented by create_action_record)
     quota_remaining = user.ai_action_quota_daily - user.ai_action_count_today
 
     # Calculate next reset date
@@ -80,16 +81,20 @@ def create_dummy_response(
 # ============================================================================
 
 @router.post("/analyze", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
+@ai_action_rate_limit()
 @require_quota(cost=1)
 @track_usage(action_type="analyze")
 async def analyze_transcription(
-    request: AIActionRequest,
+    request: Request,
+    response: Response,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
     """
     Analyze transcription to extract summary, tasks, and next actions.
 
+    **Rate Limit**: 30 requests per minute per user
     **Quota Cost:** 1 action
 
     **Request Parameters:**
@@ -101,15 +106,15 @@ async def analyze_transcription(
     - Work-in-progress response with action ID and quota information
     """
     # Verify transcription exists and user owns it
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     # Create AI action record
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="analyze",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 

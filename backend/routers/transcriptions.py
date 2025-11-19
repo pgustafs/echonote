@@ -21,7 +21,7 @@ import logging
 from typing import Annotated, Optional
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from sqlmodel import Session
 
@@ -38,6 +38,7 @@ from backend.models import (
     User,
 )
 from backend.services.transcription_service import TranscriptionService
+from backend.middleware.rate_limiter import transcription_rate_limit
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -51,7 +52,10 @@ router = APIRouter(
 
 
 @router.post("/transcribe", response_model=TranscriptionPublic)
+@transcription_rate_limit()
 async def transcribe_audio(
+    request: Request,
+    response: Response,
     file: Annotated[UploadFile, File(description="Audio file to transcribe")],
     url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
     model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
@@ -62,6 +66,8 @@ async def transcribe_audio(
 ):
     """
     Upload audio file and dispatch background transcription task.
+
+    **Rate Limit**: 10 requests per minute per user
 
     This endpoint works asynchronously:
     1. Validates and saves audio file to database

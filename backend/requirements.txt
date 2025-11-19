@@ -24,9 +24,11 @@ pyannote.audio==3.3.2  # Use version before matplotlib 3.10 requirement
 # Audio format conversion
 pydub  # Audio conversion (requires ffmpeg system package)
 
-# Authentication
+# Authentication and Security
 passlib[bcrypt]==1.7.4  # Password hashing with bcrypt
 PyJWT==2.9.0  # JWT token generation and validation
+slowapi==0.1.9  # Rate limiting for FastAPI (Phase 4: Security Hardening)
+bleach==6.0.0  # HTML sanitization to prevent XSS attacks (Phase 4: Security Hardening)
 
 # Environment and utilities
 python-dotenv==1.0.1

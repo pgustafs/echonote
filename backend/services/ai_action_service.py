@@ -17,6 +17,7 @@ from sqlmodel import Session, select, func
 
 from backend.models import AIAction, AIActionPublic, Transcription, User
 from backend.logging_config import get_logger
+from backend.services.permission_service import PermissionService
 
 logger = get_logger(__name__)
 
@@ -61,6 +62,14 @@ class AIActionService:
         session.add(ai_action)
         session.commit()
         session.refresh(ai_action)
+
+        # Increment user's quota usage
+        PermissionService.increment_usage(
+            session=session,
+            user=user,
+            action_type=action_type,
+            quota_cost=quota_cost
+        )
 
         logger.info(
             f"AI action created",

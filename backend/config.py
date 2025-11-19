@@ -165,7 +165,20 @@ class Settings:
         "your-secret-key-change-this-in-production"  # MUST be changed in production
     )
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_DAYS: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "30"))
+
+    # Phase 4.1: Security fix - Shorter access token lifetime
+    # Access tokens now default to 15 minutes for better security
+    # Use refresh tokens for longer sessions
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+
+    # Refresh token lifetime (7 days default)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+    # Legacy support - if ACCESS_TOKEN_EXPIRE_DAYS is set, use it (in minutes)
+    # This maintains backward compatibility
+    if os.getenv("ACCESS_TOKEN_EXPIRE_DAYS"):
+        legacy_days = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS"))
+        ACCESS_TOKEN_EXPIRE_MINUTES = legacy_days * 24 * 60
 
     # Redis and Celery Configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")

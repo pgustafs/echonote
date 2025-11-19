@@ -9,9 +9,11 @@ from datetime import datetime, date
 from enum import Enum
 from typing import Optional
 import uuid
+import re
 
 from sqlmodel import Field, Relationship, SQLModel, Column, Text
 from sqlalchemy import Column as SAColumn, Text as SAText
+from pydantic import validator
 
 
 class Priority(str, Enum):
@@ -65,10 +67,67 @@ class User(SQLModel, table=True):
 
 
 class UserCreate(SQLModel):
-    """Schema for user registration"""
+    """
+    Schema for user registration with enhanced validation.
+
+    Phase 4: Security Hardening - Password complexity and input validation
+    """
     username: str = Field(min_length=3, max_length=50)
     email: str
     password: str = Field(min_length=8, max_length=100)
+
+    @validator('password')
+    def validate_password_strength(cls, v):
+        """
+        Validate password complexity requirements.
+
+        Requirements:
+        - Minimum 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one digit
+
+        Raises:
+            ValueError: If password doesn't meet complexity requirements
+        """
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
+    @validator('email')
+    def validate_email_format(cls, v):
+        """
+        Validate email format using regex.
+
+        Ensures email follows standard format: user@domain.tld
+
+        Raises:
+            ValueError: If email format is invalid
+        """
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+
+    @validator('username')
+    def validate_username_format(cls, v):
+        """
+        Validate username contains only allowed characters.
+
+        Allowed: letters, numbers, hyphens, and underscores
+
+        Raises:
+            ValueError: If username contains invalid characters
+        """
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
+        return v
 
 
 class UserPublic(SQLModel):
@@ -92,9 +151,14 @@ class UserLogin(SQLModel):
 
 
 class Token(SQLModel):
-    """Schema for JWT token response"""
+    """
+    Schema for JWT token response.
+
+    Phase 4.1: Security fix - Added refresh_token support
+    """
     access_token: str
     token_type: str = "bearer"
+    refresh_token: Optional[str] = None  # Phase 4.1: Optional refresh token for extended sessions
 
 
 class TokenData(SQLModel):

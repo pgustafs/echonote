@@ -3,8 +3,11 @@
  */
 
 import { useState } from 'react'
-import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority } from '../api'
+import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, executeAIAction } from '../api'
 import { Priority, Transcription } from '../types'
+import AIActionsDrawer from './AIActionsDrawer'
+import AIResultModal from './AIResultModal'
+import type { AIAction, AIActionResponse } from '../types'
 
 interface TranscriptionListProps {
   transcriptions: Transcription[]
@@ -50,6 +53,14 @@ export default function TranscriptionList({
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
 
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
+  const [aiResultModalOpen, setAiResultModalOpen] = useState(false)
+  const [selectedTranscriptionId, setSelectedTranscriptionId] = useState<number | null>(null)
+  const [selectedAction, setSelectedAction] = useState<AIAction | null>(null)
+  const [aiResult, setAiResult] = useState<AIActionResponse | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id)
   }
@@ -94,6 +105,48 @@ export default function TranscriptionList({
     } finally {
       setDownloadingId(null)
     }
+  }
+
+  const handleOpenAIActions = (transcriptionId: number) => {
+    setSelectedTranscriptionId(transcriptionId)
+    setAiDrawerOpen(true)
+  }
+
+  const handleSelectAIAction = async (action: AIAction) => {
+    if (!selectedTranscriptionId) return
+
+    setSelectedAction(action)
+    setAiDrawerOpen(false)
+    setAiResultModalOpen(true)
+    setAiLoading(true)
+    setAiError(null)
+    setAiResult(null)
+
+    try {
+      const result = await executeAIAction(action.endpoint, {
+        transcription_id: selectedTranscriptionId,
+      })
+      setAiResult(result)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to execute AI action'
+      setAiError(errorMessage)
+      console.error('AI action error:', error)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleRegenerateAI = () => {
+    if (selectedAction) {
+      handleSelectAIAction(selectedAction)
+    }
+  }
+
+  const handleCloseAIResult = () => {
+    setAiResultModalOpen(false)
+    setSelectedAction(null)
+    setAiResult(null)
+    setAiError(null)
   }
 
   const formatDate = (dateString: string): string => {
@@ -613,7 +666,35 @@ export default function TranscriptionList({
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex justify-start gap-3 pt-2">
+                    <div className="flex justify-start gap-3 pt-2 flex-wrap">
+                      {/* AI Actions Button */}
+                      {status === 'completed' && transcription.text && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenAIActions(transcription.id)
+                          }}
+                          className="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center space-x-2 min-h-[44px]"
+                          style={{
+                            background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+                            color: 'white',
+                            boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.4)'
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)'
+                            e.currentTarget.style.transform = 'translateY(0)'
+                          }}
+                          title="Apply AI actions to this transcription"
+                        >
+                          <span className="text-lg">✨</span>
+                          <span>AI Actions</span>
+                        </button>
+                      )}
+
                       {/* Download Button */}
                       <button
                         onClick={(e) => {
@@ -696,6 +777,26 @@ export default function TranscriptionList({
         })}
         </div>
       )}
+
+      {/* AI Actions Drawer */}
+      <AIActionsDrawer
+        isOpen={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        onSelectAction={handleSelectAIAction}
+        isMobile={isMobile}
+      />
+
+      {/* AI Result Modal */}
+      <AIResultModal
+        isOpen={aiResultModalOpen}
+        onClose={handleCloseAIResult}
+        action={selectedAction}
+        result={aiResult}
+        isLoading={aiLoading}
+        error={aiError}
+        onRegenerate={handleRegenerateAI}
+        isMobile={isMobile}
+      />
     </div>
   )
 }

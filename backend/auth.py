@@ -3,9 +3,12 @@ Authentication utilities for EchoNote.
 
 This module provides JWT token generation/validation and password hashing
 using bcrypt and PyJWT.
+
+Phase 4.1: Security Fixes - Added JWT revocation support with JTI and blacklist checking
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -18,6 +21,7 @@ from sqlmodel import Session, select
 from backend.config import settings
 from backend.database import get_session
 from backend.models import TokenData, User
+from backend.services.token_blacklist_service import TokenBlacklistService
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -58,26 +62,41 @@ def get_password_hash(password: str) -> str:
     return hashed.decode('utf-8')
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None, token_type: str = "access") -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token with JTI for revocation support.
+
+    Phase 4.1: Security fix - Added JTI (JWT ID) for token revocation
+    Phase 4.1: Security fix - Shorter default lifetime (15 minutes)
 
     Args:
         data: Dictionary containing token data (typically {"sub": username})
         expires_delta: Optional expiration time delta
+        token_type: Type of token ("access" or "refresh")
 
     Returns:
-        str: Encoded JWT token
+        str: Encoded JWT token with JTI
     """
     to_encode = data.copy()
 
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        # Default expiration: 30 days
-        expire = datetime.utcnow() + timedelta(days=30)
+        # Phase 4.1: Shorter default expiration for access tokens
+        if token_type == "refresh":
+            expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({"exp": expire})
+    # Phase 4.1: Add JTI (JWT ID) for revocation support
+    jti = str(uuid.uuid4())
+    to_encode.update({
+        "exp": expire,
+        "jti": jti,  # Unique token identifier for blacklist tracking
+        "iat": datetime.utcnow().timestamp(),  # Issued at timestamp
+        "type": token_type  # Token type (access or refresh)
+    })
+
     encoded_jwt = jwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
@@ -90,6 +109,8 @@ def decode_access_token(token: str) -> TokenData:
     """
     Decode and validate a JWT access token.
 
+    Phase 4.1: Security fix - Added blacklist checking for revoked tokens
+
     Args:
         token: The JWT token to decode
 
@@ -97,7 +118,7 @@ def decode_access_token(token: str) -> TokenData:
         TokenData: The decoded token data
 
     Raises:
-        HTTPException: If token is invalid or expired
+        HTTPException: If token is invalid, expired, or revoked
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -106,6 +127,15 @@ def decode_access_token(token: str) -> TokenData:
     )
 
     try:
+        # Phase 4.1: Check if token is blacklisted (revoked)
+        if TokenBlacklistService.is_token_blacklisted(token):
+            logger.warning("Attempt to use blacklisted token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,

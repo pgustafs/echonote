@@ -8,9 +8,10 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlmodel import Session, select, func, and_
 from pydantic import BaseModel
+import jwt
 
 from backend.auth import (
     authenticate_user,
@@ -24,6 +25,10 @@ from backend.config import settings
 from backend.database import get_session
 from backend.models import Token, User, UserCreate, UserLogin, UserPublic, AIAction
 from backend.logging_config import get_logger, get_security_logger
+from backend.middleware.rate_limiter import auth_rate_limit, registration_rate_limit
+from backend.services.auth_security_service import AuthSecurityService
+from backend.services.token_blacklist_service import TokenBlacklistService
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = get_logger(__name__)
 security_logger = get_security_logger()
@@ -87,11 +92,20 @@ class ActionDetailResponse(BaseModel):
 
 
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-def register(user_data: UserCreate, session: Session = Depends(get_session)):
+@registration_rate_limit()
+def register(
+    request: Request,
+    response: Response,
+    user_data: UserCreate,
+    session: Session = Depends(get_session)
+):
     """
     Register a new user account.
 
+    **Rate Limit**: 3 registrations per hour per IP address
+
     Args:
+        request: FastAPI request object (for rate limiting)
         user_data: User registration data (username, email, password)
         session: Database session
 
@@ -103,18 +117,15 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
     """
     # Check if username already exists
     existing_user = get_user_by_username(session, user_data.username)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered"
-        )
 
     # Check if email already exists
     existing_email = get_user_by_email(session, user_data.email)
-    if existing_email:
+
+    # Phase 4.1: Security fix - Use generic message to prevent user enumeration
+    if existing_user or existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="User with this username or email already exists"
         )
 
     # Create new user
@@ -155,11 +166,20 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
 
 
 @router.post("/login", response_model=Token)
-def login(user_data: UserLogin, session: Session = Depends(get_session)):
+@auth_rate_limit()
+def login(
+    request: Request,
+    response: Response,
+    user_data: UserLogin,
+    session: Session = Depends(get_session)
+):
     """
     Login with username and password to get JWT token.
 
+    **Rate Limit**: 5 login attempts per 15 minutes per IP address
+
     Args:
+        request: FastAPI request object (for rate limiting)
         user_data: User login credentials (username, password)
         session: Database session
 
@@ -169,26 +189,63 @@ def login(user_data: UserLogin, session: Session = Depends(get_session)):
     Raises:
         HTTPException: If credentials are invalid
     """
+    # Phase 4: Security Hardening - Check if account is locked
+    is_locked, locked_until = AuthSecurityService.is_locked(user_data.username)
+    if is_locked:
+        lockout_message = AuthSecurityService.get_lockout_message(locked_until)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=lockout_message,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Authenticate user
     user = authenticate_user(session, user_data.username, user_data.password)
     if not user:
+        # Phase 4: Security Hardening - Record failed login attempt
+        attempts_remaining, locked_until = AuthSecurityService.record_failed_login(user_data.username)
+
         security_logger.warning(
             "Failed login attempt",
             extra={
                 "event_type": "login_failed",
                 "username": user_data.username,
+                "attempts_remaining": attempts_remaining
             }
         )
+
+        # Generate error message
+        if locked_until:
+            # Account just got locked
+            detail = AuthSecurityService.get_lockout_message(locked_until)
+        elif attempts_remaining > 0:
+            detail = f"Incorrect username or password. {attempts_remaining} attempt(s) remaining before temporary lockout."
+        else:
+            detail = "Incorrect username or password"
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create access token
-    access_token_expires = timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
+    # Phase 4: Security Hardening - Clear failed attempts on successful login
+    AuthSecurityService.clear_attempts(user_data.username)
+
+    # Phase 4.1: Security fix - Create access token (short-lived) and refresh token
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username},
-        expires_delta=access_token_expires
+        expires_delta=access_token_expires,
+        token_type="access"
+    )
+
+    # Create refresh token (long-lived)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=refresh_token_expires,
+        token_type="refresh"
     )
 
     logger.info(f"User logged in: {user.username}")
@@ -201,7 +258,167 @@ def login(user_data: UserLogin, session: Session = Depends(get_session)):
         }
     )
 
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=refresh_token
+    )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Logout and revoke current JWT token.
+
+    Phase 4.1: Security fix - JWT revocation support
+
+    This endpoint blacklists the current token, preventing further use.
+    The user will need to login again to get a new token.
+
+    Args:
+        credentials: Bearer token from Authorization header
+        current_user: Current authenticated user
+
+    Returns:
+        dict: Success message
+
+    Example:
+        ```bash
+        curl -X POST http://localhost:8000/api/auth/logout \
+          -H "Authorization: Bearer YOUR_TOKEN"
+        ```
+    """
+    token = credentials.credentials
+
+    # Blacklist the current token
+    success = TokenBlacklistService.blacklist_token(token, reason="logout")
+
+    if success:
+        security_logger.info(
+            f"User logged out: {current_user.username}",
+            extra={
+                "event_type": "logout",
+                "user_id": current_user.id,
+                "username": current_user.username
+            }
+        )
+        return {"message": "Successfully logged out"}
+    else:
+        # Failed to blacklist (Redis error), but don't fail the request
+        security_logger.warning(
+            f"Logout succeeded but token blacklist failed for {current_user.username}",
+            extra={
+                "event_type": "logout_blacklist_failed",
+                "user_id": current_user.id,
+                "username": current_user.username
+            }
+        )
+        return {"message": "Successfully logged out", "warning": "Token revocation unavailable"}
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    session: Session = Depends(get_session)
+):
+    """
+    Refresh an access token using a refresh token.
+
+    Phase 4.1: Security fix - Refresh token support for extended sessions
+
+    This endpoint accepts a refresh token and returns a new access token.
+    The refresh token must be valid and not blacklisted.
+
+    Args:
+        credentials: Bearer token (refresh token) from Authorization header
+        session: Database session
+
+    Returns:
+        Token: New access token and same refresh token
+
+    Raises:
+        HTTPException: If refresh token is invalid, expired, or revoked
+
+    Example:
+        ```bash
+        curl -X POST http://localhost:8000/api/auth/refresh \
+          -H "Authorization: Bearer YOUR_REFRESH_TOKEN"
+        ```
+    """
+    from backend.auth import decode_access_token, get_user_by_username
+
+    refresh_token = credentials.credentials
+
+    try:
+        # Decode and validate refresh token
+        token_data = decode_access_token(refresh_token)
+
+        # Verify this is actually a refresh token
+        payload = jwt.decode(
+            refresh_token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_exp": False}  # We'll check blacklist regardless of expiry
+        )
+
+        if payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type. Expected refresh token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Get user from database
+        user = get_user_by_username(session, token_data.username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Inactive user"
+            )
+
+        # Create new access token (short-lived)
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.username},
+            expires_delta=access_token_expires,
+            token_type="access"
+        )
+
+        security_logger.info(
+            f"Access token refreshed for user: {user.username}",
+            extra={
+                "event_type": "token_refreshed",
+                "user_id": user.id,
+                "username": user.username
+            }
+        )
+
+        # Return new access token, keep same refresh token
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            refresh_token=refresh_token
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 @router.get("/me", response_model=UserPublic)
