@@ -11,6 +11,7 @@ COPY requirements.txt .
 # Install dependencies (no --user flag needed for venv-based images)
 RUN pip install --no-cache-dir -r requirements.txt
 
+
 # Stage 2: Runtime image
 # Use RHEL10 Python 3.12 minimal base image
 FROM registry.access.redhat.com/ubi10/python-312-minimal:latest
@@ -47,32 +48,31 @@ RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.
 RUN dnf install -y ffmpeg && \
     dnf clean all && rm -rf /var/cache/dnf /var/tmp/*
 
-# Create directory for application and set ownership
-RUN mkdir -p /opt/app-root/src/backend && \
-    chown -R 1001:0 /opt/app-root/src && \
-    chmod -R g=u /opt/app-root/src
+# Create base directories for application
+RUN mkdir -p /opt/app-root/src/backend /opt/app-root/src/data
+
+# Copy Python dependencies from builder stage (entire venv)
+COPY --from=builder /opt/app-root /opt/app-root
+
+# Copy backend application code (build context is backend/)
+COPY . /opt/app-root/src/backend/
+
+# Copy entrypoint script
+COPY entrypoint.sh /opt/app-root/src/entrypoint.sh
+
+# ---- OpenShift permissions fix (MUST be after COPY) ----
+# Make everything readable/writable by group 0 for random UID support
+RUN chown -R 1001:0 /opt/app-root/src /opt/app-root && \
+    chgrp -R 0 /opt/app-root/src /opt/app-root && \
+    chmod -R g=u /opt/app-root/src /opt/app-root && \
+    chmod +x /opt/app-root/src/entrypoint.sh
+# ------------------------------------------------------
 
 # Switch back to non-root user (Red Hat best practice)
 USER 1001
 
 # Set working directory
 WORKDIR /opt/app-root/src
-
-# Copy Python dependencies from builder stage (entire venv)
-COPY --from=builder --chown=1001:0 /opt/app-root /opt/app-root
-
-# Copy backend application code (build context is backend/)
-COPY --chown=1001:0 . ./backend/
-
-# Copy and make entrypoint script executable
-COPY --chown=1001:0 entrypoint.sh ./
-USER 0
-RUN chmod +x /opt/app-root/src/entrypoint.sh
-USER 1001
-
-# Create directory for SQLite database with proper permissions
-RUN mkdir -p /opt/app-root/src/data && \
-    chmod -R g=u /opt/app-root/src/data
 
 # Expose port
 EXPOSE 8000

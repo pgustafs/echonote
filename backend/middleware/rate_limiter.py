@@ -19,6 +19,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from backend.config import settings
 
 
 def get_user_identifier(request: Request) -> str:
@@ -43,9 +44,11 @@ def get_user_identifier(request: Request) -> str:
 
 
 # Initialize rate limiter with Redis backend
+# Use database 2 to avoid conflicts with Celery (db 0 and 1) and token blacklist (db 3)
+rate_limit_redis_url = settings.REDIS_URL.rsplit('/', 1)[0] + '/2'
 limiter = Limiter(
     key_func=get_user_identifier,
-    storage_uri=os.getenv("RATE_LIMIT_REDIS_URL", "redis://localhost:6379/2"),
+    storage_uri=rate_limit_redis_url,
     default_limits=[os.getenv("DEFAULT_RATE_LIMIT", "100/minute")],
     headers_enabled=True,  # Include rate limit info in response headers
 )
