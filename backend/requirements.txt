@@ -40,3 +40,6 @@ flower==2.0.1  # Celery monitoring UI (optional)
 
 # Logging
 python-json-logger==2.0.7  # Structured JSON logging
+
+# AI Actions (LlamaStack)
+llama-stack-client

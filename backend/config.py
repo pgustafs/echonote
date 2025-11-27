@@ -189,5 +189,10 @@ class Settings:
     CHUNK_DURATION_SECONDS: int = int(os.getenv("CHUNK_DURATION_SECONDS", "60"))  # 60-second chunks
     MAX_AUDIO_DURATION_SECONDS: int = int(os.getenv("MAX_AUDIO_DURATION_SECONDS", "3600"))  # 1 hour max
 
+    # LlamaStack Configuration (AI Actions)
+    LLAMA_SERVER_URL: str = os.getenv("LLAMA_SERVER_URL", "")
+    LLAMA_MODEL_NAME: str = os.getenv("LLAMA_MODEL_NAME", "")
+    LLAMA_STACK_CLIENT_API_KEY: str = os.getenv("LLAMA_STACK_CLIENT_API_KEY", "fake")
+
 
 settings = Settings()

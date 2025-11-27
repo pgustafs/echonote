@@ -18,6 +18,8 @@ from sqlmodel import Session, select, func
 from backend.models import AIAction, AIActionPublic, Transcription, User
 from backend.logging_config import get_logger
 from backend.services.permission_service import PermissionService
+from backend.services.llama_agent_service import LlamaAgentService
+from backend.services.ai_action_prompts import get_prompts
 
 logger = get_logger(__name__)
 
@@ -83,6 +85,117 @@ class AIActionService:
         )
 
         return ai_action
+
+    @staticmethod
+    async def execute_ai_action(
+        session: Session,
+        ai_action: AIAction,
+        transcription: Transcription,
+        user: User
+    ) -> AIAction:
+        """
+        Execute an AI action using LlamaStack agent.
+
+        This method:
+        1. Gets the appropriate prompts for the action type
+        2. Creates a LlamaAgent instance with proper context
+        3. Executes the action asynchronously
+        4. Updates the AIAction record with the result
+
+        Args:
+            session: Database session
+            ai_action: The AI action record to execute
+            transcription: The transcription to process
+            user: The user requesting the action
+
+        Returns:
+            AIAction: Updated action record with result
+
+        Raises:
+            Exception: If LlamaStack is not configured or execution fails
+        """
+        try:
+            # Get system and user prompts for this action type
+            system_prompt, user_prompt = get_prompts(
+                ai_action.action_type,
+                transcription.text or ""
+            )
+
+            # Create LlamaAgent service with proper context for auditing
+            agent_service = LlamaAgentService(
+                user_id=user.id,
+                transcription_id=transcription.id,
+                action_type=ai_action.action_type
+            )
+
+            logger.info(
+                f"Executing AI action",
+                extra={
+                    "action_id": ai_action.action_id,
+                    "user_id": user.id,
+                    "transcription_id": transcription.id,
+                    "action_type": ai_action.action_type
+                }
+            )
+
+            # Execute the AI action asynchronously
+            result_text = await agent_service.run(system_prompt, user_prompt)
+
+            # Update the AI action record with the result
+            ai_action.status = "completed"
+            ai_action.result_data = json.dumps({"text": result_text})
+            ai_action.completed_at = datetime.utcnow()
+            ai_action.error_message = None
+
+            session.add(ai_action)
+            session.commit()
+            session.refresh(ai_action)
+
+            logger.info(
+                f"AI action completed successfully",
+                extra={
+                    "action_id": ai_action.action_id,
+                    "user_id": user.id,
+                    "result_length": len(result_text)
+                }
+            )
+
+            return ai_action
+
+        except ValueError as e:
+            # Unsupported action type or invalid configuration
+            logger.error(
+                f"AI action configuration error: {e}",
+                extra={
+                    "action_id": ai_action.action_id,
+                    "action_type": ai_action.action_type
+                }
+            )
+            ai_action.status = "failed"
+            ai_action.error_message = str(e)
+            ai_action.completed_at = datetime.utcnow()
+            session.add(ai_action)
+            session.commit()
+            session.refresh(ai_action)
+            raise
+
+        except Exception as e:
+            # Execution failed
+            logger.error(
+                f"AI action execution failed: {e}",
+                extra={
+                    "action_id": ai_action.action_id,
+                    "action_type": ai_action.action_type,
+                    "error": str(e)
+                }
+            )
+            ai_action.status = "failed"
+            ai_action.error_message = str(e)
+            ai_action.completed_at = datetime.utcnow()
+            session.add(ai_action)
+            session.commit()
+            session.refresh(ai_action)
+            raise
 
     @staticmethod
     def get_user_actions(

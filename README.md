@@ -184,31 +184,35 @@ EchoNote provides 18 AI-powered action endpoints to transform, analyze, and enha
 }
 ```
 
-**Response Format** (Phase 2 - work in progress):
+**Response Format**:
 ```json
 {
   "action_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "work_in_progress",
-  "message": "endpoint analyze - work in progress to implement this functionality\n\nTranscription text: [full transcription text here]",
+  "status": "completed",
+  "message": "## Summary\n\nKey points from the meeting...\n\n## Action Items\n\n- [ ] Follow up with client\n- [ ] Review proposal draft\n\n## Next Steps\n\n1. Schedule follow-up meeting\n2. Prepare presentation",
   "quota_remaining": 99,
   "quota_reset_date": "2025-11-19",
-  "result": null,
+  "result": {
+    "text": "## Summary\n\nKey points from the meeting...",
+    "action_type": "analyze",
+    "processing_duration_ms": 2340
+  },
   "error": null,
   "created_at": "2025-11-18T08:00:00",
-  "completed_at": null
+  "completed_at": "2025-11-18T08:00:02"
 }
 ```
 
 **Response includes:**
 - `action_id`: Unique UUID for tracking this AI action
-- `status`: Current status (work_in_progress, completed, failed)
-- `message`: Status message including the transcription text for verification
+- `status`: Current status (completed, failed, or processing)
+- `message`: AI-generated result text from LlamaStack
 - `quota_remaining`: How many actions the user has left today
 - `quota_reset_date`: When quota resets (midnight UTC)
-- `result`: AI-generated result (null in Phase 2)
+- `result`: Structured result data with text, action type, and processing duration
 - `error`: Error message if failed (null if successful)
 - `created_at`: When action was initiated
-- `completed_at`: When action completed (null if still processing)
+- `completed_at`: When action completed
 
 ### Usage Examples
 
@@ -254,6 +258,73 @@ curl -X POST "http://localhost:8000/api/v1/actions/voice/clean-filler-words" \
   -H "Content-Type: application/json" \
   -d "{\"transcription_id\": $TRANSCRIPTION_ID, \"options\": {\"aggressiveness\": \"moderate\"}}" | python3 -m json.tool
 ```
+
+### LlamaStack Configuration
+
+EchoNote's AI Actions are powered by **LlamaStack**, a unified interface for running AI models. All 18 AI action endpoints use the LlamaStack Agent API to process transcriptions.
+
+**Required Environment Variables:**
+
+```bash
+# LlamaStack server URL (required)
+LLAMA_SERVER_URL=http://localhost:5001
+
+# Model to use for AI actions (required)
+# Example: meta-llama/Llama-3.2-3B-Instruct
+LLAMA_MODEL_NAME=meta-llama/Llama-3.2-3B-Instruct
+
+# API key for LlamaStack client (optional)
+# Set to "fake" for local development without authentication
+LLAMA_STACK_CLIENT_API_KEY=fake
+```
+
+**LlamaStack Server Setup:**
+
+1. **Install LlamaStack** (if not already installed):
+   ```bash
+   pip install llama-stack-client
+   ```
+
+2. **Run LlamaStack Server**:
+   - Follow the [LlamaStack documentation](https://github.com/meta-llama/llama-stack) to set up and run your LlamaStack server
+   - Ensure the server is running and accessible at the URL specified in `LLAMA_SERVER_URL`
+   - Configure your preferred model (e.g., Llama 3.2, Llama 3.1, etc.)
+
+3. **Verify Configuration**:
+   ```bash
+   # Test LlamaStack connectivity
+   curl http://localhost:5001/health
+
+   # Check model availability
+   curl http://localhost:5001/models
+   ```
+
+**How It Works:**
+
+1. User requests an AI action (e.g., `/api/v1/actions/analyze`)
+2. Backend creates a new LlamaStack Agent instance with action-specific system prompt
+3. Agent processes the transcription text using the configured model
+4. Result is returned to the user with quota information
+
+**Architecture:**
+
+- `backend/services/llama_agent_service.py` - LlamaStack Agent wrapper
+- `backend/services/ai_action_service.py` - AI action orchestration
+- `backend/services/ai_action_prompts.py` - System prompts for each action type
+
+**Per-Request Isolation:**
+
+Each AI action creates a new Agent instance with:
+- Unique session ID for auditing
+- User ID and transcription ID tracking
+- Action-specific system instructions
+- Clean session state (no cross-contamination)
+
+**Performance Notes:**
+
+- Agent uses synchronous LlamaStack client wrapped in `asyncio.to_thread()` for async compatibility
+- Maintains FastAPI async performance while using sync LlamaStack API
+- No streaming support (uses `stream=False` for direct responses)
 
 ### Quota Enforcement
 
@@ -307,27 +378,37 @@ CREATE INDEX idx_ai_actions_created_at ON ai_actions(created_at);
 
 ### Architecture
 
-**Service Layer** (`backend/services/ai_action_service.py`):
-- `create_action_record()` - Create AI action with UUID
-- `get_user_actions()` - Paginated list with filters
-- `get_action_by_id()` - Retrieve with ownership verification
-- `verify_transcription_access()` - Check user owns transcription
-- `get_action_statistics()` - Usage stats by type and time period
+**Service Layer**:
+- `backend/services/ai_action_service.py` - AI action orchestration
+  - `create_action_record()` - Create AI action with UUID
+  - `execute_ai_action()` - Execute AI using LlamaStack Agent
+  - `get_user_actions()` - Paginated list with filters
+  - `get_action_by_id()` - Retrieve with ownership verification
+  - `verify_transcription_access()` - Check user owns transcription
+  - `get_action_statistics()` - Usage stats by type and time period
+- `backend/services/llama_agent_service.py` - LlamaStack Agent wrapper
+  - Per-request Agent instances for isolation
+  - Synchronous Agent API wrapped in async context
+  - Session management and auditing
+- `backend/services/ai_action_prompts.py` - System prompts for all 18 action types
 
 **Router** (`backend/routers/actions.py`):
 - All 18 endpoints with standardized structure
 - Quota enforcement via decorators
 - Permission verification (user must own transcription)
 - Standardized error handling
-- Returns transcription text in response for verification
+- Returns actual AI-generated results with quota information
 
-**Current Status (Phase 2):**
+**Current Status (Phase 2 - Complete):**
 - ✅ Database schema implemented
 - ✅ Service layer complete
 - ✅ All 18 endpoints functional
+- ✅ LlamaStack integration complete
+- ✅ Actual AI processing (no longer dummy responses)
 - ✅ Quota enforcement active
 - ✅ Permission checks working
-- ✅ Returns dummy responses with transcription text
+- ✅ Per-request Agent isolation
+- ✅ Comprehensive error handling
 - ✅ Phase 3 supporting infrastructure complete
 
 **Testing:**
@@ -1408,6 +1489,14 @@ JWT_SECRET_KEY=your-secret-key-change-this-in-production-use-openssl-rand-hex-32
 JWT_ALGORITHM=HS256
 # Token expiration in days (default: 30)
 ACCESS_TOKEN_EXPIRE_DAYS=30
+
+# LlamaStack Configuration (AI Actions)
+# LlamaStack server URL for AI actions
+LLAMA_SERVER_URL=http://localhost:5001
+# Model name to use for AI actions (e.g., meta-llama/Llama-3.2-3B-Instruct)
+LLAMA_MODEL_NAME=meta-llama/Llama-3.2-3B-Instruct
+# API key for LlamaStack client (set to "fake" for local development)
+LLAMA_STACK_CLIENT_API_KEY=fake
 ```
 
 ### Database Configuration

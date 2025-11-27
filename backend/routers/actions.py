@@ -11,6 +11,7 @@ This router provides 18 AI action endpoints across 5 categories:
 All endpoints return standardized "work in progress" responses until implemented.
 """
 
+import json
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlmodel import Session
@@ -103,7 +104,7 @@ async def analyze_transcription(
     - `options.detail_level`: Level of detail ("brief", "concise", "detailed")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated analysis with quota information
     """
     # Verify transcription exists and user owns it
     transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
@@ -118,7 +119,29 @@ async def analyze_transcription(
         quota_cost=1
     )
 
-    return create_dummy_response("analyze", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action asynchronously
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    # Calculate quota remaining
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    # Return response with actual result
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 # ============================================================================
@@ -129,7 +152,7 @@ async def analyze_transcription(
 @require_quota(cost=2)
 @track_usage(action_type="create/linkedin-post")
 async def create_linkedin_post(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -145,27 +168,47 @@ async def create_linkedin_post(
     - `options.max_length`: Maximum length in characters (default: 3000)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated LinkedIn post with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
-        action_type="create/linkedin-post",
-        request_params=request.options,
+        transcription_id=action_request.transcription_id,
+        action_type="create-linkedin-post",
+        request_params=action_request.options,
         quota_cost=2
     )
 
-    return create_dummy_response("create/linkedin-post", ai_action.action_id, current_user, 2, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/create/email-draft", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=2)
 @track_usage(action_type="create/email-draft")
 async def create_email_draft(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -181,27 +224,47 @@ async def create_email_draft(
     - `options.recipient_context`: Optional context about the recipient
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated email draft with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="create/email-draft",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=2
     )
 
-    return create_dummy_response("create/email-draft", ai_action.action_id, current_user, 2, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/create/blog-post", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=2)
 @track_usage(action_type="create/blog-post")
 async def create_blog_post(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -217,27 +280,47 @@ async def create_blog_post(
     - `options.target_length`: Target length ("short", "medium", "long")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated blog post with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="create/blog-post",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=2
     )
 
-    return create_dummy_response("create/blog-post", ai_action.action_id, current_user, 2, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/create/social-media-caption", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=2)
 @track_usage(action_type="create/social-media-caption")
 async def create_social_media_caption(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -254,20 +337,40 @@ async def create_social_media_caption(
     - `options.max_length`: Maximum length in characters
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated social media caption with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="create/social-media-caption",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=2
     )
 
-    return create_dummy_response("create/social-media-caption", ai_action.action_id, current_user, 2, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 # ============================================================================
@@ -278,7 +381,7 @@ async def create_social_media_caption(
 @require_quota(cost=1)
 @track_usage(action_type="improve/summarize")
 async def summarize_transcription(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -293,27 +396,47 @@ async def summarize_transcription(
     - `options.format`: Output format ("paragraph", "bullets")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated summary with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/summarize",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/summarize", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/summarize-bullets", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/summarize-bullets")
 async def summarize_bullets(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -328,27 +451,47 @@ async def summarize_bullets(
     - `options.detail_level`: Detail level ("concise", "detailed")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated bullet-point summary with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/summarize-bullets",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/summarize-bullets", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/rewrite-formal", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/rewrite-formal")
 async def rewrite_formal(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -362,27 +505,47 @@ async def rewrite_formal(
     - `options.preserve_structure`: Whether to preserve original structure (boolean)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated formal rewrite with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/rewrite-formal",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/rewrite-formal", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/rewrite-friendly", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/rewrite-friendly")
 async def rewrite_friendly(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -396,27 +559,47 @@ async def rewrite_friendly(
     - `options.preserve_structure`: Whether to preserve original structure (boolean)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated friendly rewrite with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/rewrite-friendly",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/rewrite-friendly", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/rewrite-simple", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/rewrite-simple")
 async def rewrite_simple(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -430,27 +613,47 @@ async def rewrite_simple(
     - `options.reading_level`: Target reading level (e.g., "grade_8")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated simplified text with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/rewrite-simple",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/rewrite-simple", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/expand", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/expand")
 async def expand_transcription(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -464,27 +667,47 @@ async def expand_transcription(
     - `options.expansion_factor`: How much to expand (1.2 - 2.0)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated expanded text with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/expand",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/expand", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/improve/shorten", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="improve/shorten")
 async def shorten_transcription(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -498,20 +721,40 @@ async def shorten_transcription(
     - `options.target_reduction`: Target reduction (0.3 - 0.7, where 0.5 = 50% of original)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated shortened text with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="improve/shorten",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("improve/shorten", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 # ============================================================================
@@ -522,7 +765,7 @@ async def shorten_transcription(
 @require_quota(cost=1)
 @track_usage(action_type="translate/to-english")
 async def translate_to_english(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -536,27 +779,47 @@ async def translate_to_english(
     - `options.preserve_formatting`: Whether to preserve original formatting (boolean)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated English translation with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="translate/to-english",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("translate/to-english", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/translate/to-swedish", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="translate/to-swedish")
 async def translate_to_swedish(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -571,27 +834,47 @@ async def translate_to_swedish(
     - `options.variant`: Swedish variant ("sweden", "finland")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated Swedish translation with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="translate/to-swedish",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("translate/to-swedish", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/translate/to-czech", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="translate/to-czech")
 async def translate_to_czech(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -605,20 +888,40 @@ async def translate_to_czech(
     - `options.preserve_formatting`: Whether to preserve original formatting (boolean)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated Czech translation with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="translate/to-czech",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("translate/to-czech", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 # ============================================================================
@@ -629,7 +932,7 @@ async def translate_to_czech(
 @require_quota(cost=1)
 @track_usage(action_type="voice/clean-filler-words")
 async def clean_filler_words(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -643,27 +946,47 @@ async def clean_filler_words(
     - `options.aggressiveness`: How aggressively to remove fillers ("light", "moderate", "aggressive")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated text with filler words removed and quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="voice/clean-filler-words",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("voice/clean-filler-words", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/voice/fix-grammar", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="voice/fix-grammar")
 async def fix_grammar(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -677,27 +1000,47 @@ async def fix_grammar(
     - `options.preserve_style`: Whether to preserve speaking style (boolean)
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated grammatically corrected text with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="voice/fix-grammar",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("voice/fix-grammar", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
 
 
 @router.post("/voice/convert-spoken-to-written", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
 @require_quota(cost=1)
 @track_usage(action_type="voice/convert-spoken-to-written")
 async def convert_spoken_to_written(
-    request: AIActionRequest,
+    action_request: AIActionRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -711,17 +1054,37 @@ async def convert_spoken_to_written(
     - `options.formality`: Formality level ("casual", "medium", "formal")
 
     **Returns:**
-    - Work-in-progress response with action ID and quota information
+    - Actual AI-generated written prose with quota information
     """
-    transcription = AIActionService.verify_transcription_access(session, request.transcription_id, current_user)
+    transcription = AIActionService.verify_transcription_access(session, action_request.transcription_id, current_user)
 
     ai_action = AIActionService.create_action_record(
         session=session,
         user=current_user,
-        transcription_id=request.transcription_id,
+        transcription_id=action_request.transcription_id,
         action_type="voice/convert-spoken-to-written",
-        request_params=request.options,
+        request_params=action_request.options,
         quota_cost=1
     )
 
-    return create_dummy_response("voice/convert-spoken-to-written", ai_action.action_id, current_user, 1, transcription.text or "")
+    # Execute AI action
+    ai_action = await AIActionService.execute_ai_action(
+        session=session,
+        ai_action=ai_action,
+        transcription=transcription,
+        user=current_user
+    )
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at
+    )
