@@ -20,20 +20,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Make transcription_id nullable to support chat and improve actions without transcription context
-    op.alter_column(
-        'ai_actions',
-        'transcription_id',
-        existing_type=sa.INTEGER(),
-        nullable=True
-    )
+    # Use batch_alter_table for SQLite compatibility (SQLite doesn't support ALTER COLUMN directly)
+    with op.batch_alter_table('ai_actions', schema=None) as batch_op:
+        batch_op.alter_column(
+            'transcription_id',
+            existing_type=sa.INTEGER(),
+            nullable=True
+        )
 
 
 def downgrade() -> None:
     # Revert: make transcription_id not nullable
     # Note: This will fail if there are NULL values in the column
-    op.alter_column(
-        'ai_actions',
-        'transcription_id',
-        existing_type=sa.INTEGER(),
-        nullable=False
-    )
+    with op.batch_alter_table('ai_actions', schema=None) as batch_op:
+        batch_op.alter_column(
+            'transcription_id',
+            existing_type=sa.INTEGER(),
+            nullable=False
+        )
