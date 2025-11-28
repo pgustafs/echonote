@@ -310,7 +310,13 @@ class AIAction(SQLModel, table=True):
 
     # Foreign Keys
     user_id: int = Field(foreign_key="users.id", index=True, description="User who requested this action")
-    transcription_id: int = Field(foreign_key="transcriptions.id", index=True, description="Transcription this action operates on")
+    transcription_id: Optional[int] = Field(
+        default=None,
+        foreign_key="transcriptions.id",
+        index=True,
+        nullable=True,
+        description="Transcription this action operates on (optional for chat and improve actions)"
+    )
 
     # Action Details
     action_type: str = Field(
@@ -368,6 +374,36 @@ class AIActionRequest(SQLModel):
     options: dict = Field(default_factory=dict, description="Action-specific options")
 
 
+class ImproveActionRequest(SQLModel):
+    """Request to improve a previous AI action result with additional instructions"""
+    session_id: str = Field(description="LlamaStack session ID from the original action")
+    instructions: str = Field(min_length=1, description="How to improve the result (e.g., 'make it shorter')")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "abc-123-def-456",
+                "instructions": "Make it shorter and more professional"
+            }
+        }
+
+
+class ChatRequest(SQLModel):
+    """Request for chat with AI model"""
+    message: str = Field(min_length=1, description="Your message to the AI")
+    session_id: Optional[str] = Field(default=None, description="Continue existing conversation (optional)")
+    transcription_id: Optional[int] = Field(default=None, gt=0, description="Chat about specific transcription (optional)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Can you help me write a professional email?",
+                "session_id": None,
+                "transcription_id": None
+            }
+        }
+
+
 class AIActionResponse(SQLModel):
     """Base schema for AI action responses"""
     action_id: str = Field(description="Unique identifier for this action")
@@ -379,6 +415,7 @@ class AIActionResponse(SQLModel):
     error: Optional[str] = Field(default=None, description="Error message if failed")
     created_at: datetime = Field(description="When the action was created")
     completed_at: Optional[datetime] = Field(default=None, description="When the action was completed")
+    session_id: Optional[str] = Field(default=None, description="LlamaStack session ID for conversation continuity")
 
 
 class AIActionPublic(SQLModel):

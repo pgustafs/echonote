@@ -12,6 +12,9 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 ⚡ **Background Processing** - Async transcription with Celery and Redis for responsive UX and progress tracking
 🔄 **Real-time Updates** - Live status updates and progress bars without page refresh
 👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
+🧠 **AI Actions (18 endpoints)** - Transform transcriptions with analyze, create, improve, translate, and voice utilities powered by LlamaStack
+💬 **AI Chat** - Multi-turn conversations with the AI model with transcription context support
+✨ **Improve Results** - Iteratively refine AI-generated content with session-based improvements
 💾 **Persistent Storage** - Audio files and transcriptions stored in database with user ownership
 🎵 **Audio Playback** - Listen to your recordings with built-in player
 📥 **Download Package** - Download transcriptions as ZIP with WAV audio and config.json
@@ -341,6 +344,218 @@ All AI action endpoints:
 - Improve (summarize, rewrite, expand, shorten): 1 action each
 - Translate: 1 action each
 - Voice utilities: 1 action each
+
+### AI Chat & Session-Based Improvements
+
+In addition to the 18 AI action endpoints, EchoNote provides multi-turn conversation capabilities and session-based result improvement.
+
+#### AI Chat Endpoint
+
+**Endpoint**: `POST /api/v1/actions/chat`
+
+Free-form chat interface with the AI model, supporting multi-turn conversations with optional transcription context.
+
+**Request Body**:
+```json
+{
+  "message": "Can you help me write a professional email?",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcription_id": 123
+}
+```
+
+**Parameters**:
+- `message` (required): Your chat message or question
+- `session_id` (optional): Session ID from a previous chat response to continue the conversation
+- `transcription_id` (optional): Include a transcription for context-aware responses
+
+**Response**:
+```json
+{
+  "action_id": "660e9511-f39c-52e5-b827-557766551111",
+  "status": "completed",
+  "message": "I'd be happy to help! To write a professional email, I'll need...",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "quota_remaining": 98,
+  "quota_reset_date": "2025-11-19"
+}
+```
+
+**Multi-turn Conversation Example**:
+```bash
+# First message (creates new session)
+curl -X POST "http://localhost:8000/api/v1/actions/chat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Help me write a LinkedIn post about AI"}'
+
+# Response includes session_id: "abc-123"
+
+# Follow-up message (continues conversation)
+curl -X POST "http://localhost:8000/api/v1/actions/chat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Make it shorter and more engaging", "session_id": "abc-123"}'
+
+# The AI remembers the previous context and refines the LinkedIn post
+```
+
+**Usage Patterns**:
+- **General Help**: Ask questions without transcription context
+- **Transcription Analysis**: Provide `transcription_id` for context-aware responses
+- **Multi-turn Refinement**: Use `session_id` to maintain conversation history
+- **Writing Assistance**: Iteratively improve content through multiple exchanges
+
+**Quota Cost**: 1 action per message
+
+#### Improve AI Action Endpoint
+
+**Endpoint**: `POST /api/v1/actions/improve/{action_id}`
+
+Refine or improve the result from a previous AI action using the same session context.
+
+**Request Body**:
+```json
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "instructions": "Make it shorter and more professional"
+}
+```
+
+**Parameters**:
+- `action_id` (path): The ID of the original AI action you want to improve
+- `session_id` (required): Session ID from the original action response
+- `instructions` (required): Your improvement instructions
+
+**Response**:
+```json
+{
+  "action_id": "770f0622-g40d-63f6-c938-668877662222",
+  "status": "completed",
+  "message": "[Improved version of the original result based on your instructions]",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "quota_remaining": 97,
+  "quota_reset_date": "2025-11-19"
+}
+```
+
+**Example Workflow**:
+```bash
+# 1. Create a LinkedIn post
+RESPONSE=$(curl -X POST "http://localhost:8000/api/v1/actions/create/linkedin-post" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"transcription_id": 123}')
+
+# Extract action_id and session_id from response
+ACTION_ID=$(echo $RESPONSE | jq -r '.action_id')
+SESSION_ID=$(echo $RESPONSE | jq -r '.session_id')
+
+# 2. Improve the result
+curl -X POST "http://localhost:8000/api/v1/actions/improve/$ACTION_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"session_id\": \"$SESSION_ID\", \"instructions\": \"Add more hashtags and make it more engaging\"}"
+
+# 3. Further refinement (using same session)
+curl -X POST "http://localhost:8000/api/v1/actions/improve/$ACTION_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"session_id\": \"$SESSION_ID\", \"instructions\": \"Make it shorter, max 280 characters\"}"
+```
+
+**Common Use Cases**:
+- **Tone Adjustment**: "Make it more formal" or "Use a friendlier tone"
+- **Length Control**: "Make it shorter" or "Expand with more details"
+- **Style Changes**: "Add bullet points" or "Use more professional language"
+- **Content Refinement**: "Add more examples" or "Remove technical jargon"
+
+**Quota Cost**: 1 action per improvement
+
+#### Session Cleanup Endpoint
+
+**Endpoint**: `DELETE /api/v1/actions/sessions/{session_id}`
+
+Cleanup a LlamaStack session when no longer needed. This is a best-effort operation that helps free server resources.
+
+**Response**: `204 No Content`
+
+**Example**:
+```bash
+curl -X DELETE "http://localhost:8000/api/v1/actions/sessions/$SESSION_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Note**: Session cleanup is automatic in the frontend when modals are closed. Manual cleanup is rarely needed but available for advanced use cases.
+
+#### Session Management
+
+**How Sessions Work**:
+
+1. **Session Creation**: When you call an AI action endpoint, LlamaStack creates a new session with a unique ID
+2. **Session Reuse**: Pass the `session_id` to subsequent requests to maintain conversation context
+3. **Session Context**: The AI model remembers previous messages and results within the same session
+4. **Session Lifecycle**: Sessions are ephemeral and tied to the UI component lifecycle (modal open/close)
+
+**Frontend Session Management**:
+
+The frontend automatically manages sessions for you:
+
+- **AI Result Modal**:
+  - Creates session when displaying AI action result
+  - Stores `session_id` in component state
+  - Passes `session_id` when you click "Improve Result"
+  - Automatically cleans up session when you close the modal
+
+- **AI Chat Component**:
+  - Creates session on first message
+  - Maintains `session_id` throughout conversation
+  - Passes `session_id` for each follow-up message
+  - Automatically cleans up when you close the chat or clear conversation
+
+**Session Cleanup**:
+
+Sessions are automatically cleaned up in these scenarios:
+- User closes the AI result modal
+- User closes the AI chat
+- User clears the chat conversation
+- Component unmounts
+
+Cleanup is best-effort and doesn't block the UI. If cleanup fails, it's logged but doesn't affect the user experience.
+
+**Technical Details**:
+
+- Sessions are managed by LlamaStack on the server side
+- Each session maintains conversation history and context
+- Session IDs are UUID v4 strings
+- Sessions persist until explicitly cleaned up or the LlamaStack server is restarted
+- Multiple concurrent sessions are supported (different modals/chats can have different sessions)
+
+#### Frontend Access
+
+**AI Chat** - Multi-turn conversations with the AI model:
+- **Mobile**: Tap "AI Chat" button in the bottom navigation bar
+- **Desktop**: Click the purple chat bubble button (bottom-right corner)
+
+**Features**:
+- Free-form conversation with the AI
+- Optional transcription context (chat about a specific recording)
+- Multi-turn conversations with memory
+- Clear chat to start fresh
+- Quota tracking in the header
+
+**Improve AI Action** - Refine any AI action result:
+1. Generate an AI action result (e.g., create LinkedIn post, summarize, etc.)
+2. In the result modal, click "Improve Result" button
+3. Enter your improvement instructions (e.g., "make it shorter")
+4. Click "Apply Improvement"
+5. The AI refines the result based on your instructions
+
+**Features**:
+- Maintains context from original result
+- Can improve multiple times in succession
+- Real-time loading feedback with spinner overlay
+- Shows "Improving your result..." while processing
 
 ### Database Schema
 

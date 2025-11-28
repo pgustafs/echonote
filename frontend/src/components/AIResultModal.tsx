@@ -1,11 +1,13 @@
 /**
  * AI Result Modal Component
  *
- * Displays the result of an AI action with copy and regenerate options
+ * Displays the result of an AI action with copy, regenerate, and improve options
+ * Supports session management for multi-turn conversations
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { AIActionResponse, AIAction } from '../types'
+import { cleanupAISession, improveAIAction } from '../api'
 
 interface AIResultModalProps {
   isOpen: boolean
@@ -29,19 +31,83 @@ export default function AIResultModal({
   isMobile = false,
 }: AIResultModalProps) {
   const [copied, setCopied] = useState(false)
+  const [showImprove, setShowImprove] = useState(false)
+  const [improveInstructions, setImproveInstructions] = useState('')
+  const [isImproving, setIsImproving] = useState(false)
+  const [improveError, setImproveError] = useState<string | null>(null)
+  const [currentResult, setCurrentResult] = useState<AIActionResponse | null>(result)
+
+  // Update current result when prop changes
+  useEffect(() => {
+    setCurrentResult(result)
+  }, [result])
+
+  // Cleanup session when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset improve state
+      setShowImprove(false)
+      setImproveInstructions('')
+      setImproveError(null)
+
+      // Cleanup session if exists
+      if (currentResult?.session_id) {
+        cleanupAISession(currentResult.session_id).catch(err => {
+          console.warn('Failed to cleanup session:', err)
+        })
+      }
+    }
+  }, [isOpen, currentResult?.session_id])
 
   if (!isOpen) return null
 
   const handleCopy = async () => {
-    if (!result?.message) return
+    if (!currentResult?.message) return
 
     try {
-      await navigator.clipboard.writeText(result.message)
+      await navigator.clipboard.writeText(currentResult.message)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
       alert('Failed to copy to clipboard')
+    }
+  }
+
+  const handleImprove = async () => {
+    if (!improveInstructions.trim()) {
+      setImproveError('Please provide instructions for improvement')
+      return
+    }
+
+    if (!currentResult?.session_id) {
+      setImproveError('Session expired. Please regenerate the result.')
+      return
+    }
+
+    if (!currentResult?.action_id) {
+      setImproveError('Unable to improve: missing action ID')
+      return
+    }
+
+    setIsImproving(true)
+    setImproveError(null)
+
+    try {
+      const improvedResult = await improveAIAction(currentResult.action_id, {
+        session_id: currentResult.session_id,
+        instructions: improveInstructions.trim()
+      })
+
+      // Update current result with improved version
+      setCurrentResult(improvedResult)
+      setImproveInstructions('')
+      setShowImprove(false)
+    } catch (err) {
+      console.error('Failed to improve:', err)
+      setImproveError(err instanceof Error ? err.message : 'Failed to improve result')
+    } finally {
+      setIsImproving(false)
     }
   }
 
@@ -102,34 +168,91 @@ export default function AIResultModal({
           </div>
         )}
 
-        {!isLoading && !error && result && (
+        {!isLoading && !error && currentResult && (
           <div className="space-y-4">
             {/* Quota Info */}
             <div className="flex items-center justify-between text-sm">
               <span className="text-[#9BA4B5]">
-                Actions remaining today: <span className="font-medium text-[#E6E8EB]">{result.quota_remaining}</span>
+                Actions remaining today: <span className="font-medium text-[#E6E8EB]">{currentResult.quota_remaining}</span>
               </span>
               <span className="text-xs text-gray-500">
-                Resets: {new Date(result.quota_reset_date).toLocaleDateString()}
+                Resets: {new Date(currentResult.quota_reset_date).toLocaleDateString()}
               </span>
             </div>
 
             {/* Result Text */}
-            <div className="result-card">
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-[#E6E8EB]">
-                {result.message}
+            <div className="result-card relative">
+              {/* Loading Overlay */}
+              {isImproving && (
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
+                  <div className="spinner w-12 h-12 mb-3" />
+                  <p className="text-white font-medium text-sm">Improving your result...</p>
+                  <p className="text-white/70 text-xs mt-1">This may take a few moments</p>
+                </div>
+              )}
+              <pre className={`whitespace-pre-wrap font-sans text-sm leading-relaxed text-[#E6E8EB] ${isImproving ? 'opacity-50' : ''}`}>
+                {currentResult.message}
               </pre>
             </div>
+
+            {/* Improve Section */}
+            {showImprove && currentResult.session_id && (
+              <div className="space-y-2">
+                <label htmlFor="improve-instructions" className="block text-sm font-medium text-[#9BA4B5]">
+                  How would you like to improve this result?
+                </label>
+                <textarea
+                  id="improve-instructions"
+                  value={improveInstructions}
+                  onChange={(e) => setImproveInstructions(e.target.value)}
+                  placeholder="E.g., 'make it shorter and more professional', 'add more examples', 'use bullet points'"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[#E6E8EB] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  rows={3}
+                  disabled={isImproving}
+                />
+                {improveError && (
+                  <p className="text-sm text-red-400">{improveError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleImprove}
+                    disabled={isImproving || !improveInstructions.trim()}
+                    className="btn-primary flex-1 relative"
+                  >
+                    {isImproving ? (
+                      <>
+                        <div className="spinner w-5 h-5" />
+                        <span className="font-medium">Improving...</span>
+                      </>
+                    ) : (
+                      <span>Apply Improvement</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowImprove(false)
+                      setImproveInstructions('')
+                      setImproveError(null)
+                    }}
+                    disabled={isImproving}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Footer Actions */}
-      {!isLoading && !error && result && (
+      {!isLoading && !error && currentResult && (
         <div className="p-4 space-y-2 flex-shrink-0 border-t border-white/10">
           <button
             onClick={handleCopy}
             className={copied ? 'btn-success w-full' : 'btn-primary w-full'}
+            disabled={isImproving}
           >
             {copied ? (
               <>
@@ -157,10 +280,30 @@ export default function AIResultModal({
             )}
           </button>
 
+          {/* Improve Button - only show if session exists */}
+          {currentResult.session_id && !showImprove && (
+            <button
+              onClick={() => setShowImprove(true)}
+              className="btn-secondary w-full"
+              disabled={isImproving}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              <span>Improve Result</span>
+            </button>
+          )}
+
           {onRegenerate && (
             <button
               onClick={onRegenerate}
               className="btn-secondary w-full"
+              disabled={isImproving}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path

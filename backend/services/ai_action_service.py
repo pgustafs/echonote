@@ -91,7 +91,8 @@ class AIActionService:
         session: Session,
         ai_action: AIAction,
         transcription: Transcription,
-        user: User
+        user: User,
+        session_id: Optional[str] = None
     ) -> AIAction:
         """
         Execute an AI action using LlamaStack agent.
@@ -107,9 +108,10 @@ class AIActionService:
             ai_action: The AI action record to execute
             transcription: The transcription to process
             user: The user requesting the action
+            session_id: Optional LlamaStack session ID for multi-turn conversation
 
         Returns:
-            AIAction: Updated action record with result
+            AIAction: Updated action record with result (includes session_id in result_data)
 
         Raises:
             Exception: If LlamaStack is not configured or execution fails
@@ -125,25 +127,41 @@ class AIActionService:
             agent_service = LlamaAgentService(
                 user_id=user.id,
                 transcription_id=transcription.id,
-                action_type=ai_action.action_type
+                action_type=ai_action.action_type,
+                session_id=session_id  # Pass session_id for reuse
             )
 
-            logger.info(
-                f"Executing AI action",
-                extra={
-                    "action_id": ai_action.action_id,
-                    "user_id": user.id,
-                    "transcription_id": transcription.id,
-                    "action_type": ai_action.action_type
-                }
-            )
+            if session_id:
+                logger.info(
+                    f"Executing AI action with session reuse: session_id={session_id}",
+                    extra={
+                        "action_id": ai_action.action_id,
+                        "user_id": user.id,
+                        "transcription_id": transcription.id,
+                        "action_type": ai_action.action_type,
+                        "session_id": session_id
+                    }
+                )
+            else:
+                logger.info(
+                    f"Executing AI action with new session",
+                    extra={
+                        "action_id": ai_action.action_id,
+                        "user_id": user.id,
+                        "transcription_id": transcription.id,
+                        "action_type": ai_action.action_type
+                    }
+                )
 
-            # Execute the AI action asynchronously
-            result_text = await agent_service.run(system_prompt, user_prompt)
+            # Execute the AI action asynchronously (returns tuple: result_text, session_id)
+            result_text, returned_session_id = await agent_service.run(system_prompt, user_prompt)
 
             # Update the AI action record with the result
             ai_action.status = "completed"
-            ai_action.result_data = json.dumps({"text": result_text})
+            ai_action.result_data = json.dumps({
+                "text": result_text,
+                "session_id": returned_session_id  # Store session_id for potential reuse
+            })
             ai_action.completed_at = datetime.utcnow()
             ai_action.error_message = None
 
@@ -156,7 +174,9 @@ class AIActionService:
                 extra={
                     "action_id": ai_action.action_id,
                     "user_id": user.id,
-                    "result_length": len(result_text)
+                    "result_length": len(result_text),
+                    "session_id": returned_session_id,
+                    "session_reused": session_id is not None
                 }
             )
 

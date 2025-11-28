@@ -45,9 +45,21 @@ export interface AIActionResponse {
   error?: string | null
   created_at: string
   completed_at?: string | null
+  session_id?: string | null  // LlamaStack session ID for conversation continuity
 }
 
-export type AIActionCategory = 'analyze' | 'create' | 'improve' | 'translate' | 'voice'
+export interface ImproveActionRequest {
+  session_id: string
+  instructions: string
+}
+
+export interface ChatRequest {
+  message: string
+  session_id?: string | null
+  transcription_id?: number | null
+}
+
+export type AIActionCategory = 'analyze' | 'create' | 'improve' | 'translate' | 'voice' | 'chat'
 
 export interface AIAction {
   id: string

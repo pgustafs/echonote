@@ -18,9 +18,11 @@ from sqlmodel import Session
 
 from backend.auth import get_current_active_user
 from backend.database import get_session
-from backend.models import User, AIActionRequest, AIActionResponse
+from backend.models import User, AIActionRequest, AIActionResponse, ImproveActionRequest, ChatRequest
 from backend.services.ai_action_service import AIActionService
 from backend.services.permission_service import PermissionService
+from backend.services.llama_agent_service import LlamaAgentService
+from backend.services.ai_action_prompts import get_improve_prompts, get_chat_prompts
 from backend.middleware.quota_checker import require_quota, track_usage
 from backend.middleware.rate_limiter import ai_action_rate_limit
 from backend.logging_config import get_logger, get_security_logger
@@ -140,7 +142,8 @@ async def analyze_transcription(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -200,7 +203,8 @@ async def create_linkedin_post(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -256,7 +260,8 @@ async def create_email_draft(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -312,7 +317,8 @@ async def create_blog_post(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -369,7 +375,8 @@ async def create_social_media_caption(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -428,7 +435,8 @@ async def summarize_transcription(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -483,7 +491,8 @@ async def summarize_bullets(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -537,7 +546,8 @@ async def rewrite_formal(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -591,7 +601,8 @@ async def rewrite_friendly(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -645,7 +656,8 @@ async def rewrite_simple(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -699,7 +711,8 @@ async def expand_transcription(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -753,7 +766,8 @@ async def shorten_transcription(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -811,7 +825,8 @@ async def translate_to_english(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -866,7 +881,8 @@ async def translate_to_swedish(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -920,7 +936,8 @@ async def translate_to_czech(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -978,7 +995,8 @@ async def clean_filler_words(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -1032,7 +1050,8 @@ async def fix_grammar(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
 
 
@@ -1086,5 +1105,358 @@ async def convert_spoken_to_written(
         result=json.loads(ai_action.result_data) if ai_action.result_data else None,
         error=ai_action.error_message,
         created_at=ai_action.created_at,
-        completed_at=ai_action.completed_at
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
     )
+
+
+# ============================================================================
+# Category 6: Multi-turn Conversation (Session-based)
+# ============================================================================
+
+@router.post("/improve/{action_id}", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
+@require_quota(cost=1)
+@track_usage(action_type="improve")
+async def improve_action(
+    action_id: str,
+    improve_request: ImproveActionRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Improve a previous AI action result with additional instructions.
+
+    **Quota Cost:** 1 action
+
+    **Request Parameters:**
+    - `session_id`: The session ID from the original action (required)
+    - `instructions`: How to improve the result (e.g., "make it shorter and more professional")
+
+    **Returns:**
+    - Improved AI-generated result with quota information
+    - Same session_id for continued conversation
+
+    **Example:**
+    ```json
+    {
+      "session_id": "abc-123-def",
+      "instructions": "Make it more concise and add bullet points"
+    }
+    ```
+
+    **Use Case:**
+    User receives an AI-generated result, then refines it with follow-up instructions
+    without losing conversation context.
+    """
+    logger.info(
+        f"Improve action requested: action_id={action_id}, user_id={current_user.id}, "
+        f"session_id={improve_request.session_id}, instructions={improve_request.instructions[:50]}..."
+    )
+
+    # Verify the original action exists and belongs to the user
+    original_action = AIActionService.get_action_by_id(session, action_id, current_user)
+
+    if not original_action:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"AI action {action_id} not found"
+        )
+
+    # Get the transcription for context
+    transcription = AIActionService.verify_transcription_access(
+        session,
+        original_action.transcription_id,
+        current_user
+    )
+
+    # Create new AI action record for the improvement
+    ai_action = AIActionService.create_action_record(
+        session=session,
+        user=current_user,
+        transcription_id=original_action.transcription_id,
+        action_type="improve",
+        request_params={"original_action_id": action_id, "instructions": improve_request.instructions},
+        quota_cost=1
+    )
+
+    try:
+        # Get prompts for improvement
+        system_prompt, user_prompt = get_improve_prompts(improve_request.instructions)
+
+        # Create LlamaAgent service with session reuse
+        agent_service = LlamaAgentService(
+            user_id=current_user.id,
+            transcription_id=transcription.id,
+            action_type="improve",
+            session_id=improve_request.session_id  # Reuse existing session
+        )
+
+        logger.info(
+            f"Executing improve action with session reuse: session_id={improve_request.session_id}, "
+            f"action_id={ai_action.action_id}"
+        )
+
+        # Execute improvement (returns tuple: result_text, session_id)
+        result_text, returned_session_id = await agent_service.run(system_prompt, user_prompt)
+
+        # Update AI action record
+        ai_action.status = "completed"
+        ai_action.result_data = json.dumps({
+            "text": result_text,
+            "session_id": returned_session_id,
+            "original_action_id": action_id
+        })
+        ai_action.completed_at = datetime.utcnow()
+        ai_action.error_message = None
+
+        session.add(ai_action)
+        session.commit()
+        session.refresh(ai_action)
+
+        logger.info(
+            f"Improve action completed: action_id={ai_action.action_id}, "
+            f"session_id={returned_session_id}, result_length={len(result_text)}"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Improve action failed: action_id={ai_action.action_id}, error={str(e)}"
+        )
+        ai_action.status = "failed"
+        ai_action.error_message = str(e)
+        ai_action.completed_at = datetime.utcnow()
+        session.add(ai_action)
+        session.commit()
+        session.refresh(ai_action)
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
+    )
+
+
+@router.post("/chat", response_model=AIActionResponse, status_code=status.HTTP_200_OK)
+@require_quota(cost=1)
+@track_usage(action_type="chat")
+async def chat_with_model(
+    chat_request: ChatRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Chat with the AI model for testing or general assistance.
+
+    **Quota Cost:** 1 action
+
+    **Request Parameters:**
+    - `message`: Your message to the AI (required)
+    - `session_id`: Optional - continue existing conversation
+    - `transcription_id`: Optional - chat about a specific transcription
+
+    **Returns:**
+    - AI response with quota information
+    - session_id for continuing the conversation
+
+    **Example - New Chat:**
+    ```json
+    {
+      "message": "Hello, can you help me write a professional email?"
+    }
+    ```
+
+    **Example - Continue Chat:**
+    ```json
+    {
+      "message": "Make it more formal",
+      "session_id": "abc-123-def"
+    }
+    ```
+
+    **Example - Chat about Transcription:**
+    ```json
+    {
+      "message": "Summarize the key points",
+      "transcription_id": 123
+    }
+    ```
+
+    **Use Cases:**
+    - Test LlamaStack configuration
+    - Get AI assistance with writing tasks
+    - Multi-turn conversations about transcriptions
+    - Exploratory dialog with the AI model
+    """
+    logger.info(
+        f"Chat requested: user_id={current_user.id}, message={chat_request.message[:50]}..., "
+        f"session_id={chat_request.session_id}, transcription_id={chat_request.transcription_id}"
+    )
+
+    # Get transcription text if provided
+    transcription_text = None
+    transcription_id_for_record = chat_request.transcription_id  # None if no transcription provided
+
+    if chat_request.transcription_id:
+        transcription = AIActionService.verify_transcription_access(
+            session,
+            chat_request.transcription_id,
+            current_user
+        )
+        transcription_text = transcription.text
+
+    # Create AI action record
+    ai_action = AIActionService.create_action_record(
+        session=session,
+        user=current_user,
+        transcription_id=transcription_id_for_record,
+        action_type="chat",
+        request_params={
+            "message": chat_request.message,
+            "has_transcription": chat_request.transcription_id is not None,
+            "session_id": chat_request.session_id
+        },
+        quota_cost=1
+    )
+
+    try:
+        # Get chat prompts
+        system_prompt, user_prompt = get_chat_prompts(
+            chat_request.message,
+            transcription_text
+        )
+
+        # Create LlamaAgent service (may reuse session if provided)
+        agent_service = LlamaAgentService(
+            user_id=current_user.id,
+            transcription_id=transcription_id_for_record,
+            action_type="chat",
+            session_id=chat_request.session_id  # May be None for new chat
+        )
+
+        if chat_request.session_id:
+            logger.info(
+                f"Continuing chat session: session_id={chat_request.session_id}, "
+                f"action_id={ai_action.action_id}"
+            )
+        else:
+            logger.info(f"Starting new chat session: action_id={ai_action.action_id}")
+
+        # Execute chat (returns tuple: result_text, session_id)
+        result_text, returned_session_id = await agent_service.run(system_prompt, user_prompt)
+
+        # Update AI action record
+        ai_action.status = "completed"
+        ai_action.result_data = json.dumps({
+            "text": result_text,
+            "session_id": returned_session_id
+        })
+        ai_action.completed_at = datetime.utcnow()
+        ai_action.error_message = None
+
+        session.add(ai_action)
+        session.commit()
+        session.refresh(ai_action)
+
+        logger.info(
+            f"Chat completed: action_id={ai_action.action_id}, "
+            f"session_id={returned_session_id}, result_length={len(result_text)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Chat failed: action_id={ai_action.action_id}, error={str(e)}")
+        ai_action.status = "failed"
+        ai_action.error_message = str(e)
+        ai_action.completed_at = datetime.utcnow()
+        session.add(ai_action)
+        session.commit()
+        session.refresh(ai_action)
+
+    quota_remaining = current_user.ai_action_quota_daily - current_user.ai_action_count_today
+
+    return AIActionResponse(
+        action_id=ai_action.action_id,
+        status=ai_action.status,
+        message=json.loads(ai_action.result_data).get("text") if ai_action.result_data else None,
+        quota_remaining=quota_remaining,
+        quota_reset_date=str(current_user.quota_reset_date),
+        result=json.loads(ai_action.result_data) if ai_action.result_data else None,
+        error=ai_action.error_message,
+        created_at=ai_action.created_at,
+        completed_at=ai_action.completed_at,
+        session_id=json.loads(ai_action.result_data).get("session_id") if ai_action.result_data else None
+    )
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cleanup_session(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Cleanup a LlamaStack session when no longer needed.
+
+    This endpoint should be called when:
+    - User closes the AI action modal
+    - User navigates away from the page
+    - Session is no longer needed
+
+    **Note:** Sessions also auto-cleanup after 30 minutes of inactivity (future implementation).
+
+    **Parameters:**
+    - `session_id`: The LlamaStack session ID to cleanup
+
+    **Returns:**
+    - 204 No Content on success
+    - 401 Unauthorized if not authenticated
+
+    **Example:**
+    ```bash
+    curl -X DELETE "http://localhost:8000/api/v1/actions/sessions/abc-123-def" \
+      -H "Authorization: Bearer $TOKEN"
+    ```
+
+    **Best Practice:**
+    Always cleanup sessions when done to prevent memory leaks on the LlamaStack server.
+    """
+    logger.info(
+        f"Session cleanup requested: session_id={session_id}, user_id={current_user.id}"
+    )
+
+    try:
+        # Create a temporary agent service just for cleanup
+        # We use dummy values for user_id, transcription_id, and action_type since we're just cleaning up
+        agent_service = LlamaAgentService(
+            user_id=current_user.id,
+            transcription_id=0,  # Not relevant for cleanup
+            action_type="cleanup"
+        )
+
+        # Cleanup the session (best-effort, errors are logged but don't fail the request)
+        await agent_service.cleanup_session(session_id)
+
+        logger.info(
+            f"Session cleanup completed: session_id={session_id}, user_id={current_user.id}"
+        )
+
+        security_logger.info(
+            f"Session cleanup: session_id={session_id}, user_id={current_user.id}, explicit=True"
+        )
+
+    except Exception as e:
+        # Log error but still return 204 (cleanup is best-effort)
+        logger.warning(
+            f"Session cleanup failed (non-critical): session_id={session_id}, "
+            f"user_id={current_user.id}, error={str(e)}"
+        )
+
+    # Always return 204 No Content (idempotent operation)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

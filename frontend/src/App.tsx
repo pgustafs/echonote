@@ -10,10 +10,12 @@ import TranscriptionList from './components/TranscriptionList'
 import Login from './components/Login'
 import SyncIndicator from './components/SyncIndicator'
 import BottomNav from './components/BottomNav'
+import AIChat from './components/AIChat'
 import { useAuth } from './contexts/AuthContext'
 import { useOfflineRecording } from './hooks/useOfflineRecording'
 import { useTranscriptionPolling } from './hooks/useTranscriptionPolling'
 import { Priority, Transcription } from './types'
+import { MessageCircle } from 'lucide-react'
 
 function App() {
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -36,6 +38,9 @@ function App() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [totalTranscriptions, setTotalTranscriptions] = useState(0)
+
+  // AI Chat state (desktop only - mobile uses BottomNav)
+  const [showDesktopChat, setShowDesktopChat] = useState(false)
   const pageSize = 10 // Should match DEFAULT_PAGE_SIZE in backend
 
   // Handle window resize for mobile detection
@@ -528,6 +533,56 @@ function App() {
 
       {/* Mobile Bottom Navigation */}
       {isMobile && <BottomNav onLogout={logout} />}
+
+      {/* Desktop Floating AI Chat Button */}
+      {!isMobile && (
+        <button
+          onClick={() => setShowDesktopChat(true)}
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
+            border: 'none',
+            boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4), 0 0 40px rgba(118, 75, 162, 0.2)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease',
+            zIndex: 40,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)'
+            e.currentTarget.style.boxShadow = '0 6px 30px rgba(102, 126, 234, 0.6), 0 0 60px rgba(118, 75, 162, 0.3)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(102, 126, 234, 0.4), 0 0 40px rgba(118, 75, 162, 0.2)'
+          }}
+          aria-label="Open AI Chat"
+          title="Chat with AI"
+        >
+          <MessageCircle
+            size={28}
+            style={{
+              color: 'white',
+              strokeWidth: 2
+            }}
+          />
+        </button>
+      )}
+
+      {/* Desktop AI Chat Modal */}
+      {!isMobile && showDesktopChat && (
+        <AIChat
+          onClose={() => setShowDesktopChat(false)}
+          isMobile={false}
+        />
+      )}
 
       {/* Sync Indicator for PWA offline/online status */}
       <SyncIndicator

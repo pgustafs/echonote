@@ -5,7 +5,7 @@ Defines system and user prompts for each AI action type.
 Each action has a specific system prompt that guides the AI's behavior.
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 
 def get_prompts(action_type: str, transcription_text: str) -> Tuple[str, str]:
@@ -620,5 +620,76 @@ Return the converted written text only."""
     user_prompt = f"""Convert this spoken transcription to polished written prose:
 
 {transcription_text}"""
+
+    return system_prompt, user_prompt
+
+
+# =============================================================================
+# IMPROVE & CHAT ACTIONS (Multi-turn conversation)
+# =============================================================================
+
+def get_improve_prompts(improvement_instructions: str) -> Tuple[str, str]:
+    """
+    Generate prompts for improving a previous AI result.
+
+    This is used for multi-turn conversations where we want to refine
+    a previous response. Since we're reusing a session, the AI already
+    has context of the previous result.
+
+    Args:
+        improvement_instructions: User's instructions for improvement
+            (e.g., "make it shorter", "add more examples")
+
+    Returns:
+        Tuple of (system_prompt, user_prompt)
+    """
+    system_prompt = """You are continuing a previous conversation.
+The user wants to improve or refine the previous result based on their new instructions.
+
+Please:
+- Apply their improvement instructions while maintaining overall quality
+- Build upon the previous response (don't start from scratch)
+- Maintain coherence and consistency with the previous output
+- Focus on the specific improvements requested"""
+
+    user_prompt = improvement_instructions
+
+    return system_prompt, user_prompt
+
+
+def get_chat_prompts(message: str, transcription_text: Optional[str] = None) -> Tuple[str, str]:
+    """
+    Generate prompts for free-form chat with the AI model.
+
+    This is used for general assistance, testing, or exploratory conversations.
+    Can optionally include transcription context.
+
+    Args:
+        message: User's chat message
+        transcription_text: Optional transcription to chat about
+
+    Returns:
+        Tuple of (system_prompt, user_prompt)
+    """
+    system_prompt = """You are a helpful AI assistant for EchoNote, a voice transcription application.
+
+Your role is to:
+- Provide helpful assistance with writing, editing, and content creation
+- Answer questions about transcriptions when provided
+- Offer suggestions and improvements
+- Be conversational yet professional
+- Maintain context across the conversation
+
+If the user has provided a transcription, you can reference and discuss it.
+Otherwise, provide general assistance based on their request."""
+
+    if transcription_text:
+        user_prompt = f"""Here is the transcription we're discussing:
+
+{transcription_text}
+
+User's message: {message}"""
+    else:
+        user_prompt = message
 
     return system_prompt, user_prompt

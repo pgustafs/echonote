@@ -471,7 +471,7 @@ export async function getBulkTranscriptionStatus(ids: number[]): Promise<BulkSta
 // AI Actions APIs
 // ============================================================================
 
-import type { AIActionRequest, AIActionResponse } from './types'
+import type { AIActionRequest, AIActionResponse, ImproveActionRequest, ChatRequest } from './types'
 
 /**
  * Execute an AI action on a transcription
@@ -494,6 +494,66 @@ export async function executeAIAction(
   }
 
   return response.json()
+}
+
+/**
+ * Improve a previous AI action result with additional instructions
+ */
+export async function improveAIAction(
+  actionId: string,
+  request: ImproveActionRequest
+): Promise<AIActionResponse> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/v1/actions/improve/${actionId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Failed to improve AI action: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Chat with the AI model
+ */
+export async function chatWithAI(
+  request: ChatRequest
+): Promise<AIActionResponse> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/v1/actions/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Failed to chat with AI: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Cleanup a LlamaStack session when no longer needed
+ */
+export async function cleanupAISession(sessionId: string): Promise<void> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/v1/actions/sessions/${sessionId}`, {
+    method: 'DELETE',
+  })
+
+  // 204 No Content is success, no need to parse response
+  if (!response.ok && response.status !== 204) {
+    console.warn(`Failed to cleanup session ${sessionId}: ${response.statusText}`)
+    // Don't throw error - cleanup is best-effort
+  }
 }
 
 /**
