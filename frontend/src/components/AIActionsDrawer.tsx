@@ -130,14 +130,16 @@ export default function AIActionsDrawer({
       <>
         {/* Backdrop */}
         <div
-          className="fixed inset-0 z-40 bg-black/70 transition-opacity"
+          className="fixed inset-0 bg-black/70 transition-opacity"
           onClick={onClose}
           aria-hidden="true"
+          style={{ zIndex: 60 }}
         />
 
         {/* Bottom Sheet */}
         <div
-          className="fixed inset-0 z-50 flex flex-col animate-slide-up drawer-glass"
+          className="fixed inset-0 flex flex-col animate-slide-up drawer-glass"
+          style={{ zIndex: 70 }}
         >
           {/* Handle */}
           <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
@@ -154,7 +156,7 @@ export default function AIActionsDrawer({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/70 transition-opacity"
+        className="fixed inset-0 bg-black/70 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
         style={{
@@ -165,6 +167,7 @@ export default function AIActionsDrawer({
           bottom: 0,
           width: '100vw',
           height: '100vh',
+          zIndex: 60,
         }}
       />
 
@@ -178,7 +181,7 @@ export default function AIActionsDrawer({
           bottom: 0,
           width: '24rem',
           maxWidth: '100%',
-          zIndex: 50,
+          zIndex: 70,
           margin: 0,
           padding: 0,
         }}

@@ -833,4 +833,106 @@
       opacity: 1;
     }
   }
+
+  /* ===== MOBILE DETAIL SLIDER (GMAIL-STYLE) ===== */
+
+  /* Backdrop */
+  .mobile-slider-backdrop {
+    @apply fixed inset-0 z-40 transition-opacity duration-300;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .mobile-slider-backdrop-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Slider container */
+  .mobile-slider {
+    @apply fixed top-0 right-0 bottom-0 z-50 w-full flex flex-col transition-transform duration-300 ease-out;
+    background: var(--color-bg);
+    transform: translateX(100%);
+  }
+
+  .mobile-slider-open {
+    transform: translateX(0);
+  }
+
+  /* Header */
+  .mobile-slider-header {
+    @apply flex items-center justify-between px-4 py-3 border-b flex-shrink-0;
+    border-color: var(--color-stroke-subtle);
+  }
+
+  .light .mobile-slider-header {
+    border-color: rgba(0, 0, 0, 0.06);
+  }
+
+  /* Content area */
+  .mobile-slider-content {
+    @apply flex-1 overflow-y-auto px-4 py-4;
+  }
+
+  /* Bottom action bar */
+  .mobile-slider-actions {
+    @apply flex items-stretch justify-around border-t flex-shrink-0;
+    border-color: var(--color-stroke-subtle);
+    height: 76px;
+    padding: 8px 4px;
+  }
+
+  .light .mobile-slider-actions {
+    border-color: rgba(0, 0, 0, 0.06);
+  }
+
+  /* Action buttons */
+  .mobile-slider-action-btn {
+    @apply flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all;
+    background: transparent;
+    border: none;
+    min-width: 64px;
+    min-height: 44px;
+  }
+
+  .mobile-slider-action-btn:hover:not(:disabled) {
+    background: var(--opacity-hover);
+  }
+
+  .mobile-slider-action-btn:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  .mobile-slider-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .mobile-slider-action-btn svg,
+  .mobile-slider-action-btn span {
+    color: var(--color-text-primary);
+  }
+
+  /* Danger action button */
+  .mobile-slider-action-btn-danger svg,
+  .mobile-slider-action-btn-danger span {
+    color: var(--color-error);
+  }
+
+  .mobile-slider-action-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .light .mobile-slider-action-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.05);
+  }
+}
+
+@layer utilities {
+  /* Touch target for mobile accessibility (44x44px minimum) */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }

@@ -7,6 +7,7 @@ import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscri
 import { Priority, Transcription } from '../types'
 import AIActionsDrawer from './AIActionsDrawer'
 import AIResultModal from './AIResultModal'
+import MobileDetailSlider from './MobileDetailSlider'
 import type { AIAction, AIActionResponse } from '../types'
 
 interface TranscriptionListProps {
@@ -42,6 +43,10 @@ export default function TranscriptionList({
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
 
+  // Mobile detail slider state
+  const [mobileSliderOpen, setMobileSliderOpen] = useState(false)
+  const [selectedTranscription, setSelectedTranscription] = useState<Transcription | null>(null)
+
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [aiResultModalOpen, setAiResultModalOpen] = useState(false)
   const [selectedTranscriptionId, setSelectedTranscriptionId] = useState<number | null>(null)
@@ -50,8 +55,20 @@ export default function TranscriptionList({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
-  const toggleExpand = (id: number) => {
-    setExpandedId(expandedId === id ? null : id)
+  const toggleExpand = (id: number, transcription?: Transcription) => {
+    if (isMobile) {
+      // On mobile, open the detail slider
+      setSelectedTranscription(transcription || null)
+      setMobileSliderOpen(true)
+    } else {
+      // On desktop, toggle inline expansion
+      setExpandedId(expandedId === id ? null : id)
+    }
+  }
+
+  const closeMobileSlider = () => {
+    setMobileSliderOpen(false)
+    setSelectedTranscription(null)
   }
 
   const handleDelete = async (id: number) => {
@@ -62,6 +79,7 @@ export default function TranscriptionList({
     setDeletingId(id)
     try {
       await deleteTranscription(id)
+      closeMobileSlider() // Close slider on mobile after delete
       onDelete(id)
     } catch (error) {
       console.error('Error deleting transcription:', error)
@@ -328,7 +346,7 @@ export default function TranscriptionList({
               {/* Header */}
               <div
                 className="flex items-start justify-between cursor-pointer group touch-manipulation min-h-[44px]"
-                onClick={() => toggleExpand(transcription.id)}
+                onClick={() => toggleExpand(transcription.id, transcription)}
               >
                 <div className="flex-1 min-w-0">
                   {/* Metadata row - single horizontal line for mobile */}
@@ -683,6 +701,22 @@ export default function TranscriptionList({
         onRegenerate={handleRegenerateAI}
         isMobile={isMobile}
       />
+
+      {/* Mobile Detail Slider */}
+      {isMobile && (
+        <MobileDetailSlider
+          transcription={selectedTranscription}
+          isOpen={mobileSliderOpen}
+          onClose={closeMobileSlider}
+          onDelete={handleDelete}
+          onDownload={handleDownload}
+          onPriorityChange={handlePriorityChange}
+          onOpenAIActions={handleOpenAIActions}
+          isDeleting={deletingId === selectedTranscription?.id}
+          isDownloading={downloadingId === selectedTranscription?.id}
+          isUpdating={updatingId === selectedTranscription?.id}
+        />
+      )}
     </div>
   )
 }

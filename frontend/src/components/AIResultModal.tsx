@@ -324,7 +324,7 @@ export default function AIResultModal({
   if (isMobile) {
     // Mobile: Full Screen Modal
     return (
-      <div className="fixed inset-0 z-50 drawer-glass">
+      <div className="fixed inset-0 drawer-glass" style={{ zIndex: 90 }}>
         {modalContent}
       </div>
     )
@@ -335,13 +335,14 @@ export default function AIResultModal({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/70 transition-opacity"
+        className="fixed inset-0 bg-black/70 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
+        style={{ zIndex: 80 }}
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 90 }}>
         <div className="rounded-2xl shadow-2xl w-full max-w-2xl drawer-glass">
           {modalContent}
         </div>
