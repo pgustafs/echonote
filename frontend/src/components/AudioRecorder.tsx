@@ -25,12 +25,15 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   const [selectedModel, setSelectedModel] = useState(defaultModel)
   const [enableDiarization, setEnableDiarization] = useState(false)
   const [numSpeakers, setNumSpeakers] = useState<number | undefined>(undefined)
+  const [captureTab, setCaptureTab] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const isStoppingRef = useRef<boolean>(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const tabStreamRef = useRef<MediaStream | null>(null)
 
   // Update selected model when default changes
   useEffect(() => {
@@ -111,31 +114,126 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (tabStreamRef.current) {
+        tabStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     }
   }, []);
 
+  // Start combined recording (Tab Audio + Microphone)
+  const startCombinedRecording = async (): Promise<MediaStream | null> => {
+    try {
+      log.info('Starting combined tab + microphone recording...');
+
+      // 1. Get the MIC stream
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          channelCount: 1
+        }
+      });
+
+      // 2. Get the SYSTEM/TAB audio (User must select the tab!)
+      // NOTE: 'video: true' is required to get tab audio
+      const tabStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
+      });
+
+      // Check if the user actually shared audio
+      if (tabStream.getAudioTracks().length === 0) {
+        log.error('User did not share tab audio');
+        alert('Please ensure you check "Share tab audio" in the prompt!');
+        // Stop the mic stream since we're aborting
+        micStream.getTracks().forEach(track => track.stop());
+        tabStream.getTracks().forEach(track => track.stop());
+        return null;
+      }
+
+      // Store tab stream for cleanup
+      tabStreamRef.current = tabStream;
+
+      // 3. Mix the streams using Web Audio API
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const dest = audioContext.createMediaStreamDestination();
+
+      // Add Mic to the mix
+      const micSource = audioContext.createMediaStreamSource(micStream);
+      micSource.connect(dest);
+
+      // Add Tab Audio to the mix
+      const tabSource = audioContext.createMediaStreamSource(tabStream);
+      tabSource.connect(dest);
+
+      // 4. Create a new combined Stream (audio only)
+      const combinedStream = new MediaStream([
+        dest.stream.getAudioTracks()[0]
+      ]);
+
+      log.info('Combined stream created successfully', {
+        micTracks: micStream.getAudioTracks().length,
+        tabTracks: tabStream.getAudioTracks().length,
+        combinedTracks: combinedStream.getAudioTracks().length
+      });
+
+      // Stop the video track from tab capture (we only want audio)
+      tabStream.getVideoTracks().forEach(track => track.stop());
+
+      return combinedStream;
+
+    } catch (err) {
+      log.error('Error starting combined recording:', err);
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        alert('Permission denied. Please allow screen sharing and microphone access.');
+      } else {
+        alert('Could not start tab capture. Please try again.');
+      }
+      return null;
+    }
+  };
+
   const startRecording = async () => {
     try {
-      log.info('Starting recording...');
-      
-      // 1. GET OR REUSE MEDIASTREAM (Best Practice)
-      let stream = streamRef.current;
-      if (!stream || !stream.active || stream.getTracks().every(t => t.readyState !== 'live')) {
-        log.info('Requesting new microphone stream (or stream was inactive)');
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: false,
-            channelCount: 1
-          }
-        });
+      log.info('Starting recording...', { captureTab });
+
+      // 1. GET OR REUSE MEDIASTREAM
+      let stream: MediaStream | null = null;
+
+      if (captureTab) {
+        // Tab capture mode: always get new combined stream
+        log.info('Using tab capture + microphone mode');
+        stream = await startCombinedRecording();
+        if (!stream) {
+          log.error('Failed to get combined stream');
+          return;
+        }
         streamRef.current = stream;
       } else {
-        log.info('Reusing existing active microphone stream');
+        // Microphone only mode
+        stream = streamRef.current;
+        if (!stream || !stream.active || stream.getTracks().every(t => t.readyState !== 'live')) {
+          log.info('Requesting new microphone stream (or stream was inactive)');
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: false,
+              channelCount: 1
+            }
+          });
+          streamRef.current = stream;
+        } else {
+          log.info('Reusing existing active microphone stream');
+        }
       }
 
       // 2. CREATE A NEW MEDIARECORDER INSTANCE (Best Practice)
@@ -200,6 +298,19 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+
+    // Clean up tab stream and audio context if in tab capture mode
+    if (tabStreamRef.current) {
+      log.info('Stopping tab stream tracks...');
+      tabStreamRef.current.getTracks().forEach(track => track.stop());
+      tabStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      log.info('Closing audio context...');
+      audioContextRef.current.close();
+      audioContextRef.current = null;
     }
   };
 
@@ -567,6 +678,41 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                   </select>
                 </div>
               )}
+
+            {/* Tab Capture Checkbox */}
+            <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
+              <input
+                type="checkbox"
+                checked={captureTab}
+                onChange={(e) => setCaptureTab(e.target.checked)}
+                className="checkbox-field"
+              />
+              <div className="flex-1">
+                <span className="text-text-primary font-medium text-sm sm:text-base group-hover:text-accent-blue transition-colors block">
+                  Capture tab audio + microphone
+                </span>
+                <span className="text-xs text-text-tertiary">Record audio from another browser tab along with your microphone</span>
+              </div>
+            </label>
+
+            {/* Tab Capture Help Text */}
+            {captureTab && (
+              <div className="pl-8 border-accent-blue-left">
+                <div className="bg-accent-blue/10 border border-accent-blue/30 rounded-lg p-3 space-y-2">
+                  <p className="text-xs sm:text-sm text-text-primary font-medium flex items-start space-x-2">
+                    <svg className="w-4 h-4 text-accent-blue flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <span>Important: When prompted, select the tab and check "Share tab audio"</span>
+                  </p>
+                  <ul className="text-xs text-text-secondary space-y-1 ml-6 list-disc">
+                    <li>You'll see two permission prompts (tab selection, then microphone)</li>
+                    <li>Make sure to tick the "Share tab audio" checkbox</li>
+                    <li>Works best in Chrome/Edge (limited support in Safari/Firefox)</li>
+                  </ul>
+                </div>
+              </div>
+            )}
 
             {/* Diarization Checkbox */}
             <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
