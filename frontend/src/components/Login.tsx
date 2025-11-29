@@ -1,13 +1,16 @@
 /**
  * Login/Register page component
- * Provides authentication UI matching the neo-minimal dark mode theme
+ * 2025 theme-aware authentication UI
  */
 
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
+import { Sun, Moon } from 'lucide-react'
 
 export default function Login() {
   const { login, register } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,18 +45,29 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      {/* Background gradient */}
-      <div className="fixed inset-0 gradient-header opacity-20" style={{ zIndex: 0 }}></div>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-bg">
+      {/* Theme toggle button - top right */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 icon-button z-50"
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {theme === 'dark' ? (
+          <Sun className="w-5 h-5" />
+        ) : (
+          <Moon className="w-5 h-5" />
+        )}
+      </button>
 
       {/* Login card */}
-      <div className="w-full max-w-md relative" style={{ zIndex: 1 }}>
-        <div className="enterprise-card-dark p-8">
+      <div className="w-full max-w-md">
+        <div className="card p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 mx-auto mb-4 bg-white/10 backdrop-blur-md rounded-2xl shadow-lg flex items-center justify-center border border-white/20">
+            <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-card flex items-center justify-center border border-stroke-subtle">
               <svg
-                className="w-9 h-9 text-white"
+                className="w-9 h-9 text-icon"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -66,10 +80,10 @@ export default function Login() {
                 />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold mb-2" style={{ color: '#E6E8EB' }}>
+            <h1 className="text-3xl font-bold mb-2 text-text-primary">
               {isRegisterMode ? 'Create Account' : 'Welcome Back'}
             </h1>
-            <p className="text-sm" style={{ color: '#9BA4B5' }}>
+            <p className="text-sm text-text-secondary">
               {isRegisterMode
                 ? 'Sign up to start using EchoNote'
                 : 'Sign in to access your transcriptions'}
@@ -78,17 +92,10 @@ export default function Login() {
 
           {/* Error Message */}
           {error && (
-            <div
-              className="mb-6 rounded-2xl p-4"
-              style={{
-                background: 'rgba(228, 76, 101, 0.1)',
-                border: '1px solid rgba(228, 76, 101, 0.3)',
-              }}
-            >
-              <div className="flex items-start space-x-3">
+            <div className="alert-error mb-6">
+              <div className="flex items-start gap-3">
                 <svg
-                  className="w-5 h-5 flex-shrink-0 mt-0.5"
-                  style={{ color: '#E44C65' }}
+                  className="w-5 h-5 flex-shrink-0 mt-0.5 text-error"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -98,7 +105,7 @@ export default function Login() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <p className="text-sm font-medium" style={{ color: '#E44C65' }}>
+                <p className="alert-error-title">
                   {error}
                 </p>
               </div>
@@ -111,8 +118,7 @@ export default function Login() {
             <div>
               <label
                 htmlFor="username"
-                className="block text-sm font-semibold mb-2"
-                style={{ color: '#E6E8EB' }}
+                className="block text-sm font-semibold mb-2 text-text-primary"
               >
                 Username
               </label>
@@ -124,20 +130,7 @@ export default function Login() {
                 required
                 minLength={3}
                 maxLength={50}
-                className="w-full px-4 py-3 rounded-2xl transition-all duration-200 outline-none focus:outline-none"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: '#E6E8EB',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
-                  e.currentTarget.style.borderColor = 'rgba(92, 124, 250, 0.5)'
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
-                }}
+                className="input-field"
                 placeholder="Enter your username"
                 disabled={isLoading}
               />
@@ -148,8 +141,7 @@ export default function Login() {
               <div>
                 <label
                   htmlFor="email"
-                  className="block text-sm font-semibold mb-2"
-                  style={{ color: '#E6E8EB' }}
+                  className="block text-sm font-semibold mb-2 text-text-primary"
                 >
                   Email
                 </label>
@@ -159,20 +151,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 rounded-2xl transition-all duration-200 outline-none focus:outline-none"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    color: '#E6E8EB',
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
-                    e.currentTarget.style.borderColor = 'rgba(92, 124, 250, 0.5)'
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
-                  }}
+                  className="input-field"
                   placeholder="Enter your email"
                   disabled={isLoading}
                 />
@@ -183,8 +162,7 @@ export default function Login() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-semibold mb-2"
-                style={{ color: '#E6E8EB' }}
+                className="block text-sm font-semibold mb-2 text-text-primary"
               >
                 Password
               </label>
@@ -195,20 +173,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 rounded-2xl transition-all duration-200 outline-none focus:outline-none"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: '#E6E8EB',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
-                  e.currentTarget.style.borderColor = 'rgba(92, 124, 250, 0.5)'
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
-                }}
+                className="input-field"
                 placeholder="Enter your password"
                 disabled={isLoading}
               />
@@ -218,26 +183,11 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full px-6 py-3 font-semibold rounded-2xl transition-all duration-200 min-h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
-                color: 'white',
-                boxShadow: '0 4px 12px rgba(92, 124, 250, 0.25)',
-              }}
-              onMouseEnter={(e) => {
-                if (!isLoading) {
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(92, 124, 250, 0.35)'
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(92, 124, 250, 0.25)'
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
+              className="btn-accent-blue w-full"
             >
               {isLoading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 spinner"></div>
                   <span>{isRegisterMode ? 'Creating Account...' : 'Signing In...'}</span>
                 </div>
               ) : (
@@ -251,10 +201,7 @@ export default function Login() {
             <button
               onClick={toggleMode}
               disabled={isLoading}
-              className="text-sm font-medium transition-colors disabled:opacity-50"
-              style={{ color: '#5C7CFA' }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
+              className="text-sm font-medium text-accent-blue hover:text-accent-mint transition-colors disabled:opacity-disabled"
             >
               {isRegisterMode
                 ? 'Already have an account? Sign in'

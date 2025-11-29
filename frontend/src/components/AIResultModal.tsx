@@ -117,7 +117,7 @@ export default function AIResultModal({
       <div className="flex items-center justify-between p-4 flex-shrink-0 drawer-header">
         <div className="flex items-center gap-2">
           {action && <span className="text-2xl">{action.icon}</span>}
-          <h2 className="text-lg font-semibold text-[#E6E8EB]">
+          <h2 className="text-lg font-semibold text-text-primary">
             {action?.label || 'AI Result'}
           </h2>
         </div>
@@ -127,7 +127,7 @@ export default function AIResultModal({
           aria-label="Close"
         >
           <svg
-            className="w-5 h-5 text-[#9BA4B5]"
+            className="w-5 h-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -142,7 +142,7 @@ export default function AIResultModal({
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <div className="spinner w-12 h-12" />
-            <p className="text-[#9BA4B5]">Generating your content...</p>
+            <p className="text-text-secondary">Generating your content...</p>
           </div>
         )}
 
@@ -172,10 +172,10 @@ export default function AIResultModal({
           <div className="space-y-4">
             {/* Quota Info */}
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[#9BA4B5]">
-                Actions remaining today: <span className="font-medium text-[#E6E8EB]">{currentResult.quota_remaining}</span>
+              <span className="text-text-secondary">
+                Actions remaining today: <span className="font-medium text-text-primary">{currentResult.quota_remaining}</span>
               </span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-text-tertiary">
                 Resets: {new Date(currentResult.quota_reset_date).toLocaleDateString()}
               </span>
             </div>
@@ -190,7 +190,7 @@ export default function AIResultModal({
                   <p className="text-white/70 text-xs mt-1">This may take a few moments</p>
                 </div>
               )}
-              <pre className={`whitespace-pre-wrap font-sans text-sm leading-relaxed text-[#E6E8EB] ${isImproving ? 'opacity-50' : ''}`}>
+              <pre className={`whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-primary ${isImproving ? 'opacity-50' : ''}`}>
                 {currentResult.message}
               </pre>
             </div>
@@ -198,7 +198,7 @@ export default function AIResultModal({
             {/* Improve Section */}
             {showImprove && currentResult.session_id && (
               <div className="space-y-2">
-                <label htmlFor="improve-instructions" className="block text-sm font-medium text-[#9BA4B5]">
+                <label htmlFor="improve-instructions" className="block text-sm font-medium text-text-secondary">
                   How would you like to improve this result?
                 </label>
                 <textarea
@@ -206,12 +206,12 @@ export default function AIResultModal({
                   value={improveInstructions}
                   onChange={(e) => setImproveInstructions(e.target.value)}
                   placeholder="E.g., 'make it shorter and more professional', 'add more examples', 'use bullet points'"
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[#E6E8EB] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  className="input-field text-sm"
                   rows={3}
                   disabled={isImproving}
                 />
                 {improveError && (
-                  <p className="text-sm text-red-400">{improveError}</p>
+                  <p className="text-sm text-error">{improveError}</p>
                 )}
                 <div className="flex gap-2">
                   <button

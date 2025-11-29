@@ -1,6 +1,6 @@
 /**
  * Main App component for EchoNote
- * Professional enterprise design with mobile-first responsive layout
+ * 2025 Modern design with dark/light theme support
  */
 
 import { useEffect, useState, useCallback } from 'react'
@@ -12,13 +12,15 @@ import SyncIndicator from './components/SyncIndicator'
 import BottomNav from './components/BottomNav'
 import AIChat from './components/AIChat'
 import { useAuth } from './contexts/AuthContext'
+import { useTheme } from './contexts/ThemeContext'
 import { useOfflineRecording } from './hooks/useOfflineRecording'
 import { useTranscriptionPolling } from './hooks/useTranscriptionPolling'
 import { Priority, Transcription } from './types'
-import { MessageCircle } from 'lucide-react'
+import { MessageCircle, Sun, Moon } from 'lucide-react'
 
 function App() {
   const { user, logout, isLoading: authLoading } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const { isOnline, syncStatus, pendingCount, saveOfflineRecording, triggerSync } = useOfflineRecording()
 
   // Track previous pending count to detect sync completion
@@ -43,6 +45,9 @@ function App() {
   const [showDesktopChat, setShowDesktopChat] = useState(false)
   const pageSize = 10 // Should match DEFAULT_PAGE_SIZE in backend
 
+  // Infinite scroll state (mobile only)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+
   // Handle window resize for mobile detection
   useEffect(() => {
     const handleResize = () => {
@@ -61,11 +66,12 @@ function App() {
   }, [user])
 
   // Load transcriptions on mount and when filter, search, or page changes (only when user is authenticated)
+  // On mobile, skip if currentPage > 1 (handled by infinite scroll)
   useEffect(() => {
-    if (user) {
+    if (user && !(isMobile && currentPage > 1)) {
       loadTranscriptions()
     }
-  }, [priorityFilter, searchQuery, currentPage, user])
+  }, [priorityFilter, searchQuery, currentPage, user, isMobile])
 
   // Reload transcriptions when sync completes (pending count goes from >0 to 0)
   useEffect(() => {
@@ -87,9 +93,13 @@ function App() {
     }
   }
 
-  const loadTranscriptions = async () => {
+  const loadTranscriptions = async (append = false) => {
     try {
-      setIsLoading(true)
+      if (!append) {
+        setIsLoading(true)
+      } else {
+        setIsLoadingMore(true)
+      }
       setError(null)
       const skip = (currentPage - 1) * pageSize
       const data = await getTranscriptions(skip, pageSize, priorityFilter, searchQuery || null)
@@ -99,15 +109,60 @@ function App() {
         progress: t.progress,
         text: t.text?.substring(0, 50)
       })))
-      setTranscriptions(data.transcriptions)
+
+      if (append) {
+        // Append to existing transcriptions (for infinite scroll)
+        setTranscriptions(prev => [...prev, ...data.transcriptions])
+      } else {
+        // Replace transcriptions (for normal pagination/filters)
+        setTranscriptions(data.transcriptions)
+      }
       setTotalTranscriptions(data.total)
     } catch (err) {
       console.error('Error loading transcriptions:', err)
       setError('Failed to load transcriptions')
     } finally {
-      setIsLoading(false)
+      if (!append) {
+        setIsLoading(false)
+      } else {
+        setIsLoadingMore(false)
+      }
     }
   }
+
+  // Load more items for infinite scroll (mobile only)
+  const loadMoreTranscriptions = useCallback(() => {
+    if (isMobile && !isLoadingMore && transcriptions.length < totalTranscriptions) {
+      console.log('[App] Loading more transcriptions for infinite scroll')
+      setCurrentPage(prev => prev + 1)
+    }
+  }, [isMobile, isLoadingMore, transcriptions.length, totalTranscriptions])
+
+  // Infinite scroll: detect when user scrolls near bottom (mobile only)
+  useEffect(() => {
+    if (!isMobile) return
+
+    const handleScroll = () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight
+      const clientHeight = document.documentElement.clientHeight
+
+      // Trigger load when user is within 300px of bottom
+      if (scrollHeight - scrollTop - clientHeight < 300) {
+        loadMoreTranscriptions()
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [isMobile, loadMoreTranscriptions])
+
+  // Load more items when page changes (for infinite scroll on mobile)
+  useEffect(() => {
+    if (user && isMobile && currentPage > 1) {
+      loadTranscriptions(true) // append = true
+    }
+  }, [currentPage, user, isMobile])
 
   const handleRecordingComplete = async (
     audioBlob: Blob,
@@ -276,55 +331,56 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {/* Header - hidden on mobile */}
+      {/* Header - 2025 Minimal Design (hidden on mobile) */}
       {!isMobile && (
-        <header className="gradient-header shadow-xl relative overflow-hidden">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              {/* Logo */}
+        <header className="bg-bg">
+          <div className="max-w-7xl mx-auto px-12 lg:px-20 py-6 lg:py-8">
+            <div className="flex items-center justify-between">
+              {/* Brand Name */}
               <div className="flex items-center">
-                <img
-                  src="/econote_logo.png"
-                  alt="EchoNote Logo"
-                  className="h-12 sm:h-16 lg:h-20 w-auto"
-                  style={{ filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3))' }}
-                />
+                <h1 className="text-xl lg:text-2xl font-bold text-text-primary tracking-tight">
+                  EchoNote
+                </h1>
               </div>
-              {/* User info and logout */}
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                {/* Stats badge */}
-                <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+
+              {/* Right side controls */}
+              <div className="flex items-center gap-6 lg:gap-8">
+                {/* Stats - floating text */}
+                <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+                  <svg className="w-5 h-5 text-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-white font-semibold">{totalTranscriptions} Recording{totalTranscriptions !== 1 ? 's' : ''}</span>
+                  <span className="text-text-primary font-medium text-sm">
+                    {totalTranscriptions} Recording{totalTranscriptions !== 1 ? 's' : ''}
+                  </span>
                 </div>
 
-                {/* User info */}
-                <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 sm:px-4 py-2 rounded-2xl border border-white/20 shadow-lg">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                {/* User info - floating text */}
+                <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+                  <svg className="w-5 h-5 text-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
-                  <span className="text-white text-sm sm:text-base font-medium">{user.username}</span>
+                  <span className="text-text-primary text-sm font-medium">{user.username}</span>
                 </div>
 
-                {/* Logout button */}
+                {/* Theme toggle - floating icon */}
+                <button
+                  onClick={toggleTheme}
+                  className="header-icon-btn opacity-80 hover:opacity-100"
+                  aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                  title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-5 h-5 text-icon" strokeWidth={2} />
+                  ) : (
+                    <Moon className="w-5 h-5 text-icon" strokeWidth={2} />
+                  )}
+                </button>
+
+                {/* Logout button - text link */}
                 <button
                   onClick={logout}
-                  className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-2xl transition-all duration-200 min-h-[44px]"
-                  style={{
-                    background: 'rgba(228, 76, 101, 0.2)',
-                    color: '#FF6B6B',
-                    border: '1px solid rgba(228, 76, 101, 0.3)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(228, 76, 101, 0.3)'
-                    e.currentTarget.style.color = '#FF8787'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(228, 76, 101, 0.2)'
-                    e.currentTarget.style.color = '#FF6B6B'
-                  }}
+                  className="text-sm font-medium text-error opacity-80 hover:opacity-100 hover:underline transition-all px-2"
                   title="Sign out"
                 >
                   Logout
@@ -336,12 +392,12 @@ function App() {
       )}
 
       {/* Main content */}
-      <main className={isMobile ? "px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"} style={isMobile ? { paddingBottom: '80px' } : {}}>
+      <main className={isMobile ? "px-0 py-0 pb-20" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12"}>
         {/* Error Message */}
         {error && (
-          <div className={isMobile ? "mb-4 p-4 shadow-lg" : "mb-6 sm:mb-8 rounded-2xl p-4 shadow-lg"} style={{ background: 'rgba(228, 76, 101, 0.1)', border: '1px solid rgba(228, 76, 101, 0.3)' }}>
-            <div className="flex items-start space-x-3">
-              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#E44C65' }} fill="currentColor" viewBox="0 0 20 20">
+          <div className={`alert-error ${isMobile ? 'mb-4' : 'mb-6 sm:mb-8 rounded-card'}`}>
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-error" fill="currentColor" viewBox="0 0 20 20">
                 <path
                   fillRule="evenodd"
                   d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -349,14 +405,11 @@ function App() {
                 />
               </svg>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: '#E44C65' }}>{error}</p>
+                <p className="alert-error-title">{error}</p>
               </div>
               <button
                 onClick={() => setError(null)}
-                className="flex-shrink-0 touch-target transition-colors"
-                style={{ color: '#E44C65' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#d43d56'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#E44C65'}
+                className="icon-button"
                 aria-label="Dismiss error"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -393,12 +446,12 @@ function App() {
             isLoading={isLoading}
           />
 
-          {/* Pagination Controls */}
-          {!isLoading && totalTranscriptions > pageSize && (
-                <div className="mt-6 sm:mt-8 enterprise-card-dark p-4 sm:p-6">
+          {/* Pagination Controls - Desktop Only */}
+          {!isMobile && !isLoading && totalTranscriptions > pageSize && (
+                <div className={isMobile ? "mt-6 p-4 bg-bg-secondary" : "mt-6 sm:mt-8 card p-4 sm:p-6"}>
                   <div className="flex flex-col gap-4">
                     {/* Page info */}
-                    <div className="text-sm font-medium text-center sm:text-left" style={{ color: '#9BA4B5' }}>
+                    <div className="text-sm font-medium text-center sm:text-left text-text-secondary">
                       Showing {Math.min((currentPage - 1) * pageSize + 1, totalTranscriptions)} - {Math.min(currentPage * pageSize, totalTranscriptions)} of {totalTranscriptions}
                     </div>
 
@@ -408,7 +461,7 @@ function App() {
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="btn-secondary min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 flex-shrink-0"
+                        className="btn-secondary min-w-[44px] px-3 sm:px-4"
                         aria-label="Previous page"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -444,30 +497,11 @@ function App() {
                           <button
                             key={page}
                             onClick={() => handlePageChange(page)}
-                            className="min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 font-semibold transition-all duration-200 flex-shrink-0"
-                            style={currentPage === page ? {
-                              background: 'linear-gradient(135deg, #5C7CFA 0%, #9775FA 100%)',
-                              color: 'white',
-                              borderRadius: '1.5rem',
-                              boxShadow: '0 4px 12px rgba(92, 124, 250, 0.25)'
-                            } : {
-                              background: 'rgba(255, 255, 255, 0.04)',
-                              color: '#9BA4B5',
-                              border: '1px solid rgba(255, 255, 255, 0.08)',
-                              borderRadius: '1.5rem'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (currentPage !== page) {
-                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
-                                e.currentTarget.style.color = '#E6E8EB'
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (currentPage !== page) {
-                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                                e.currentTarget.style.color = '#9BA4B5'
-                              }
-                            }}
+                            className={`min-w-[44px] px-3 sm:px-4 py-2 font-semibold rounded-button transition-all duration-200 flex-shrink-0 ${
+                              currentPage === page
+                                ? 'btn-accent-blue'
+                                : 'btn-secondary'
+                            }`}
                           >
                             {page}
                           </button>
@@ -478,7 +512,7 @@ function App() {
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage >= Math.ceil(totalTranscriptions / pageSize)}
-                        className="btn-secondary min-w-[44px] min-h-[44px] px-3 sm:px-4 py-2 flex-shrink-0"
+                        className="btn-secondary min-w-[44px] px-3 sm:px-4"
                         aria-label="Next page"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -489,27 +523,32 @@ function App() {
                   </div>
                 </div>
               )}
+
+          {/* Mobile: Loading more indicator for infinite scroll */}
+          {isMobile && isLoadingMore && (
+            <div className="mt-6 mb-4 flex justify-center items-center gap-3 py-4">
+              <div className="w-6 h-6 spinner"></div>
+              <span className="text-sm text-text-secondary font-medium">Loading more...</span>
+            </div>
+          )}
         </section>
       </main>
 
       {/* Desktop Footer */}
       {!isMobile && (
-        <footer className="mt-12 sm:mt-20" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
+        <footer className="mt-12 sm:mt-20 border-t border-stroke-subtle bg-bg-secondary">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
-              <p style={{ color: '#9BA4B5' }}>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-text-secondary">
+              <p>
                 © 2025 EchoNote. AI-powered voice transcription.
               </p>
-              <div className="flex items-center space-x-4" style={{ color: '#9BA4B5' }}>
+              <div className="flex items-center gap-4">
                 <span>Powered by</span>
                 <a
                   href="https://fastapi.tiangolo.com/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="transition-colors underline"
-                  style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
+                  className="text-accent-blue hover:text-accent-mint transition-colors underline"
                 >
                   FastAPI
                 </a>
@@ -518,10 +557,7 @@ function App() {
                   href="https://vitejs.dev/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="transition-colors underline"
-                  style={{ color: '#5C7CFA', textDecorationColor: 'rgba(92, 124, 250, 0.3)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#4ADEDE'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#5C7CFA'}
+                  className="text-accent-blue hover:text-accent-mint transition-colors underline"
                 >
                   Vite
                 </a>
@@ -538,40 +574,14 @@ function App() {
       {!isMobile && (
         <button
           onClick={() => setShowDesktopChat(true)}
-          style={{
-            position: 'fixed',
-            bottom: '2rem',
-            right: '2rem',
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)',
-            border: 'none',
-            boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4), 0 0 40px rgba(118, 75, 162, 0.2)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s ease',
-            zIndex: 40,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.1)'
-            e.currentTarget.style.boxShadow = '0 6px 30px rgba(102, 126, 234, 0.6), 0 0 60px rgba(118, 75, 162, 0.3)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)'
-            e.currentTarget.style.boxShadow = '0 4px 20px rgba(102, 126, 234, 0.4), 0 0 40px rgba(118, 75, 162, 0.2)'
-          }}
+          className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-ai hover:scale-110 transition-transform duration-300 flex items-center justify-center z-40"
           aria-label="Open AI Chat"
           title="Chat with AI"
         >
           <MessageCircle
             size={28}
-            style={{
-              color: 'white',
-              strokeWidth: 2
-            }}
+            className="text-ai-text"
+            strokeWidth={2}
           />
         </button>
       )}

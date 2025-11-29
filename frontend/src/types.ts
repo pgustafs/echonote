@@ -2,6 +2,8 @@
  * TypeScript types for EchoNote frontend
  */
 
+import type React from 'react'
+
 export type Priority = 'low' | 'medium' | 'high'
 
 export interface Transcription {
@@ -66,6 +68,6 @@ export interface AIAction {
   category: AIActionCategory
   label: string
   description: string
-  icon: string
+  icon: React.ReactNode
   endpoint: string
 }

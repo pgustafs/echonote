@@ -38,8 +38,10 @@ export default function AIActionsDrawer({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between p-4 drawer-header">
-        <h2 className="text-lg font-semibold flex items-center gap-2 text-[#E6E8EB]">
-          <span>✨</span>
+        <h2 className="text-lg font-semibold flex items-center gap-2 text-text-primary">
+          <svg className="w-5 h-5 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
           <span>AI Actions</span>
         </h2>
         <button
@@ -48,7 +50,7 @@ export default function AIActionsDrawer({
           aria-label="Close"
         >
           <svg
-            className="w-5 h-5 text-[#9BA4B5]"
+            className="w-5 h-5 text-text-secondary"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -75,12 +77,12 @@ export default function AIActionsDrawer({
                 className="w-full flex items-center justify-between p-3 drawer-category-header"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">{category.icon}</span>
-                  <span className="font-medium text-[#E6E8EB]">{category.label}</span>
-                  <span className="text-xs text-[#9BA4B5]">({actions.length})</span>
+                  <span className="text-accent-blue">{category.icon}</span>
+                  <span className="font-medium text-text-primary">{category.label}</span>
+                  <span className="text-xs text-text-secondary">({actions.length})</span>
                 </div>
                 <svg
-                  className={`w-5 h-5 transition-transform text-[#9BA4B5] ${isExpanded ? 'rotate-180' : ''}`}
+                  className={`w-5 h-5 transition-transform text-text-secondary ${isExpanded ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -91,20 +93,20 @@ export default function AIActionsDrawer({
 
               {/* Actions List */}
               {isExpanded && (
-                <div className="border-t border-white/[0.08]">
+                <div className="border-t border-stroke-subtle">
                   {actions.map((action) => (
                     <button
                       key={action.id}
                       onClick={() => handleActionClick(action)}
                       className="w-full flex items-start gap-3 p-3 text-left touch-target drawer-action-item"
                     >
-                      <span className="text-2xl flex-shrink-0">{action.icon}</span>
+                      <span className="flex-shrink-0 text-text-secondary mt-0.5">{action.icon}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-[#E6E8EB]">{action.label}</div>
-                        <div className="text-sm text-[#9BA4B5]">{action.description}</div>
+                        <div className="font-medium text-text-primary">{action.label}</div>
+                        <div className="text-sm text-text-secondary">{action.description}</div>
                       </div>
                       <svg
-                        className="w-5 h-5 flex-shrink-0 mt-1 text-electric-500"
+                        className="w-5 h-5 flex-shrink-0 mt-1 text-accent-blue"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -135,16 +137,11 @@ export default function AIActionsDrawer({
 
         {/* Bottom Sheet */}
         <div
-          className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-2xl flex flex-col animate-slide-up drawer-glass"
-          style={{
-            borderBottom: 'none',
-            maxHeight: '85vh',
-            height: '85vh',
-          }}
+          className="fixed inset-0 z-50 flex flex-col animate-slide-up drawer-glass"
         >
           {/* Handle */}
           <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
-            <div className="w-12 h-1 rounded-full bg-white/30" />
+            <div className="w-12 h-1 rounded-full bg-text-tertiary" />
           </div>
           {drawerContent}
         </div>
@@ -160,13 +157,30 @@ export default function AIActionsDrawer({
         className="fixed inset-0 z-40 bg-black/70 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+        }}
       />
 
       {/* Side Drawer */}
       <div
-        className="fixed right-0 top-0 bottom-0 z-50 shadow-2xl w-96 max-w-full animate-slide-left drawer-glass"
+        className="drawer-glass-desktop animate-slide-left"
         style={{
-          borderRight: 'none',
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: '24rem',
+          maxWidth: '100%',
+          zIndex: 50,
+          margin: 0,
+          padding: 0,
         }}
       >
         {drawerContent}

@@ -232,18 +232,18 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
   };
 
   return (
-    <div className={isMobile ? "enterprise-card-dark p-6 relative overflow-hidden" : "enterprise-card-dark p-6 sm:p-8 lg:p-10 relative overflow-hidden"}>
+    <div className="bg-bg p-6 sm:p-8 lg:p-10 relative overflow-hidden">
       <div className="flex flex-col items-center space-y-6 sm:space-y-8 relative" style={{ zIndex: 1 }}>
         <div className="text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3" style={{ color: '#E6E8EB' }}>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center space-x-3 text-text-primary">
             {!isMobile && (
-              <svg className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#5C7CFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7 sm:w-8 sm:h-8 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             )}
             <span>Record Voice Message</span>
           </h2>
-          <p className="text-sm sm:text-base" style={{ color: '#9BA4B5' }}>
+          <p className="text-sm sm:text-base text-text-secondary">
             Adjust options below, then press the microphone to start.
           </p>
         </div>
@@ -251,14 +251,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
         {/* Microphone Button Container with DNA Spiral Background */}
         <div className="relative">
           {/* DNA Spiral Animation - Anchored to button center */}
-          <div className="absolute pointer-events-none" style={{
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '600px',
-            height: '300px',
-            zIndex: 0
-          }}>
+          <div className="dna-spiral-container">
             <svg
               className="w-full h-full"
               viewBox="0 0 800 400"
@@ -459,78 +452,22 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
           {/* Pulse rings */}
           {isRecording && !isPaused && (
             <>
-              <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" style={{ border: '6px solid transparent' }} />
-              <div className="absolute inset-0 rounded-full bg-red-500/10 animate-pulse" style={{ border: '6px solid transparent' }} />
+              <div className="absolute inset-0 rounded-full bg-error/20 animate-ping" style={{ border: '6px solid transparent' }} />
+              <div className="absolute inset-0 rounded-full bg-error/10 animate-pulse" style={{ border: '6px solid transparent' }} />
             </>
           )}
           <div
-            className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-full flex items-center justify-center transition-all duration-300"
-            style={
+            className={
               isRecording
-                ? {
-                    background: 'transparent',
-                    border: '6px solid #E44C65',
-                    boxShadow: '0 8px 24px rgba(228, 76, 101, 0.4), inset 0 0 20px rgba(228, 76, 101, 0.1)',
-                    transform: 'scale(1.05)',
-                    cursor: 'pointer'
-                  }
-                : isTranscribing
-                ? {
-                    background: 'transparent',
-                    border: '6px solid rgba(255, 255, 255, 0.3)',
-                    cursor: 'not-allowed'
-                  }
-                : {
-                    background: 'transparent',
-                    border: '6px solid #9775FA',
-                    boxShadow: '0 8px 24px rgba(92, 124, 250, 0.4), inset 0 0 20px rgba(92, 124, 250, 0.1)',
-                    cursor: 'pointer'
-                  }
+                ? "mic-button-recording"
+                : isTranscribing || isStopping
+                ? "mic-button-disabled"
+                : "mic-button-idle"
             }
-            onMouseEnter={(e) => {
-              if (!isTranscribing && !isStopping) {
-                if (isRecording) {
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(228, 76, 101, 0.6), inset 0 0 30px rgba(228, 76, 101, 0.15)'
-                  e.currentTarget.style.transform = 'scale(1.1)'
-                } else {
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(92, 124, 250, 0.6), inset 0 0 30px rgba(92, 124, 250, 0.15)'
-                  e.currentTarget.style.transform = 'scale(1.05)'
-                }
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isTranscribing && !isStopping) {
-                if (isRecording) {
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(228, 76, 101, 0.4), inset 0 0 20px rgba(228, 76, 101, 0.1)'
-                  e.currentTarget.style.transform = 'scale(1.05)'
-                } else {
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(92, 124, 250, 0.4), inset 0 0 20px rgba(92, 124, 250, 0.1)'
-                  e.currentTarget.style.transform = 'scale(1)'
-                }
-              }
-            }}
-            onMouseDown={(e) => {
-              if (!isTranscribing && !isStopping) {
-                if (isRecording) {
-                  e.currentTarget.style.transform = 'scale(1)'
-                } else {
-                  e.currentTarget.style.transform = 'scale(0.95)'
-                }
-              }
-            }}
-            onMouseUp={(e) => {
-              if (!isTranscribing && !isStopping) {
-                if (isRecording) {
-                  e.currentTarget.style.transform = 'scale(1.1)'
-                } else {
-                  e.currentTarget.style.transform = 'scale(1.05)'
-                }
-              }
-            }}
           >
             <svg
               className="w-20 h-20 sm:w-24 sm:h-24 transition-colors duration-300"
-              style={{ color: isRecording ? '#E44C65' : '#9775FA' }}
+              style={{ color: isRecording ? 'var(--color-error)' : 'var(--color-accent-violet)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -548,13 +485,13 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
 
         {/* Recording Indicator - Below microphone button */}
         {isRecording && (
-          <div className="bg-slate-700/50 backdrop-blur-sm px-6 sm:px-8 py-3 sm:py-4 rounded-lg border border-slate-600">
+          <div className="recording-indicator">
             <div className="flex items-center justify-center space-x-3 sm:space-x-4">
-              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${isPaused ? 'bg-yellow-400' : 'bg-red-500 animate-pulse'}`} />
-              <span className="text-2xl sm:text-3xl font-mono font-bold text-white tabular-nums">
+              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${isPaused ? 'bg-warning' : 'bg-error animate-pulse'}`} />
+              <span className="text-2xl sm:text-3xl font-mono font-bold text-text-primary tabular-nums">
                 {formatTime(recordingTime)}
               </span>
-              <span className="text-sm text-slate-400 hidden sm:inline">
+              <span className="text-sm text-text-tertiary hidden sm:inline">
                 {isPaused ? 'Paused' : 'Recording'}
               </span>
             </div>
@@ -599,20 +536,20 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
         {!isRecording && !isTranscribing && (
           <div className="w-full max-w-2xl">
             {/* Settings Card Container */}
-            <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-600/50 rounded-xl p-5 sm:p-6 space-y-4 sm:space-y-5">
+            <div className="card space-y-5 p-6">
               {/* Card Header */}
-              <div className="flex items-center space-x-2 pb-3 border-b border-slate-600/30">
-                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center space-x-2 pb-3 border-b border-stroke-subtle">
+                <svg className="w-5 h-5 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
-                <h3 className="text-lg font-semibold text-white">Recording Options</h3>
+                <h3 className="text-lg font-semibold text-text-primary">Recording Options</h3>
               </div>
 
               {/* Model Selector */}
               {availableModels.length > 0 && (
                 <div className="space-y-2">
-                  <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
-                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <label className="block text-text-primary font-semibold text-sm sm:text-base flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                     </svg>
                     <span>Transcription Model</span>
@@ -620,7 +557,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="select-dark"
+                    className="select-field"
                   >
                     {availableModels.map((model) => (
                       <option key={model} value={model}>
@@ -642,21 +579,21 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     setNumSpeakers(undefined)
                   }
                 }}
-                className="checkbox-dark checkbox-purple"
+                className="checkbox-field"
               />
               <div className="flex-1">
-                <span className="text-white font-medium text-sm sm:text-base group-hover:text-purple-300 transition-colors block">
+                <span className="text-text-primary font-medium text-sm sm:text-base group-hover:text-accent-violet transition-colors block">
                   Enable speaker diarization
                 </span>
-                <span className="text-xs text-slate-400">Detect and label different speakers</span>
+                <span className="text-xs text-text-tertiary">Detect and label different speakers</span>
               </div>
             </label>
 
             {/* Number of Speakers Input */}
             {enableDiarization && (
-              <div className="space-y-2 pl-8 border-l-2 border-purple-500/30">
-                <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
-                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="space-y-2 pl-8 border-accent-violet-left">
+                <label className="block text-text-primary font-semibold text-sm sm:text-base flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-accent-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                   <span>Number of Speakers (optional)</span>
@@ -671,10 +608,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     setNumSpeakers(value ? parseInt(value) : undefined)
                   }}
                   placeholder="Auto-detect"
-                  className="input-field-dark"
+                  className="input-field"
                 />
-                <p className="text-xs sm:text-sm text-slate-400 flex items-start space-x-2">
-                  <svg className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <p className="text-xs sm:text-sm text-text-tertiary flex items-start space-x-2">
+                  <svg className="w-4 h-4 text-accent-blue flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   <span>Leave empty to automatically detect (2-10 speakers)</span>
@@ -683,27 +620,27 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
             )}
 
             {/* URL Attachment (Optional) - Moved to last position */}
-            <div className="pt-4 border-t border-slate-600/30">
+            <div className="pt-4 divider-top">
               <label className="flex items-center space-x-3 cursor-pointer group touch-manipulation">
                 <input
                   type="checkbox"
                   checked={includeUrl}
                   onChange={(e) => setIncludeUrl(e.target.checked)}
-                  className="checkbox-dark checkbox-blue"
+                  className="checkbox-field"
                 />
                 <div className="flex-1">
-                  <span className="text-white font-medium text-sm sm:text-base group-hover:text-blue-300 transition-colors block">
-                    Attach URL to note <span className="text-slate-400 text-xs font-normal">(optional)</span>
+                  <span className="text-text-primary font-medium text-sm sm:text-base group-hover:text-accent-blue transition-colors block">
+                    Attach URL to note <span className="text-text-tertiary text-xs font-normal">(optional)</span>
                   </span>
-                  <span className="text-xs text-slate-400">Include a reference link with your transcription</span>
+                  <span className="text-xs text-text-tertiary">Include a reference link with your transcription</span>
                 </div>
               </label>
 
               {/* URL Input */}
               {includeUrl && (
-                <div className="space-y-2 mt-3 pl-8 border-l-2 border-blue-500/30">
-                  <label className="block text-white font-semibold text-sm sm:text-base flex items-center space-x-2">
-                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="space-y-2 mt-3 pl-8 border-accent-blue-left">
+                  <label className="block text-text-primary font-semibold text-sm sm:text-base flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                     </svg>
                     <span>URL</span>
@@ -713,7 +650,7 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://example.com"
-                    className="input-field-dark"
+                    className="input-field"
                   />
                 </div>
               )}
@@ -723,10 +660,10 @@ export default function AudioRecorder({ onRecordingComplete, isTranscribing, ava
         )}
 
         {isTranscribing && (
-          <div className="bg-blue-50 border border-blue-200 px-6 sm:px-8 py-4 rounded-lg shadow-sm w-full sm:w-auto">
+          <div className="transcribing-indicator">
             <div className="flex items-center justify-center space-x-3 sm:space-x-4">
               <div className="w-5 h-5 sm:w-6 sm:h-6 spinner"></div>
-              <span className="font-semibold text-blue-900 text-sm sm:text-base">Transcribing your voice...</span>
+              <span className="font-semibold text-accent-blue text-sm sm:text-base">Transcribing your voice...</span>
             </div>
           </div>
         )}

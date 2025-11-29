@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { LogOut, MessageCircle } from 'lucide-react'
+import { LogOut, MessageCircle, Sun, Moon } from 'lucide-react'
 import AIChat from './AIChat'
+import { useTheme } from '../contexts/ThemeContext'
 
 interface BottomNavProps {
   onLogout: () => void
@@ -8,102 +9,50 @@ interface BottomNavProps {
 
 export default function BottomNav({ onLogout }: BottomNavProps) {
   const [showChat, setShowChat] = useState(false)
+  const { theme, toggleTheme } = useTheme()
 
   return (
     <>
-      <nav
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '60px',
-          backgroundColor: 'rgba(255, 255, 255, 0.02)',
-          backdropFilter: 'blur(12px)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          zIndex: 30,
-          display: 'flex',
-          justifyContent: 'space-around',
-          alignItems: 'center',
-          padding: '0 1rem'
-        }}
-      >
+      <nav className="fixed bottom-0 left-0 right-0 h-[60px] bg-bg backdrop-blur-xl z-30 flex justify-around items-center px-4 bottom-nav-border">
         <button
           onClick={() => setShowChat(true)}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '0.25rem',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.5rem 1rem',
-            transition: 'opacity 0.2s ease',
-            minWidth: '60px'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = '0.8'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = '1'
-          }}
+          className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer p-2 min-w-[60px] hover:opacity-80 transition-opacity touch-target"
         >
           <MessageCircle
             size={24}
-            style={{
-              color: '#60A5FA',
-              strokeWidth: 1.5
-            }}
+            className="text-ai"
+            strokeWidth={2}
           />
-          <span
-            style={{
-              fontSize: '0.75rem',
-              color: '#E6E8EB',
-              fontWeight: 500,
-              letterSpacing: '0.01em'
-            }}
-          >
+          <span className="text-xs text-text-secondary font-medium tracking-wide">
             AI Chat
           </span>
         </button>
 
         <button
+          onClick={toggleTheme}
+          className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer p-2 min-w-[60px] hover:opacity-80 transition-opacity touch-target"
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? (
+            <Sun size={24} className="text-icon" strokeWidth={2} />
+          ) : (
+            <Moon size={24} className="text-icon" strokeWidth={2} />
+          )}
+          <span className="text-xs text-text-secondary font-medium tracking-wide">
+            Theme
+          </span>
+        </button>
+
+        <button
           onClick={onLogout}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '0.25rem',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.5rem 1rem',
-            transition: 'opacity 0.2s ease',
-            minWidth: '60px'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = '0.8'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = '1'
-          }}
+          className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer p-2 min-w-[60px] hover:opacity-80 transition-opacity touch-target"
         >
           <LogOut
             size={24}
-            style={{
-              color: '#E44C65',
-              strokeWidth: 1.5
-            }}
+            className="text-error"
+            strokeWidth={2}
           />
-          <span
-            style={{
-              fontSize: '0.75rem',
-              color: '#E6E8EB',
-              fontWeight: 500,
-              letterSpacing: '0.01em'
-            }}
-          >
+          <span className="text-xs text-text-secondary font-medium tracking-wide">
             Logout
           </span>
         </button>

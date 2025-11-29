@@ -179,17 +179,17 @@ export default function AIChat({
   const chatContent = (
     <div className={`flex flex-col ${isMobile ? 'h-full' : 'h-[600px]'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 flex-shrink-0 drawer-header">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">💬</span>
-          <h2 className="text-lg font-semibold text-[#E6E8EB]">
+      <div className="flex items-center justify-between p-4 flex-shrink-0 drawer-header gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-2xl flex-shrink-0">💬</span>
+          <h2 className="text-lg font-semibold text-text-primary truncate">
             {transcriptionId ? 'Chat About Transcription' : 'Chat with AI'}
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {quotaRemaining !== null && (
-            <span className="text-xs text-[#9BA4B5] px-2 py-1 bg-white/5 rounded">
-              {quotaRemaining} actions left
+            <span className="text-xs text-text-secondary px-2 py-1 card rounded whitespace-nowrap">
+              {quotaRemaining} left
             </span>
           )}
           {messages.length > 0 && (
@@ -199,7 +199,7 @@ export default function AIChat({
               aria-label="Clear chat"
               title="Clear chat"
             >
-              <svg className="w-5 h-5 text-[#9BA4B5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </button>
@@ -210,7 +210,7 @@ export default function AIChat({
               className="icon-button"
               aria-label="Close"
             >
-              <svg className="w-5 h-5 text-[#9BA4B5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -219,14 +219,14 @@ export default function AIChat({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ minHeight: 0 }}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 w-full" style={{ minHeight: 0 }}>
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <svg className="w-16 h-16 text-[#9BA4B5] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-16 h-16 text-icon mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            <h3 className="text-lg font-medium text-[#E6E8EB] mb-2">Start a Conversation</h3>
-            <p className="text-sm text-[#9BA4B5] max-w-sm">
+            <h3 className="text-lg font-medium text-text-primary mb-2">Start a Conversation</h3>
+            <p className="text-sm text-text-secondary max-w-sm">
               {transcriptionId
                 ? 'Ask questions about your transcription, request summaries, or get help with writing tasks.'
                 : 'Get help with writing, ask questions, or just have a conversation with the AI model.'}
@@ -237,15 +237,15 @@ export default function AIChat({
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex w-full ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] rounded-lg p-3 ${
+              className={`max-w-[80%] rounded-lg p-3 overflow-hidden ${
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-accent-blue text-white'
                   : message.error
-                  ? 'bg-red-900/30 border border-red-500/50 text-red-200'
-                  : 'bg-white/5 text-[#E6E8EB]'
+                  ? 'alert-error'
+                  : 'card text-text-primary'
               }`}
             >
               {message.isLoading ? (
@@ -254,9 +254,9 @@ export default function AIChat({
                   <span className="text-sm">Thinking...</span>
                 </div>
               ) : (
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed break-words overflow-wrap-anywhere">
                   {message.content}
-                </pre>
+                </div>
               )}
               <div className="mt-1 text-xs opacity-60">
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -268,22 +268,22 @@ export default function AIChat({
       </div>
 
       {/* Input */}
-      <div className="p-4 flex-shrink-0 border-t border-white/10">
+      <div className="p-4 flex-shrink-0 border-t border-stroke-subtle">
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Type your message... (Shift+Enter for new line)"
-            className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[#E6E8EB] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+            placeholder={isMobile ? "Type your message..." : "Type your message... (Shift+Enter for new line)"}
+            className="input-field flex-1 text-sm resize-none min-w-0"
             rows={2}
             disabled={isLoading}
           />
           <button
             onClick={handleSend}
             disabled={!inputMessage.trim() || isLoading}
-            className="btn-primary px-4 self-end"
+            className="btn-ai px-4 self-end"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -296,7 +296,7 @@ export default function AIChat({
 
   if (isMobile || !onClose) {
     // Full page view - z-50 to appear above BottomNav (z-30)
-    return <div className="fixed inset-0 z-50 drawer-glass">{chatContent}</div>
+    return <div className="fixed inset-0 z-50 drawer-glass overflow-hidden">{chatContent}</div>
   }
 
   // Modal view
