@@ -356,7 +356,7 @@ async def get_audio(
     session: Session = Depends(get_session)
 ):
     """
-    Stream the audio file for a specific transcription.
+    Stream the audio file for a specific transcription from MinIO storage.
 
     This endpoint uses query parameter authentication to support HTML audio elements
     that cannot set Authorization headers.
@@ -380,12 +380,29 @@ async def get_audio(
     Example:
         <audio src="/api/transcriptions/123/audio?token=YOUR_JWT_TOKEN" />
     """
+    from backend.services.minio_service import get_minio_service
+
     transcription = TranscriptionService.get_transcription_by_id(
         session, transcription_id, current_user
     )
 
+    # Get audio from MinIO or fallback to legacy database BLOB
+    if transcription.minio_object_path:
+        # New: Fetch from MinIO
+        try:
+            minio_service = get_minio_service()
+            audio_data = minio_service.download_audio(transcription.minio_object_path)
+        except Exception as e:
+            logger.error(f"Failed to download audio from MinIO: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve audio file")
+    elif transcription.audio_data:
+        # Legacy: Fetch from database BLOB
+        audio_data = transcription.audio_data
+    else:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
     return Response(
-        content=transcription.audio_data,
+        content=audio_data,
         media_type=transcription.audio_content_type,
         headers={
             "Content-Disposition": f'inline; filename="{transcription.audio_filename}"'

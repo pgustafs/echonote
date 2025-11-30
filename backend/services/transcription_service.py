@@ -24,6 +24,7 @@ from sqlmodel import Session, select
 
 from backend.config import settings
 from backend.models import Priority, Transcription, TranscriptionPublic, User
+from backend.services.minio_service import get_minio_service, generate_object_name
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -230,6 +231,7 @@ class TranscriptionService:
     ) -> Transcription:
         """
         Create a new transcription database record with pending status.
+        Uploads audio file to MinIO object storage instead of storing in database.
 
         Args:
             session: Database session
@@ -243,9 +245,10 @@ class TranscriptionService:
         Returns:
             Created transcription record
         """
+        # Create initial record to get ID
         db_transcription = Transcription(
             text="",  # Will be filled by background task
-            audio_data=audio_bytes,
+            audio_data=None,  # No longer storing in database
             audio_filename=audio_filename,
             audio_content_type=audio_content_type,
             duration_seconds=duration_seconds,
@@ -259,8 +262,32 @@ class TranscriptionService:
         session.commit()
         session.refresh(db_transcription)
 
-        logger.info(f"Created transcription record with ID: {db_transcription.id} (status=pending)")
-        return db_transcription
+        # Upload audio to MinIO
+        try:
+            minio_service = get_minio_service()
+            object_name = generate_object_name(user.id, db_transcription.id, audio_filename)
+            minio_service.upload_audio(audio_bytes, object_name, audio_content_type)
+
+            # Update record with MinIO path
+            db_transcription.minio_object_path = object_name
+            session.commit()
+            session.refresh(db_transcription)
+
+            logger.info(
+                f"Created transcription record ID: {db_transcription.id} "
+                f"(status=pending, minio_path={object_name})"
+            )
+            return db_transcription
+
+        except Exception as e:
+            # Rollback database record if MinIO upload fails
+            logger.error(f"Failed to upload audio to MinIO: {e}")
+            session.delete(db_transcription)
+            session.commit()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload audio file to storage: {str(e)}"
+            )
 
     @staticmethod
     def dispatch_transcription_task(
@@ -452,7 +479,7 @@ class TranscriptionService:
         user: User
     ) -> None:
         """
-        Delete a transcription and its audio file.
+        Delete a transcription and its audio file from both database and MinIO storage.
 
         Args:
             session: Database session
@@ -464,6 +491,19 @@ class TranscriptionService:
         """
         transcription = TranscriptionService.get_transcription_by_id(session, transcription_id, user)
 
+        # Delete audio file from MinIO if it exists
+        if transcription.minio_object_path:
+            try:
+                minio_service = get_minio_service()
+                minio_service.delete_audio(transcription.minio_object_path)
+                logger.info(f"Deleted audio from MinIO: {transcription.minio_object_path}")
+            except Exception as e:
+                # Log error but don't fail the deletion - database cleanup should continue
+                logger.warning(
+                    f"Failed to delete audio from MinIO for transcription {transcription_id}: {e}"
+                )
+
+        # Delete database record
         session.delete(transcription)
         session.commit()
 
@@ -548,9 +588,24 @@ class TranscriptionService:
         Raises:
             HTTPException: If package creation fails
         """
+        # Get audio from MinIO or fallback to legacy database BLOB
+        if transcription.minio_object_path:
+            # New: Fetch from MinIO
+            try:
+                minio_service = get_minio_service()
+                audio_bytes = minio_service.download_audio(transcription.minio_object_path)
+            except Exception as e:
+                logger.error(f"Failed to download audio from MinIO: {e}")
+                raise HTTPException(status_code=500, detail="Failed to retrieve audio file for download")
+        elif transcription.audio_data:
+            # Legacy: Use database BLOB
+            audio_bytes = transcription.audio_data
+        else:
+            raise HTTPException(status_code=404, detail="Audio file not found")
+
         # Get audio in WAV format (convert if needed)
         wav_bytes = TranscriptionService.convert_audio_to_wav(
-            transcription.audio_data,
+            audio_bytes,
             transcription.audio_content_type,
             transcription.id
         )

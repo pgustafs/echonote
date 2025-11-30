@@ -4,18 +4,19 @@ This guide covers building and deploying EchoNote using containers with Red Hat 
 
 ## Deployment Options
 
-EchoNote requires a **5-container deployment** for full functionality:
+EchoNote requires a **6-container deployment** for full functionality with MinIO object storage:
 
-### Production Deployment (5 containers) - REQUIRED
+### Production Deployment (6 containers) - REQUIRED
 - **Frontend** - React/Vite SPA
 - **Backend** - FastAPI REST API
+- **MinIO** - S3-compatible object storage for audio files
 - **Redis** - Message broker and result backend
 - **Celery Worker** - Async transcription processor
 - **Celery Beat** - Scheduled task scheduler (daily quota reset)
 - **Use case**: All environments (development, testing, production)
-- **File**: `echonote-kube-priv.yaml`
+- **File**: `echonote-kube-priv-minio.yaml`
 
-**Note:** The application currently requires Celery and Redis for transcription processing. There is no synchronous fallback mode. All transcriptions are processed as background tasks. Celery Beat is required for scheduled tasks like daily quota resets.
+**Note:** The application currently requires Celery and Redis for transcription processing. There is no synchronous fallback mode. All transcriptions are processed as background tasks. Celery Beat is required for scheduled tasks like daily quota resets. MinIO is required for storing audio files (replaces legacy PostgreSQL BLOB storage).
 
 ## Quick Start
 
@@ -56,7 +57,7 @@ podman exec echonote-redis redis-cli ping  # Should return "PONG"
 
 ## Architecture
 
-EchoNote uses a 5-container architecture with async background processing and scheduled tasks:
+EchoNote uses a 6-container architecture with async background processing, scheduled tasks, and object storage for audio files:
 
 #### Backend Container (`backend/Containerfile`)
 - **Base Image**: UBI 10 Python 3.12 minimal
@@ -121,6 +122,48 @@ EchoNote uses a 5-container architecture with async background processing and sc
 - Beat sends "execute task named X" to Redis at scheduled times
 - Worker picks up task from Redis and executes the Python function
 - This separation allows minimal dependencies for Beat (no PyTorch, ffmpeg, etc.)
+
+#### MinIO Container (`quay.io/minio/minio:latest`)
+- **Base Image**: Official MinIO container image
+- **Purpose**: S3-compatible object storage for audio files
+- **Ports**: 9000 (API), 9090 (Console/Web UI)
+- **Storage**: Persistent volume for audio files
+- **Auto-Initialization**: Creates bucket automatically on first upload
+- **Architecture**: Replaces PostgreSQL BLOB storage for better performance and scalability
+- **Benefits**:
+  - Unlimited storage capacity (no database size limits)
+  - 90% reduction in database size (only metadata in DB)
+  - Better performance (streaming directly from object storage)
+  - Prevents database crashes from large audio files (45MB+ BLOBs caused crashes)
+  - Cost-effective storage compared to database BLOBs
+
+**Environment Variables:**
+- `MINIO_ROOT_USER` - Admin username (default: minioadmin) **CHANGE IN PRODUCTION**
+- `MINIO_ROOT_PASSWORD` - Admin password (default: minioadmin123) **CHANGE IN PRODUCTION**
+
+**Storage Path Structure:**
+```
+audio/user_{user_id}/transcription_{transcription_id}_{filename}
+```
+
+**Example:** `audio/user_1/transcription_236_recording-1764501558629.wav`
+- Uses user ID (not username) for immutability and safety
+- Each user has their own folder
+- Transcription ID ensures uniqueness
+
+**CRITICAL Configuration:**
+Both **backend** AND **Celery worker** containers must have MinIO environment variables configured:
+- `MINIO_ENDPOINT` - MinIO server address (e.g., `localhost:9000` or `minio-service:9000`)
+- `MINIO_ACCESS_KEY` - Matches `MINIO_ROOT_USER` from MinIO container
+- `MINIO_SECRET_KEY` - Matches `MINIO_ROOT_PASSWORD` from MinIO container
+- `MINIO_BUCKET` - Bucket name (default: `echonote-audio`)
+- `MINIO_SECURE` - Use HTTPS (`true`/`false`, default: `false`)
+
+**Common Issue:**
+Upload succeeds (backend works) but transcription fails (Celery worker can't download audio):
+→ Celery worker is missing MinIO environment variables!
+→ Check: `podman exec echonote-celery-worker env | grep MINIO`
+→ Fix: Add MinIO env vars to celery-worker container in deployment YAML
 
 ## Building the Containers
 
@@ -252,6 +295,8 @@ oc logs -f echonote-backend
 
 ### Backend and Celery Worker
 
+**IMPORTANT:** Both backend AND Celery worker require the same MinIO configuration!
+
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `MODEL_URL` | vLLM Whisper server URL | `http://localhost:8080/v1` | Yes |
@@ -261,6 +306,11 @@ oc logs -f echonote-backend
 | `SQLITE_DB` | SQLite database path | `/opt/app-root/src/data/echonote.db` | No |
 | `CORS_ORIGINS` | Allowed CORS origins | `http://localhost:5173` | Yes |
 | `MAX_UPLOAD_SIZE` | Max file upload size in bytes | `104857600` (100MB) | No |
+| **`MINIO_ENDPOINT`** | **MinIO server endpoint** | **`minio:9000`** | **Yes** |
+| **`MINIO_ACCESS_KEY`** | **MinIO access credentials** | **`minioadmin`** | **Yes** |
+| **`MINIO_SECRET_KEY`** | **MinIO secret credentials** | **`minioadmin123`** | **Yes** |
+| **`MINIO_BUCKET`** | **MinIO bucket name** | **`echonote-audio`** | **Yes** |
+| **`MINIO_SECURE`** | **Use HTTPS for MinIO** | **`false`** | **No** |
 | `CELERY_BROKER_URL` | Redis broker URL (full deployment) | `redis://localhost:6379/0` | Yes (full) |
 | `CELERY_RESULT_BACKEND` | Redis result backend URL (full deployment) | `redis://localhost:6379/1` | Yes (full) |
 | `HF_TOKEN` | Hugging Face token for pyannote models | - | No |
@@ -287,7 +337,37 @@ Celery Beat requires minimal environment variables (does not execute tasks, only
 - `MODEL_URL`, `API_KEY` (no transcription)
 - `HF_TOKEN` (no diarization)
 - `CORS_ORIGINS` (no HTTP server)
+- **MinIO environment variables** (no audio file operations)
 - Audio processing environment variables
+
+### MinIO
+
+MinIO requires minimal configuration as it's a standalone service:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `MINIO_ROOT_USER` | Admin username | `minioadmin` | Yes (**CHANGE IN PRODUCTION**) |
+| `MINIO_ROOT_PASSWORD` | Admin password | `minioadmin123` | Yes (**CHANGE IN PRODUCTION**) |
+
+**Storage:**
+- Mount persistent volume to `/data` for audio file storage
+- Recommended: 10Gi+ for development, 50Gi+ for production
+
+**Ports:**
+- **9000** - MinIO API endpoint (used by backend/worker)
+- **9090** - MinIO Console (web UI for administration)
+
+**Access MinIO Console:**
+- Local: http://localhost:9091
+- OpenShift: https://minio-ui-echonote.apps.example.com
+- Login with MINIO_ROOT_USER and MINIO_ROOT_PASSWORD
+
+**Security Notes:**
+- Default credentials are insecure - **MUST** be changed in production
+- Use Kubernetes secrets for credentials (not ConfigMaps)
+- Keep bucket private (do not enable public access)
+- Internal traffic can use HTTP (`MINIO_SECURE=false`)
+- External Routes should use TLS termination at edge
 
 ### Redis
 
@@ -653,6 +733,114 @@ podman logs echonote-backend | grep "status/bulk"
 
 # 4. Ensure transcriptions have status fields in database
 # (Fixed in current version - list_transcriptions endpoint returns status fields)
+```
+
+### MinIO Connection and Storage Issues
+
+**Problem: Upload succeeds but transcription fails with "SignatureDoesNotMatch"**
+
+This is the most common MinIO issue - Celery worker missing MinIO credentials:
+
+```bash
+# Check backend has MinIO env vars (should show values)
+podman exec echonote-backend env | grep MINIO
+
+# Check Celery worker has MinIO env vars (CRITICAL - often missing!)
+podman exec echonote-celery-worker env | grep MINIO
+
+# If worker shows nothing, update deployment YAML to add MinIO env vars
+# to celery-worker container, then redeploy
+```
+
+**Problem: "Connection refused" to MinIO**
+
+```bash
+# 1. Verify MinIO container is running
+podman ps | grep minio
+# Should show: echonote-minio or similar
+
+# 2. Check MinIO logs
+podman logs echonote-minio
+
+# 3. Verify endpoint configuration
+podman exec echonote-backend env | grep MINIO_ENDPOINT
+# Should show: localhost:9000 (local) or minio-service:9000 (OpenShift)
+
+# 4. Test connectivity from backend
+podman exec echonote-backend curl http://localhost:9000/minio/health/live
+# Should return: <?xml version="1.0" encoding="UTF-8"?>...
+```
+
+**Problem: Credentials mismatch**
+
+MinIO server and client credentials must match:
+
+```bash
+# MinIO server uses:
+# - MINIO_ROOT_USER
+# - MINIO_ROOT_PASSWORD
+
+# Backend/Worker use:
+# - MINIO_ACCESS_KEY (must equal MINIO_ROOT_USER)
+# - MINIO_SECRET_KEY (must equal MINIO_ROOT_PASSWORD)
+
+# Verify they match:
+podman exec echonote-minio env | grep MINIO_ROOT
+podman exec echonote-backend env | grep MINIO_ACCESS
+podman exec echonote-backend env | grep MINIO_SECRET
+```
+
+**Problem: "Bucket does not exist"**
+
+```bash
+# MinIO service auto-creates bucket on first upload
+# If this fails, check MinIO logs
+podman logs echonote-minio | grep bucket
+
+# Manually create bucket via MinIO Console:
+# 1. Open http://localhost:9091
+# 2. Login with MINIO_ROOT_USER/PASSWORD
+# 3. Click "Buckets" → "Create Bucket"
+# 4. Name: echonote-audio
+
+# Or use mc (MinIO Client):
+mc alias set local http://localhost:9000 minioadmin minioadmin123
+mc mb local/echonote-audio
+```
+
+**Problem: Audio playback fails (404 errors)**
+
+```bash
+# 1. Check database has minio_object_path populated
+podman exec echonote-backend sqlite3 echonote.db \
+  "SELECT id, minio_object_path, audio_data IS NULL as is_minio \
+   FROM transcriptions ORDER BY id DESC LIMIT 5;"
+# New recordings should show minio_object_path and is_minio=1
+
+# 2. Verify file exists in MinIO Console
+# Open http://localhost:9091 → Buckets → echonote-audio → Browse
+
+# 3. Or use mc to list files:
+mc ls local/echonote-audio/audio/user_1/
+
+# 4. Check backend logs for download errors
+podman logs echonote-backend | grep -i minio
+```
+
+**Problem: MinIO running out of space**
+
+```bash
+# Check MinIO disk usage in Console:
+# http://localhost:9091 → Monitoring → Storage
+
+# Check persistent volume size
+podman volume inspect minio-data | grep -i size
+
+# Increase volume size (requires recreation):
+# 1. Backup existing data
+# 2. Delete old volume
+# 3. Create larger volume
+# 4. Restore data
 ```
 
 ### Image pull issues

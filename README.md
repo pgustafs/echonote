@@ -1232,6 +1232,7 @@ bleach==6.0.0    # HTML sanitization to prevent XSS attacks
 - **SQLModel** - SQL databases using Python type hints
 - **SQLite** - Development database (auto-created)
 - **PostgreSQL** - Production database support
+- **MinIO** - S3-compatible object storage for audio files
 - **Celery 5.5.3** - Distributed task queue for async transcription processing
 - **Redis 7** - Message broker and result backend for Celery
 - **PyJWT** - JWT token generation and validation
@@ -1594,6 +1595,323 @@ podman exec echonote-redis redis-cli -n 1 keys "*"
 - Ensure Redis container is running
 - Check Redis configuration in `redis/redis.conf`
 - Verify `REDIS_URL` and `CELERY_BROKER_URL` match Redis hostname
+
+## Audio Storage Architecture
+
+EchoNote uses **MinIO object storage** for storing audio files, replacing the legacy PostgreSQL BLOB storage approach for better scalability and performance.
+
+### Why MinIO?
+
+**Problem with PostgreSQL BLOBs:**
+- 2-minute recordings (~45MB) were causing PostgreSQL crashes even with 2GB memory allocation
+- Large binary data in database causes memory exhaustion, slow queries, and expensive storage
+- Database backups become massive and time-consuming
+
+**Solution with MinIO:**
+- ✅ **Unlimited Storage** - Store audio files in S3-compatible object storage
+- ✅ **Better Performance** - Streaming directly from MinIO, no database bottleneck
+- ✅ **Cost-Effective** - Object storage is cheaper than database storage
+- ✅ **Scalable** - Handles large files effortlessly (tested with 4-minute recordings)
+- ✅ **90% Database Size Reduction** - Only metadata stored in database
+
+### Storage Architecture
+
+**6-Container Production Deployment:**
+1. **Frontend** - React/Vite SPA
+2. **Backend** - FastAPI REST API
+3. **MinIO** - S3-compatible object storage for audio files
+4. **PostgreSQL** - Metadata and transcriptions only (no BLOBs)
+5. **Redis** - Message broker and result backend
+6. **Celery Worker** - Background transcription processor
+7. **Celery Beat** - Scheduled task scheduler
+
+### How It Works
+
+**1. Upload Flow** (`backend/routers/transcriptions.py` → `backend/services/transcription_service.py`)
+```python
+POST /api/transcribe
+├─ Router receives audio file
+├─ Service validates and converts audio (WebM → WAV)
+├─ Create database record (get transcription ID)
+├─ Upload audio to MinIO
+│   └─ Path: audio/user_{user_id}/transcription_{id}_{filename}
+├─ Store MinIO path in database (minio_object_path column)
+├─ Dispatch Celery task for transcription
+└─ Return transcription with status="pending"
+```
+
+**2. Transcription Flow** (`backend/tasks.py`)
+```python
+Celery Worker receives task
+├─ Load transcription from database
+├─ Download audio from MinIO using minio_object_path
+├─ Process transcription with Whisper
+├─ Update database with transcription text
+└─ Update status to "completed"
+```
+
+**3. Playback Flow** (`backend/routers/transcriptions.py`)
+```python
+GET /api/transcriptions/{id}/audio
+├─ Verify user owns transcription
+├─ Check if minio_object_path exists (new recordings)
+│   ├─ YES: Download from MinIO
+│   └─ NO: Fallback to audio_data BLOB (legacy recordings)
+└─ Stream audio to browser
+```
+
+**4. Delete Flow** (`backend/services/transcription_service.py`)
+```python
+DELETE /api/transcriptions/{id}
+├─ Verify user owns transcription
+├─ Delete audio file from MinIO (if exists)
+│   └─ Log warning on failure, continue deletion
+└─ Delete database record
+```
+
+### MinIO Path Structure
+
+Audio files are stored with the following naming convention:
+
+```
+audio/user_{user_id}/transcription_{transcription_id}_{original_filename}
+```
+
+**Example:**
+```
+audio/user_1/transcription_236_recording-1764501558629.wav
+│     │       │              │    └─ Original filename
+│     │       │              └─ Transcription ID (unique)
+│     │       └─ User ID (immutable, from database)
+│     └─ User folder (one per user)
+└─ Audio files root directory
+```
+
+**Why User ID (not username)?**
+- ✅ **Immutable** - User IDs never change, usernames can be updated
+- ✅ **Safe** - No special characters, spaces, or encoding issues
+- ✅ **Efficient** - Numeric IDs are faster for lookups and indexing
+- ✅ **Standard Practice** - Most systems use IDs for file paths
+
+**Mapping:** User "pgustafs" → `user.id = 1` → `audio/user_1/...`
+
+### Database Schema Changes
+
+**Migration 005** (`backend/alembic/versions/005_add_minio_object_storage.py`)
+
+Added to `transcriptions` table:
+- `minio_object_path` (String, nullable) - Path to audio file in MinIO
+- `audio_data` - Made nullable (legacy BLOB support)
+- Index on `minio_object_path` for fast lookups
+
+**Backward Compatibility:**
+- New recordings: `minio_object_path` populated, `audio_data = NULL`
+- Legacy recordings: `audio_data` contains BLOB, `minio_object_path = NULL`
+- All code paths check MinIO first, fallback to BLOB
+
+### MinIO Service
+
+**File:** `backend/services/minio_service.py`
+
+**Core Operations:**
+```python
+class MinIOService:
+    def upload_audio(file_data: bytes, object_name: str, content_type: str) -> str
+    def download_audio(object_name: str) -> bytes
+    def delete_audio(object_name: str) -> None
+```
+
+**Singleton Pattern:**
+```python
+_minio_service: Optional[MinIOService] = None
+
+def get_minio_service() -> MinIOService:
+    global _minio_service
+    if _minio_service is None:
+        _minio_service = MinIOService()
+    return _minio_service
+```
+
+**Auto-Initialization:**
+- Creates bucket on first request if it doesn't exist
+- Uses bucket name from `MINIO_BUCKET` environment variable
+
+### Configuration
+
+**Environment Variables:**
+```bash
+# MinIO server endpoint (hostname:port)
+MINIO_ENDPOINT=minio:9000                    # Kubernetes/Podman: service name
+# MINIO_ENDPOINT=localhost:9000              # Local development
+
+# MinIO credentials
+MINIO_ACCESS_KEY=minioadmin                  # CHANGE IN PRODUCTION!
+MINIO_SECRET_KEY=minioadmin123               # CHANGE IN PRODUCTION!
+
+# Bucket name (auto-created if doesn't exist)
+MINIO_BUCKET=echonote-audio
+
+# Use HTTPS for MinIO (true/false)
+MINIO_SECURE=false                           # Set to "true" for TLS/HTTPS
+```
+
+**Configuration File:** `backend/config.py`
+```python
+class Settings:
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "echonote-audio")
+    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
+```
+
+### Deployment Considerations
+
+**Local Development** (`echonote-kube-priv-minio.yaml`):
+- MinIO runs as sidecar container in same pod
+- Endpoint: `localhost:9000` (pod-local communication)
+- Console: `localhost:9091` for web UI
+
+**Production OpenShift** (`openshift-deployment-priv.yaml_bak_minio`):
+- MinIO runs as separate deployment
+- Endpoint: `minio-service.echonote.svc:9000` (cluster DNS)
+- Routes for external access (API + Console)
+- 20Gi persistent volume for audio storage
+
+**CRITICAL:** Both backend AND Celery worker containers need MinIO environment variables!
+```yaml
+# Backend container - needs MinIO to upload
+env:
+  - name: MINIO_ENDPOINT
+    valueFrom: { configMapKeyRef: { name: echonote-config, key: MINIO_ENDPOINT }}
+  - name: MINIO_ACCESS_KEY
+    valueFrom: { secretKeyRef: { name: minio-secret, key: minio_root_user }}
+  # ... other MinIO vars
+
+# Celery Worker container - needs MinIO to download
+env:
+  - name: MINIO_ENDPOINT
+    valueFrom: { configMapKeyRef: { name: echonote-config, key: MINIO_ENDPOINT }}
+  - name: MINIO_ACCESS_KEY
+    valueFrom: { secretKeyRef: { name: minio-secret, key: minio_root_user }}
+  # ... other MinIO vars
+```
+
+### Security Best Practices
+
+**1. Change Default Credentials:**
+```yaml
+# openshift-deployment-priv.yaml_bak_minio
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+stringData:
+  minio_root_user: <strong-random-username>        # CHANGE THIS
+  minio_root_password: <min-16-character-password> # CHANGE THIS
+```
+
+**2. Bucket Access Control:**
+- Default: Private bucket (authentication required)
+- Do NOT make bucket public unless you want unauthenticated access
+- Use presigned URLs for temporary public access (future feature)
+
+**3. Network Security:**
+- Internal cluster communication: `MINIO_SECURE=false` (HTTP)
+- External access via OpenShift Routes: TLS termination at edge
+- Production: Consider internal TLS with cert-manager
+
+### Monitoring and Troubleshooting
+
+**Check MinIO Status:**
+```bash
+# Check MinIO container is running
+podman ps | grep minio
+
+# Check MinIO logs
+podman logs echonote-minio
+
+# Access MinIO Console
+# Local: http://localhost:9091
+# OpenShift: https://minio-ui-echonote.apps.example.com
+```
+
+**Common Issues:**
+
+**1. "Connection refused" to MinIO**
+```bash
+# Verify MinIO is running
+podman ps | grep minio
+
+# Check endpoint configuration
+podman exec echonote-backend env | grep MINIO_ENDPOINT
+
+# Test connectivity from backend
+podman exec echonote-backend curl http://localhost:9000/minio/health/live
+```
+
+**2. "SignatureDoesNotMatch" errors**
+```bash
+# Credential mismatch between MinIO server and client
+# Verify credentials match in:
+# - MinIO container: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+# - Backend/Worker: MINIO_ACCESS_KEY, MINIO_SECRET_KEY
+
+# Check backend credentials
+podman exec echonote-backend env | grep MINIO
+
+# Check Celery worker credentials (CRITICAL!)
+podman exec echonote-celery-worker env | grep MINIO
+# If empty, worker missing MinIO env vars → update deployment YAML
+```
+
+**3. "Bucket does not exist" errors**
+```bash
+# MinIO service creates bucket automatically on first upload
+# If this fails, check MinIO logs
+podman logs echonote-minio
+
+# Manually create bucket via MinIO Console
+# Or use mc (MinIO Client):
+mc alias set local http://localhost:9000 minioadmin minioadmin123
+mc mb local/echonote-audio
+```
+
+**4. Audio playback fails (404 errors)**
+```bash
+# Check database for minio_object_path
+podman exec echonote-backend sqlite3 echonote.db \
+  "SELECT id, minio_object_path FROM transcriptions WHERE id=236;"
+
+# Verify file exists in MinIO Console or via mc:
+mc ls local/echonote-audio/audio/user_1/
+```
+
+**5. Upload succeeds but download fails (Celery worker)**
+```bash
+# Most common issue: Celery worker missing MinIO credentials
+# Check worker environment variables
+podman exec echonote-celery-worker env | grep MINIO
+
+# If empty/missing, update deployment YAML to include MinIO env vars
+# for celery-worker container, then redeploy
+```
+
+### Migration from PostgreSQL BLOBs
+
+**Current State:**
+- ✅ All new recordings automatically upload to MinIO
+- ✅ Legacy recordings remain in database BLOBs (backward compatible)
+- ✅ All read operations support both MinIO and BLOBs
+
+**Future Improvements:**
+1. **Migrate existing BLOBs** - Script to move old audio_data to MinIO
+2. **Remove audio_data column** - After all recordings migrated
+3. **Presigned URLs** - Direct browser → MinIO downloads (bypass backend)
+4. **CDN Integration** - Cache frequently accessed audio files
+5. **Lifecycle Policies** - Auto-delete old recordings after X days
+
+**See Also:** `MINIO_MIGRATION_GUIDE.md` for complete migration documentation
 
 ## Quick Start
 

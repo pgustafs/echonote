@@ -38,6 +38,7 @@ from backend.celery_app import celery_app
 from backend.config import settings
 from backend.database import get_session
 from backend.models import Transcription
+from backend.services.minio_service import get_minio_service
 from backend.audio_chunker import chunk_audio, chunk_audio_by_diarization
 from backend.transcription_merger import merge_transcriptions, group_by_speaker
 from backend.diarization import get_diarization_service
@@ -154,9 +155,25 @@ def transcribe_audio_task(
         db_transcription.progress = 5
         session.commit()
 
-        logger.info(f"Loaded transcription {transcription_id}: {len(db_transcription.audio_data)} bytes")
+        # Fetch audio from MinIO or fallback to legacy database BLOB
+        if db_transcription.minio_object_path:
+            # New: Fetch from MinIO object storage
+            logger.info(f"Fetching audio from MinIO: {db_transcription.minio_object_path}")
+            try:
+                minio_service = get_minio_service()
+                audio_bytes = minio_service.download_audio(db_transcription.minio_object_path)
+                logger.info(f"Loaded transcription {transcription_id} from MinIO: {len(audio_bytes)} bytes")
+            except Exception as e:
+                logger.error(f"Failed to download audio from MinIO: {e}")
+                raise ValueError(f"Failed to retrieve audio file from storage: {str(e)}")
+        elif db_transcription.audio_data:
+            # Legacy: Fetch from database BLOB
+            logger.warning(f"Using legacy BLOB storage for transcription {transcription_id}")
+            audio_bytes = db_transcription.audio_data
+            logger.info(f"Loaded transcription {transcription_id} from database: {len(audio_bytes)} bytes")
+        else:
+            raise ValueError(f"Audio file not found for transcription {transcription_id}")
 
-        audio_bytes = db_transcription.audio_data
         audio_content_type = db_transcription.audio_content_type
 
         # Determine audio format

@@ -125,3 +125,7 @@ FRONTEND_AI_ACTIONS.md
 AI_ACTION_IMPROVE.md
 TODO_LIST.md
 OPENSHIFT_LARGE_RECORDING_ERROR.md
+openshift-deployment-priv.yaml_bak_minio
+echonote-kube-priv-minio.yaml
+MINIO_MIGRATION_GUIDE.md
+k8s/minio-deployment.yaml

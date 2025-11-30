@@ -181,7 +181,16 @@ class Transcription(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     text: str = Field(index=True, description="Transcribed text from audio")
-    audio_data: bytes = Field(description="Binary audio file data")
+
+    # Audio storage - Legacy BLOB field (deprecated, use minio_object_path instead)
+    audio_data: Optional[bytes] = Field(default=None, description="Binary audio file data (deprecated)")
+
+    # MinIO object storage path
+    minio_object_path: Optional[str] = Field(
+        default=None,
+        description="Path to audio file in MinIO object storage (e.g., 'audio/user_1/transcription_123.webm')"
+    )
+
     audio_filename: str = Field(description="Original filename of the audio")
     audio_content_type: str = Field(
         default="audio/wav",

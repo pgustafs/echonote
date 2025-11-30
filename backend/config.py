@@ -20,6 +20,11 @@ Environment variables:
 - HF_TOKEN: Hugging Face token for accessing gated models
 - DEFAULT_PAGE_SIZE: Default number of transcriptions per page (default: 10)
 - MAX_PAGE_SIZE: Maximum allowed page size (default: 100)
+- MINIO_ENDPOINT: MinIO server endpoint (default: minio:9000)
+- MINIO_ACCESS_KEY: MinIO access key (default: minioadmin)
+- MINIO_SECRET_KEY: MinIO secret key (default: minioadmin123)
+- MINIO_BUCKET: MinIO bucket name for audio files (default: echonote-audio)
+- MINIO_SECURE: Use HTTPS for MinIO connection (default: false)
 
 Legacy environment variables (deprecated, use MODELS instead):
 - MODEL_URL: URL of the vLLM Whisper server
@@ -184,6 +189,13 @@ class Settings:
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+
+    # MinIO Object Storage Configuration
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "echonote-audio")
+    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
     # Audio Chunking Configuration
     CHUNK_DURATION_SECONDS: int = int(os.getenv("CHUNK_DURATION_SECONDS", "60"))  # 60-second chunks
