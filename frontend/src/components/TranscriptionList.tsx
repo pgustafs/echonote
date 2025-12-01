@@ -3,11 +3,12 @@
  */
 
 import { useState } from 'react'
-import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, executeAIAction } from '../api'
+import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, executeAIAction, reTranscribeAudio, deleteAudioFile } from '../api'
 import { Priority, Transcription } from '../types'
 import AIActionsDrawer from './AIActionsDrawer'
 import AIResultModal from './AIResultModal'
 import MobileDetailSlider from './MobileDetailSlider'
+import ReTranscribeModal, { ReTranscribeOptions } from './ReTranscribeModal'
 import type { AIAction, AIActionResponse } from '../types'
 
 interface TranscriptionListProps {
@@ -21,6 +22,8 @@ interface TranscriptionListProps {
   onFilterChange?: (priority: Priority | null) => void
   totalCount?: number
   isLoading?: boolean
+  availableModels?: string[]
+  defaultModel?: string
 }
 
 // No inline styles needed - all handled by Tailwind theme classes
@@ -35,17 +38,29 @@ export default function TranscriptionList({
   priorityFilter = null,
   onFilterChange,
   totalCount = 0,
-  isLoading = false
+  isLoading = false,
+  availableModels = [],
+  defaultModel = ''
 }: TranscriptionListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
+  const [deletingAudioId, setDeletingAudioId] = useState<number | null>(null)
 
   // Mobile detail slider state
   const [mobileSliderOpen, setMobileSliderOpen] = useState(false)
-  const [selectedTranscription, setSelectedTranscription] = useState<Transcription | null>(null)
+  const [mobileSelectedId, setMobileSelectedId] = useState<number | null>(null)
+
+  // Derive selectedTranscription from transcriptions array to ensure it's always up-to-date
+  const selectedTranscription = mobileSelectedId
+    ? transcriptions.find(t => t.id === mobileSelectedId) || null
+    : null
+
+  // Re-transcribe modal state
+  const [reTranscribeModalOpen, setReTranscribeModalOpen] = useState(false)
+  const [reTranscribeId, setReTranscribeId] = useState<number | null>(null)
 
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
   const [aiResultModalOpen, setAiResultModalOpen] = useState(false)
@@ -55,10 +70,10 @@ export default function TranscriptionList({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
-  const toggleExpand = (id: number, transcription?: Transcription) => {
+  const toggleExpand = (id: number) => {
     if (isMobile) {
       // On mobile, open the detail slider
-      setSelectedTranscription(transcription || null)
+      setMobileSelectedId(id)
       setMobileSliderOpen(true)
     } else {
       // On desktop, toggle inline expansion
@@ -68,7 +83,7 @@ export default function TranscriptionList({
 
   const closeMobileSlider = () => {
     setMobileSliderOpen(false)
-    setSelectedTranscription(null)
+    setMobileSelectedId(null)
   }
 
   const handleDelete = async (id: number) => {
@@ -111,6 +126,44 @@ export default function TranscriptionList({
       alert('Failed to download transcription')
     } finally {
       setDownloadingId(null)
+    }
+  }
+
+  const handleDeleteAudio = async (id: number) => {
+    setDeletingAudioId(id)
+    try {
+      const updated = await deleteAudioFile(id)
+      onUpdate(id, updated)
+    } catch (error) {
+      console.error('Error deleting audio file:', error)
+      alert('Failed to delete audio file')
+    } finally {
+      setDeletingAudioId(null)
+    }
+  }
+
+  const handleOpenReTranscribe = (id: number) => {
+    setReTranscribeId(id)
+    setReTranscribeModalOpen(true)
+  }
+
+  const handleReTranscribeSubmit = async (options: ReTranscribeOptions) => {
+    if (!reTranscribeId) return
+
+    try {
+      const updated = await reTranscribeAudio(
+        reTranscribeId,
+        options.model,
+        options.url,
+        options.enableDiarization,
+        options.numSpeakers
+      )
+      onUpdate(reTranscribeId, updated)
+      setReTranscribeModalOpen(false)
+      setReTranscribeId(null)
+    } catch (error) {
+      console.error('Error re-transcribing:', error)
+      throw error // Let the modal handle the error display
     }
   }
 
@@ -346,7 +399,7 @@ export default function TranscriptionList({
               {/* Header */}
               <div
                 className="flex items-start justify-between cursor-pointer group touch-manipulation min-h-[44px]"
-                onClick={() => toggleExpand(transcription.id, transcription)}
+                onClick={() => toggleExpand(transcription.id)}
               >
                 <div className="flex-1 min-w-0">
                   {/* Metadata row - single horizontal line for mobile */}
@@ -404,7 +457,7 @@ export default function TranscriptionList({
                       </div>
                       {errorMessage && (
                         <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
-                          <p className="text-xs text-red-300">{errorMessage}</p>
+                          <p className="text-xs text-red-300 error-message">{errorMessage}</p>
                         </div>
                       )}
                     </div>
@@ -474,54 +527,58 @@ export default function TranscriptionList({
                   <div className={isMobile ? "space-y-4" : "space-y-5"}>
                     {/* Audio Player */}
                     <div className={isMobile ? "audio-player-mobile" : "section-container p-3 sm:p-4"}>
-                      <div className="flex items-center space-x-2 sm:space-x-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const audio = document.getElementById(
-                              `audio-${transcription.id}`
-                            ) as HTMLAudioElement
-                            if (audio) {
-                              if (isPlaying) {
-                                audio.pause()
-                                setPlayingId(null)
-                              } else {
-                                audio.play()
-                                setPlayingId(transcription.id)
-                              }
-                            }
-                          }}
-                          className="flex-shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
-                        >
-                          {isPlaying ? (
-                            <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="currentColor" viewBox="0 0 20 20">
-                              <path
-                                fillRule="evenodd"
-                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          ) : (
-                            <svg className="w-5 h-5 sm:w-7 sm:h-7 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          )}
-                        </button>
+                      {transcription.audio_filename ? (
+                          <div className="flex items-center space-x-2 sm:space-x-3">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const audio = document.getElementById(
+                                  `audio-${transcription.id}`
+                                ) as HTMLAudioElement
+                                if (audio) {
+                                  if (isPlaying) {
+                                    audio.pause()
+                                    setPlayingId(null)
+                                  } else {
+                                    audio.play()
+                                    setPlayingId(transcription.id)
+                                  }
+                                }
+                              }}
+                              className="flex-shrink-0 w-11 h-11 sm:w-14 sm:h-14 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
+                            >
+                              {isPlaying ? (
+                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="currentColor" viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              ) : (
+                                <svg className="w-5 h-5 sm:w-7 sm:h-7 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </button>
 
-                        <audio
-                          id={`audio-${transcription.id}`}
-                          src={getAudioUrl(transcription.id)}
-                          onEnded={() => setPlayingId(null)}
-                          onPause={() => setPlayingId(null)}
-                          onPlay={() => setPlayingId(transcription.id)}
-                          className="flex-1 min-w-0 h-10 sm:h-12"
-                          controls
-                        />
-                      </div>
+                            <audio
+                              id={`audio-${transcription.id}`}
+                              src={getAudioUrl(transcription.id)}
+                              onEnded={() => setPlayingId(null)}
+                              onPause={() => setPlayingId(null)}
+                              onPlay={() => setPlayingId(transcription.id)}
+                              className="flex-1 min-w-0 h-10 sm:h-12"
+                              controls
+                            />
+                          </div>
+                      ) : (
+                        <p className="text-text-tertiary text-sm italic">Audio file deleted</p>
+                      )}
                     </div>
 
                     {/* URL Display */}
@@ -548,26 +605,48 @@ export default function TranscriptionList({
                     )}
 
                     {/* File Info */}
-                    <div className={isMobile ? "section-container-mobile" : "section-container"}>
-                      <div className="flex items-center space-x-3">
-                        <svg className="w-5 h-5 text-accent-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-text-tertiary mb-1">Audio File</div>
-                          <div className="flex items-center flex-wrap gap-2">
-                            <span className="font-medium text-text-primary text-sm truncate">
-                              {transcription.audio_filename}
-                            </span>
-                            {transcription.duration_seconds && (
-                              <span className="badge-duration">
-                                {transcription.duration_seconds.toFixed(1)}s
+                    {transcription.audio_filename && (
+                      <div className={isMobile ? "section-container-mobile" : "section-container"}>
+                        <div className="flex items-center space-x-3">
+                          <svg className="w-5 h-5 text-accent-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-text-tertiary mb-1">Audio File</div>
+                            <div className="flex items-center flex-wrap gap-2">
+                              <span className="font-medium text-text-primary text-sm truncate">
+                                {transcription.audio_filename}
                               </span>
-                            )}
+                              {transcription.duration_seconds && (
+                                <span className="badge-duration">
+                                  {transcription.duration_seconds.toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (window.confirm('Delete audio file? The transcription text will be kept.')) {
+                                handleDeleteAudio(transcription.id)
+                              }
+                            }}
+                            disabled={deletingAudioId === transcription.id}
+                            className="icon-button-sm icon-button-sm-danger flex-shrink-0"
+                            title="Delete audio file"
+                            aria-label="Delete audio file"
+                          >
+                            {deletingAudioId === transcription.id ? (
+                              <div className="spinner w-4 h-4" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            )}
+                          </button>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Priority Selector */}
                     <div className={isMobile ? "section-container-mobile" : "section-container"}>
@@ -613,6 +692,21 @@ export default function TranscriptionList({
                           <span>AI Actions</span>
                         </button>
                       )}
+
+                      {/* Re-Transcribe Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleOpenReTranscribe(transcription.id)
+                        }}
+                        className="btn-secondary min-h-[44px] flex items-center space-x-2"
+                        title="Re-transcribe with different options"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Re-Transcribe</span>
+                      </button>
 
                       {/* Download Button */}
                       <button
@@ -712,11 +806,29 @@ export default function TranscriptionList({
           onDownload={handleDownload}
           onPriorityChange={handlePriorityChange}
           onOpenAIActions={handleOpenAIActions}
+          onReTranscribe={handleOpenReTranscribe}
+          onDeleteAudio={handleDeleteAudio}
           isDeleting={deletingId === selectedTranscription?.id}
           isDownloading={downloadingId === selectedTranscription?.id}
           isUpdating={updatingId === selectedTranscription?.id}
+          isDeletingAudio={deletingAudioId === selectedTranscription?.id}
         />
       )}
+
+      {/* Re-Transcribe Modal */}
+      <ReTranscribeModal
+        transcriptionId={reTranscribeId}
+        isOpen={reTranscribeModalOpen}
+        onClose={() => {
+          setReTranscribeModalOpen(false)
+          setReTranscribeId(null)
+        }}
+        onSubmit={handleReTranscribeSubmit}
+        availableModels={availableModels}
+        defaultModel={defaultModel}
+        isMobile={isMobile}
+        currentUrl={reTranscribeId ? (transcriptions.find(t => t.id === reTranscribeId)?.url || '') : ''}
+      />
     </div>
   )
 }

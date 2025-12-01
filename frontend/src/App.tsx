@@ -444,6 +444,8 @@ function App() {
             onFilterChange={handleFilterChange}
             totalCount={totalTranscriptions}
             isLoading={isLoading}
+            availableModels={availableModels}
+            defaultModel={defaultModel}
           />
 
           {/* Pagination Controls - Desktop Only */}

@@ -16,9 +16,12 @@ interface MobileDetailSliderProps {
   onDownload: (id: number) => void
   onPriorityChange: (id: number, priority: Priority) => void
   onOpenAIActions: (id: number) => void
+  onReTranscribe: (id: number) => void
+  onDeleteAudio: (id: number) => void
   isDeleting: boolean
   isDownloading: boolean
   isUpdating: boolean
+  isDeletingAudio: boolean
 }
 
 export default function MobileDetailSlider({
@@ -29,9 +32,12 @@ export default function MobileDetailSlider({
   onDownload,
   onPriorityChange,
   onOpenAIActions,
+  onReTranscribe,
+  onDeleteAudio,
   isDeleting,
   isDownloading,
   isUpdating,
+  isDeletingAudio,
 }: MobileDetailSliderProps) {
   const [playingId, setPlayingId] = useState<number | null>(null)
 
@@ -144,7 +150,7 @@ export default function MobileDetailSlider({
               </div>
               {errorMessage && (
                 <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
-                  <p className="text-xs text-red-300">{errorMessage}</p>
+                  <p className="text-xs text-red-300 error-message">{errorMessage}</p>
                 </div>
               )}
             </div>
@@ -169,53 +175,57 @@ export default function MobileDetailSlider({
           {/* Audio Player */}
           <div className="section-container-mobile mb-4">
             <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wide">Audio</h3>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => {
-                  const audio = document.getElementById(
-                    `audio-mobile-${transcription.id}`
-                  ) as HTMLAudioElement
-                  if (audio) {
-                    if (isPlaying) {
-                      audio.pause()
-                      setPlayingId(null)
-                    } else {
-                      audio.play()
-                      setPlayingId(transcription.id)
+            {transcription.audio_filename ? (
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    const audio = document.getElementById(
+                      `audio-mobile-${transcription.id}`
+                    ) as HTMLAudioElement
+                    if (audio) {
+                      if (isPlaying) {
+                        audio.pause()
+                        setPlayingId(null)
+                      } else {
+                        audio.play()
+                        setPlayingId(transcription.id)
+                      }
                     }
-                  }
-                }}
-                className="flex-shrink-0 w-11 h-11 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
-              >
-                {isPlaying ? (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                )}
-              </button>
+                  }}
+                  className="flex-shrink-0 w-11 h-11 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
+                >
+                  {isPlaying ? (
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </button>
 
-              <audio
-                id={`audio-mobile-${transcription.id}`}
-                src={getAudioUrl(transcription.id)}
-                onEnded={() => setPlayingId(null)}
-                onPause={() => setPlayingId(null)}
-                onPlay={() => setPlayingId(transcription.id)}
-                className="flex-1 min-w-0 h-10"
-                controls
-              />
-            </div>
+                <audio
+                  id={`audio-mobile-${transcription.id}`}
+                  src={getAudioUrl(transcription.id)}
+                  onEnded={() => setPlayingId(null)}
+                  onPause={() => setPlayingId(null)}
+                  onPlay={() => setPlayingId(transcription.id)}
+                  className="flex-1 min-w-0 h-10"
+                  controls
+                />
+              </div>
+            ) : (
+              <p className="text-text-tertiary text-sm italic">Audio file deleted</p>
+            )}
           </div>
 
           {/* URL Display */}
@@ -234,19 +244,42 @@ export default function MobileDetailSlider({
           )}
 
           {/* File Info */}
-          <div className="section-container-mobile mb-4">
-            <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wide">Audio File</h3>
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="font-medium text-text-primary text-sm truncate">
-                {transcription.audio_filename}
-              </span>
-              {transcription.duration_seconds && (
-                <span className="badge-duration">
-                  {transcription.duration_seconds.toFixed(1)}s
-                </span>
-              )}
+          {transcription.audio_filename && (
+            <div className="section-container-mobile mb-4">
+              <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wide">Audio File</h3>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center flex-wrap gap-2 flex-1 min-w-0">
+                  <span className="font-medium text-text-primary text-sm truncate">
+                    {transcription.audio_filename}
+                  </span>
+                  {transcription.duration_seconds && (
+                    <span className="badge-duration">
+                      {transcription.duration_seconds.toFixed(1)}s
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Delete audio file? The transcription text will be kept.')) {
+                      onDeleteAudio(transcription.id)
+                    }
+                  }}
+                  disabled={isDeletingAudio}
+                  className="icon-button-sm icon-button-sm-danger flex-shrink-0"
+                  title="Delete audio file"
+                  aria-label="Delete audio file"
+                >
+                  {isDeletingAudio ? (
+                    <div className="spinner w-4 h-4" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Priority Selector */}
           <div className="section-container-mobile mb-4">
@@ -254,9 +287,15 @@ export default function MobileDetailSlider({
             <div className="flex items-center gap-2">
               <select
                 value={transcription.priority}
-                onChange={(e) => onPriorityChange(transcription.id, e.target.value as Priority)}
+                onChange={(e) => {
+                  const newValue = e.target.value as Priority
+                  // Don't call if value hasn't changed
+                  if (newValue !== transcription.priority) {
+                    onPriorityChange(transcription.id, newValue)
+                  }
+                }}
                 disabled={isUpdating}
-                className="select-field py-2 text-sm min-h-[44px]"
+                className="select-field select-field-mobile py-2 text-sm min-h-[44px]"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -282,6 +321,18 @@ export default function MobileDetailSlider({
               <span className="text-xs font-medium">AI Actions</span>
             </button>
           )}
+
+          {/* Re-Transcribe Button */}
+          <button
+            onClick={() => onReTranscribe(transcription.id)}
+            className="mobile-slider-action-btn"
+            title="Re-transcribe with new options"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="text-xs font-medium">Re-Transcribe</span>
+          </button>
 
           {/* Download Button */}
           <button

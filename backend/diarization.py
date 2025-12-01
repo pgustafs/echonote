@@ -19,8 +19,33 @@ from typing import Optional
 import soundfile as sf
 import torch
 from pyannote.audio import Pipeline
+from pyannote.audio.core.task import Specifications, Problem, Resolution
+from pyannote.audio.core.model import Introspection
+from omegaconf import DictConfig, ListConfig
+from omegaconf.base import ContainerMetadata, Metadata
+from omegaconf.nodes import AnyNode
 
 from backend.config import settings
+
+# Fix for PyTorch 2.6+: Add safe globals for model loading
+# PyTorch 2.6+ changed weights_only default from False to True, which breaks
+# loading of pyannote models that contain OmegaConf and pyannote classes
+if hasattr(torch, 'serialization') and hasattr(torch.serialization, 'add_safe_globals'):
+    torch.serialization.add_safe_globals([
+        # PyTorch internal classes
+        torch.torch_version.TorchVersion,
+        # pyannote.audio core classes
+        Specifications,
+        Problem,
+        Resolution,
+        Introspection,
+        # OmegaConf classes (required for model configuration)
+        ListConfig,
+        DictConfig,
+        ContainerMetadata,
+        Metadata,
+        AnyNode,
+    ])
 
 logger = logging.getLogger(__name__)
 

@@ -521,6 +521,154 @@ def delete_transcription(
     return {"message": "Transcription deleted successfully"}
 
 
+@router.post("/transcriptions/{transcription_id}/re-transcribe", response_model=TranscriptionPublic)
+def re_transcribe(
+    transcription_id: int,
+    model: Annotated[str | None, Form(description="Model to use for transcription")] = None,
+    url: Annotated[str | None, Form(description="Optional URL associated with the voice note")] = None,
+    enable_diarization: Annotated[bool, Form(description="Enable speaker diarization")] = False,
+    num_speakers: Annotated[int | None, Form(description="Number of speakers (optional)")] = None,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Re-transcribe an existing transcription with new options.
+
+    This endpoint allows re-processing an existing audio file with different:
+    - Transcription model
+    - Diarization settings
+    - Number of speakers
+    - Associated URL
+
+    Authentication: Requires valid JWT token.
+    Only allows re-transcription if original transcription belongs to the authenticated user.
+
+    Args:
+        transcription_id: ID of the transcription to re-transcribe
+        model: Model name to use for transcription (defaults to DEFAULT_MODEL)
+        url: Optional URL to associate with the re-transcription
+        enable_diarization: Enable speaker diarization (default: False)
+        num_speakers: Number of speakers to detect (optional, auto-detect if not specified)
+        current_user: Authenticated user (injected)
+        session: Database session (injected)
+
+    Returns:
+        TranscriptionPublic: Updated transcription with status="pending"
+
+    Raises:
+        HTTPException 404: Transcription not found
+        HTTPException 403: Not authorized to re-transcribe this transcription
+        HTTPException 500: Re-transcription task dispatch failure
+    """
+    try:
+        # Get the existing transcription (verifies ownership)
+        original = TranscriptionService.get_transcription_by_id(
+            session, transcription_id, current_user
+        )
+
+        # Determine which model to use
+        selected_model = model if model else settings.DEFAULT_MODEL
+
+        logger.info(f"Re-transcribing transcription {transcription_id} with model: {selected_model}, diarization: {enable_diarization}")
+
+        # Update transcription status to pending and clear previous results
+        original.status = "pending"
+        original.progress = 0
+        original.text = ""
+        original.error_message = None
+        original.task_id = None
+
+        # Update URL if provided
+        if url is not None:
+            original.url = url
+
+        session.commit()
+        session.refresh(original)
+
+        # Dispatch Celery task for background processing with new options
+        task_id = TranscriptionService.dispatch_transcription_task(
+            transcription_id=original.id,
+            model=selected_model,
+            enable_diarization=enable_diarization,
+            num_speakers=num_speakers,
+            session=session
+        )
+
+        # Return transcription with status="pending"
+        return TranscriptionService.to_public_schema(original)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Critical error during re-transcription: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to re-transcribe: {str(e)}"
+        )
+
+
+@router.delete("/transcriptions/{transcription_id}/audio", response_model=TranscriptionPublic)
+def delete_audio_file(
+    transcription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Delete the audio file from storage while keeping the transcription text.
+
+    This endpoint removes the audio file from MinIO storage and updates the
+    transcription record to reflect that the audio is no longer available.
+    The transcription text remains intact.
+
+    Args:
+        transcription_id: ID of the transcription whose audio should be deleted
+        current_user: Currently authenticated user
+        session: Database session
+
+    Returns:
+        TranscriptionPublic: Updated transcription without audio file
+
+    Raises:
+        HTTPException: If transcription not found or user lacks permission
+    """
+    try:
+        # Get the transcription (verifies ownership)
+        transcription = TranscriptionService.get_transcription_by_id(
+            session, transcription_id, current_user
+        )
+
+        # Delete audio file from MinIO if it exists
+        if transcription.audio_filename:
+            try:
+                TranscriptionService.delete_audio_from_storage(
+                    user_id=current_user.id,
+                    transcription_id=transcription.id,
+                    filename=transcription.audio_filename
+                )
+                logger.info(f"Deleted audio file for transcription {transcription_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete audio file from storage: {e}")
+                # Continue anyway to update the database record
+
+        # Update transcription to reflect audio deletion
+        transcription.audio_filename = None
+        transcription.duration_seconds = None
+
+        session.commit()
+        session.refresh(transcription)
+
+        return TranscriptionService.to_public_schema(transcription)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete audio file: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete audio file: {str(e)}"
+        )
+
+
 @router.get("/models")
 def get_models():
     """

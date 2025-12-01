@@ -191,7 +191,10 @@ class Transcription(SQLModel, table=True):
         description="Path to audio file in MinIO object storage (e.g., 'audio/user_1/transcription_123.webm')"
     )
 
-    audio_filename: str = Field(description="Original filename of the audio")
+    audio_filename: Optional[str] = Field(
+        default=None,
+        description="Original filename of the audio (null if audio deleted)"
+    )
     audio_content_type: str = Field(
         default="audio/wav",
         description="MIME type of the audio file"
@@ -254,7 +257,7 @@ class TranscriptionPublic(SQLModel):
     """Public schema for transcription (without binary audio data)"""
     id: int
     text: str
-    audio_filename: str
+    audio_filename: Optional[str]
     audio_content_type: str
     created_at: datetime
     duration_seconds: Optional[float]

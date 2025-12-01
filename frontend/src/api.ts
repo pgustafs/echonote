@@ -415,6 +415,73 @@ export async function downloadTranscription(id: number): Promise<void> {
   window.URL.revokeObjectURL(url)
 }
 
+/**
+ * Re-transcribe an existing transcription with new options
+ */
+export async function reTranscribeAudio(
+  id: number,
+  model?: string,
+  url?: string,
+  enableDiarization?: boolean,
+  numSpeakers?: number
+): Promise<Transcription> {
+  const formData = new FormData()
+
+  if (model) {
+    formData.append('model', model)
+  }
+
+  if (url !== undefined) {
+    formData.append('url', url)
+  }
+
+  if (enableDiarization !== undefined) {
+    formData.append('enable_diarization', enableDiarization.toString())
+  }
+
+  if (numSpeakers !== undefined) {
+    formData.append('num_speakers', numSpeakers.toString())
+  }
+
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}/re-transcribe`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `HTTP error ${response.status}`);
+    } else {
+      throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+    }
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete the audio file from a transcription while keeping the text
+ */
+export async function deleteAudioFile(id: number): Promise<Transcription> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}/audio`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `HTTP error ${response.status}`);
+    } else {
+      throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+    }
+  }
+
+  return response.json()
+}
+
 // ============================================================================
 // Background Task Status APIs
 // ============================================================================

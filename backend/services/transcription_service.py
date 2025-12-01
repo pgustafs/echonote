@@ -510,6 +510,38 @@ class TranscriptionService:
         logger.info(f"Deleted transcription ID: {transcription_id}")
 
     @staticmethod
+    def delete_audio_from_storage(
+        user_id: int,
+        transcription_id: int,
+        filename: str
+    ) -> None:
+        """
+        Delete only the audio file from MinIO storage.
+
+        This method removes the audio file from MinIO but does not delete
+        the transcription record from the database. Used when user wants
+        to save storage space but keep the transcription text.
+
+        Args:
+            user_id: ID of the user who owns the transcription
+            transcription_id: ID of the transcription
+            filename: Name of the audio file
+
+        Raises:
+            Exception: If MinIO deletion fails
+        """
+        # Construct the MinIO object path
+        object_path = f"audio/user_{user_id}/transcription_{transcription_id}_{filename}"
+
+        try:
+            minio_service = get_minio_service()
+            minio_service.delete_audio(object_path)
+            logger.info(f"Deleted audio from MinIO: {object_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete audio from MinIO: {object_path}, error: {e}")
+            raise
+
+    @staticmethod
     def convert_audio_to_wav(
         audio_data: bytes,
         content_type: str,
