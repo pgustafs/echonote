@@ -335,15 +335,25 @@ export async function getTranscription(id: number): Promise<Transcription> {
 }
 
 /**
- * Get audio URL for a transcription
+ * Get audio URL for a transcription with optional format conversion
+ * @param id - Transcription ID
+ * @param format - Optional audio format (webm, wav, mp3, ogg). If not specified, returns original format.
  * Note: For authenticated audio access, append token as query param in the audio element
  */
-export function getAudioUrl(id: number): string {
+export function getAudioUrl(id: number, format?: string): string {
   const token = localStorage.getItem(TOKEN_KEY)
+  const baseUrl = `${getApiBaseUrl()}/transcriptions/${id}/audio`
+
+  const params = new URLSearchParams()
   if (token) {
-    return `${getApiBaseUrl()}/transcriptions/${id}/audio?token=${encodeURIComponent(token)}`
+    params.append('token', token)
   }
-  return `${getApiBaseUrl()}/transcriptions/${id}/audio`
+  if (format) {
+    params.append('format', format)
+  }
+
+  const queryString = params.toString()
+  return queryString ? `${baseUrl}?${queryString}` : baseUrl
 }
 
 /**
@@ -382,8 +392,17 @@ export async function deleteTranscription(id: number): Promise<void> {
 /**
  * Download a transcription as ZIP containing WAV audio and config.json
  */
-export async function downloadTranscription(id: number): Promise<void> {
-  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}/download`)
+export async function downloadTranscription(id: number, format?: string): Promise<void> {
+  const params = new URLSearchParams()
+  if (format) {
+    params.append('format', format)
+  }
+  const queryString = params.toString()
+  const url = queryString
+    ? `${getApiBaseUrl()}/transcriptions/${id}/download?${queryString}`
+    : `${getApiBaseUrl()}/transcriptions/${id}/download`
+
+  const response = await fetchWithAuth(url)
 
   if (!response.ok) {
     throw new Error('Failed to download transcription')
@@ -403,16 +422,16 @@ export async function downloadTranscription(id: number): Promise<void> {
   const blob = await response.blob()
 
   // Create a temporary link element and trigger download
-  const url = window.URL.createObjectURL(blob)
+  const downloadUrl = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
-  link.href = url
+  link.href = downloadUrl
   link.download = filename
   document.body.appendChild(link)
   link.click()
 
   // Cleanup
   document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
+  window.URL.revokeObjectURL(downloadUrl)
 }
 
 /**

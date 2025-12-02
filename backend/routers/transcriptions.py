@@ -475,12 +475,13 @@ async def get_audio(
 @router.get("/transcriptions/{transcription_id}/download")
 async def download_transcription(
     transcription_id: int,
+    format: Optional[str] = Query(None, description="Audio format (webm, wav, mp3). Defaults to wav."),
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
     Download a transcription as a ZIP file containing:
-    - {username}.wav: Audio file in WAV format
+    - {username}.{format}: Audio file in specified format (default: wav)
     - config.json: Transcription metadata and text
 
     Authentication: Requires valid JWT token.
@@ -488,6 +489,7 @@ async def download_transcription(
 
     Args:
         transcription_id: ID of the transcription
+        format: Audio format (webm, wav, mp3). Defaults to wav if not specified.
         current_user: Authenticated user (injected)
         session: Database session (injected)
 
@@ -503,9 +505,12 @@ async def download_transcription(
         session, transcription_id, current_user
     )
 
-    # Create ZIP package
+    # Default to wav if no format specified
+    target_format = format.lower() if format else 'wav'
+
+    # Create ZIP package with specified format
     zip_buffer = TranscriptionService.create_download_package(
-        transcription, current_user.username
+        transcription, current_user.username, target_format
     )
 
     # Generate a meaningful filename for the ZIP

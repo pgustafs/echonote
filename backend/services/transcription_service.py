@@ -564,18 +564,20 @@ class TranscriptionService:
     @staticmethod
     def create_download_package(
         transcription: Transcription,
-        username: str
+        username: str,
+        format: str = 'wav'
     ) -> BytesIO:
         """
         Create a ZIP package containing audio and metadata for download.
 
         The package includes:
-        - {username}.wav: Audio file in WAV format
+        - {username}.{format}: Audio file in specified format
         - config.json: Transcription metadata and text
 
         Args:
             transcription: Transcription to package
             username: Username for filename
+            format: Audio format (webm, wav, mp3). Defaults to wav.
 
         Returns:
             BytesIO buffer containing the ZIP file
@@ -583,34 +585,61 @@ class TranscriptionService:
         Raises:
             HTTPException: If package creation fails
         """
-        # Get audio from MinIO or fallback to legacy database BLOB
-        if transcription.minio_object_path:
-            # New: Fetch from MinIO
+        from backend.celery_app import celery_app
+
+        # Determine source format
+        source_content_type = transcription.audio_content_type or "audio/webm"
+        format_mapping = {
+            'audio/webm': 'webm',
+            'audio/wav': 'wav',
+            'audio/wave': 'wav',
+            'audio/x-wav': 'wav',
+            'audio/mpeg': 'mp3',
+            'audio/mp3': 'mp3',
+            'audio/ogg': 'ogg',
+        }
+        source_format = format_mapping.get(source_content_type, 'webm')
+
+        # Check if format conversion is needed
+        target_format = format.lower()
+        if target_format != source_format:
+            logger.info(f"Format conversion for download: {source_format} -> {target_format}")
+            # Use celery task for conversion
             try:
-                minio_service = get_minio_service()
-                audio_bytes = minio_service.download_audio(transcription.minio_object_path)
+                task_result = celery_app.send_task(
+                    'backend.tasks.convert_audio_format',
+                    kwargs={
+                        'transcription_id': transcription.id,
+                        'target_format': target_format
+                    }
+                )
+                # Wait for conversion to complete (timeout 60s)
+                audio_bytes = task_result.get(timeout=60)
             except Exception as e:
-                logger.error(f"Failed to download audio from MinIO: {e}")
-                raise HTTPException(status_code=500, detail="Failed to retrieve audio file for download")
-        elif transcription.audio_data:
-            # Legacy: Use database BLOB
-            audio_bytes = transcription.audio_data
+                logger.error(f"Format conversion failed for download: {e}")
+                raise HTTPException(status_code=500, detail=f"Format conversion failed: {str(e)}")
         else:
-            raise HTTPException(status_code=404, detail="Audio file not found")
+            # No conversion needed, get original audio
+            if transcription.minio_object_path:
+                # New: Fetch from MinIO
+                try:
+                    minio_service = get_minio_service()
+                    audio_bytes = minio_service.download_audio(transcription.minio_object_path)
+                except Exception as e:
+                    logger.error(f"Failed to download audio from MinIO: {e}")
+                    raise HTTPException(status_code=500, detail="Failed to retrieve audio file for download")
+            elif transcription.audio_data:
+                # Legacy: Use database BLOB
+                audio_bytes = transcription.audio_data
+            else:
+                raise HTTPException(status_code=404, detail="Audio file not found")
 
-        # Get audio in WAV format (convert if needed)
-        wav_bytes = TranscriptionService.convert_audio_to_wav(
-            audio_bytes,
-            transcription.audio_content_type,
-            transcription.id
-        )
-
-        # Create config.json content
-        wav_filename = f"{username}.wav"
+        # Create config.json content with correct filename
+        audio_filename = f"{username}.{target_format}"
         config_data = {
             username: {
                 "transcript": transcription.text,
-                "audio_file": wav_filename
+                "audio_file": audio_filename
             }
         }
         config_json = json.dumps(config_data, indent=4)
@@ -619,14 +648,14 @@ class TranscriptionService:
         zip_buffer = BytesIO()
         try:
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # Add WAV file
-                zip_file.writestr(wav_filename, wav_bytes)
+                # Add audio file with correct extension
+                zip_file.writestr(audio_filename, audio_bytes)
 
                 # Add config.json
                 zip_file.writestr('config.json', config_json)
 
             zip_buffer.seek(0)
-            logger.info(f"Created ZIP archive for transcription {transcription.id}")
+            logger.info(f"Created ZIP archive for transcription {transcription.id} with format {target_format}")
             return zip_buffer
         except Exception as e:
             logger.error(f"Error creating ZIP file: {e}")

@@ -13,7 +13,7 @@ interface MobileDetailSliderProps {
   isOpen: boolean
   onClose: () => void
   onDelete: (id: number) => void
-  onDownload: (id: number) => void
+  onDownload: (id: number, format?: string) => void
   onPriorityChange: (id: number, priority: Priority) => void
   onOpenAIActions: (id: number) => void
   onReTranscribe: (id: number) => void
@@ -40,6 +40,7 @@ export default function MobileDetailSlider({
   isDeletingAudio,
 }: MobileDetailSliderProps) {
   const [playingId, setPlayingId] = useState<number | null>(null)
+  const [audioFormat, setAudioFormat] = useState<string>('webm')
 
   if (!transcription) return null
 
@@ -176,52 +177,84 @@ export default function MobileDetailSlider({
           <div className="section-container-mobile mb-4">
             <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wide">Audio</h3>
             {transcription.audio_filename ? (
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => {
-                    const audio = document.getElementById(
-                      `audio-mobile-${transcription.id}`
-                    ) as HTMLAudioElement
-                    if (audio) {
-                      if (isPlaying) {
-                        audio.pause()
-                        setPlayingId(null)
-                      } else {
-                        audio.play()
-                        setPlayingId(transcription.id)
+              <div className="space-y-3">
+                {/* Format Selector */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-medium text-text-tertiary whitespace-nowrap">Format:</span>
+                  <select
+                    value={audioFormat}
+                    onChange={(e) => {
+                      const newFormat = e.target.value
+                      setAudioFormat(newFormat)
+                      // Update audio source
+                      const audio = document.getElementById(`audio-mobile-${transcription.id}`) as HTMLAudioElement
+                      if (audio) {
+                        const wasPlaying = !audio.paused
+                        const currentTime = audio.currentTime
+                        audio.src = getAudioUrl(transcription.id, newFormat)
+                        audio.load()
+                        if (wasPlaying) {
+                          audio.currentTime = currentTime
+                          audio.play()
+                        }
                       }
-                    }
-                  }}
-                  className="flex-shrink-0 w-11 h-11 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
-                >
-                  {isPlaying ? (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  )}
-                </button>
+                    }}
+                    className="select-field select-field-mobile text-sm py-2 px-3"
+                  >
+                    <option value="webm">WebM (Original)</option>
+                    <option value="wav">WAV</option>
+                    <option value="mp3">MP3</option>
+                  </select>
+                </div>
 
-                <audio
-                  id={`audio-mobile-${transcription.id}`}
-                  src={getAudioUrl(transcription.id)}
-                  onEnded={() => setPlayingId(null)}
-                  onPause={() => setPlayingId(null)}
-                  onPlay={() => setPlayingId(transcription.id)}
-                  className="flex-1 min-w-0 h-10"
-                  controls
-                />
+                {/* Player Controls */}
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => {
+                      const audio = document.getElementById(
+                        `audio-mobile-${transcription.id}`
+                      ) as HTMLAudioElement
+                      if (audio) {
+                        if (isPlaying) {
+                          audio.pause()
+                          setPlayingId(null)
+                        } else {
+                          audio.play()
+                          setPlayingId(transcription.id)
+                        }
+                      }
+                    }}
+                    className="flex-shrink-0 w-11 h-11 rounded-lg bg-accent-blue hover:bg-accent-blue/90 active:bg-accent-blue/80 text-white flex items-center justify-center transition-all duration-200 touch-target"
+                  >
+                    {isPlaying ? (
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
+                  </button>
+
+                  <audio
+                    id={`audio-mobile-${transcription.id}`}
+                    src={getAudioUrl(transcription.id, audioFormat)}
+                    onEnded={() => setPlayingId(null)}
+                    onPause={() => setPlayingId(null)}
+                    onPlay={() => setPlayingId(transcription.id)}
+                    className="flex-1 min-w-0 h-10"
+                    controls
+                  />
+                </div>
               </div>
             ) : (
               <p className="text-text-tertiary text-sm italic">Audio file deleted</p>
@@ -336,7 +369,7 @@ export default function MobileDetailSlider({
 
           {/* Download Button */}
           <button
-            onClick={() => onDownload(transcription.id)}
+            onClick={() => onDownload(transcription.id, audioFormat)}
             disabled={isDownloading}
             className="mobile-slider-action-btn"
             title="Download"
