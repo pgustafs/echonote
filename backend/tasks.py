@@ -187,6 +187,34 @@ def transcribe_audio_task(
         }
         audio_format = format_mapping.get(audio_content_type, 'wav')
 
+        # Convert WebM to WAV if needed (moved from backend to worker for lightweight backend)
+        if audio_content_type == "audio/webm":
+            logger.info(f"Converting WebM to WAV ({len(audio_bytes)} bytes)")
+            from backend.audio_converter import convert_webm_to_wav
+            import gc
+            import sys
+
+            # Convert to WAV
+            wav_bytes, converter_duration = convert_webm_to_wav(audio_bytes)
+            logger.info(f"WebM converted to WAV: {len(wav_bytes)} bytes")
+
+            # Clean up converter module to free memory
+            modules_to_remove = [m for m in sys.modules.keys() if 'pydub' in m.lower()]
+            for module_name in modules_to_remove:
+                del sys.modules[module_name]
+            del convert_webm_to_wav
+            gc.collect()
+
+            # Replace audio bytes and update format
+            audio_bytes = wav_bytes
+            audio_format = 'wav'
+            audio_content_type = 'audio/wav'
+
+            # Update duration if we got it from converter
+            if converter_duration and not db_transcription.duration_seconds:
+                db_transcription.duration_seconds = converter_duration
+                session.commit()
+
         # Get audio duration and check if chunking needed
         from pydub import AudioSegment
         audio = AudioSegment.from_file(BytesIO(audio_bytes), format=audio_format)
@@ -646,4 +674,90 @@ def cleanup_old_ai_actions_task():
 
     except Exception as e:
         logger.error(f"Error during AI actions cleanup: {str(e)}", exc_info=True)
+        raise
+
+
+@celery_app.task(
+    name='backend.tasks.convert_audio_format',
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60
+)
+def convert_audio_format_task(self, transcription_id: int, target_format: str) -> bytes:
+    """
+    Convert audio file to a different format on-demand.
+
+    This task runs on the celery worker where all audio processing dependencies
+    (pydub, ffmpeg) are available. The converted audio is returned as bytes
+    and NOT stored in MinIO to save storage space.
+
+    Args:
+        transcription_id: ID of the transcription record
+        target_format: Target audio format (wav, mp3, ogg, etc.)
+
+    Returns:
+        Converted audio data as bytes
+
+    Raises:
+        Exception: If conversion fails or transcription not found
+
+    Example:
+        # Dispatch task from backend (synchronous)
+        task = convert_audio_format_task.apply_async(
+            kwargs={'transcription_id': 123, 'target_format': 'wav'}
+        )
+        converted_bytes = task.get(timeout=60)
+    """
+    logger.info(f"Converting audio for transcription {transcription_id} to {target_format}")
+
+    session = next(get_session())
+
+    try:
+        # Load transcription record
+        db_transcription = session.get(Transcription, transcription_id)
+        if not db_transcription:
+            raise Exception(f"Transcription {transcription_id} not found")
+
+        # Get source format from content type
+        source_content_type = db_transcription.audio_content_type or "audio/webm"
+        format_mapping = {
+            'audio/webm': 'webm',
+            'audio/wav': 'wav',
+            'audio/wave': 'wav',
+            'audio/x-wav': 'wav',
+            'audio/mpeg': 'mp3',
+            'audio/mp3': 'mp3',
+            'audio/ogg': 'ogg',
+        }
+        source_format = format_mapping.get(source_content_type, 'webm')
+
+        # If source format matches target, no conversion needed
+        if source_format == target_format:
+            logger.info(f"Source format already {target_format}, downloading original")
+            minio_service = get_minio_service()
+            audio_bytes = minio_service.download_audio(db_transcription.minio_object_path)
+            return audio_bytes
+
+        # Download original audio from MinIO using stored path
+        minio_service = get_minio_service()
+        object_name = db_transcription.minio_object_path
+
+        logger.info(f"Downloading original audio from MinIO: {object_name}")
+        audio_bytes = minio_service.download_audio(object_name)
+        logger.info(f"Downloaded {len(audio_bytes)} bytes")
+
+        # Convert audio format (runs in isolated subprocess)
+        from backend.audio_converter import convert_audio_format
+
+        logger.info(f"Converting from {source_format} to {target_format}")
+        converted_bytes, duration = convert_audio_format(audio_bytes, source_format, target_format)
+        logger.info(f"Conversion complete: {len(converted_bytes)} bytes")
+
+        return converted_bytes
+
+    except Exception as e:
+        logger.error(f"Error converting audio format for transcription {transcription_id}: {str(e)}", exc_info=True)
+        # Retry on transient errors
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)
         raise

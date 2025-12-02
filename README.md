@@ -11,7 +11,7 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 🤖 **AI Transcription** - Powered by Whisper (large-v3-turbo) via vLLM
 ⚡ **Background Processing** - Async transcription with Celery and Redis for responsive UX and progress tracking
 🔄 **Real-time Updates** - Live status updates and progress bars without page refresh
-👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio (optional, CPU-only)
+👥 **Speaker Diarization** - Detect and separate different speakers using pyannote.audio 4.0.2 with speaker-diarization-community-1 model (optional, CPU-only)
 🧠 **AI Actions (18 endpoints)** - Transform transcriptions with analyze, create, improve, translate, and voice utilities powered by LlamaStack
 💬 **AI Chat** - Multi-turn conversations with the AI model with transcription context support
 ✨ **Improve Results** - Iteratively refine AI-generated content with session-based improvements
@@ -21,7 +21,7 @@ A modern, beautiful voice transcription application built with FastAPI and Vite.
 🔍 **Search & Filter** - Full-text search in transcriptions with priority filtering
 📱 **Responsive Design** - Works seamlessly on desktop and mobile with dedicated mobile layout
 🌓 **Dark Mode Ready** - Beautiful UI in both light and dark themes
-🎨 **Format Conversion** - Server-side WebM to WAV conversion with FFmpeg (isolated subprocess)
+🎨 **Format Conversion** - On-demand audio format conversion (wav, mp3, ogg) on worker with no storage overhead
 📴 **Progressive Web App** - Full PWA with offline recording, automatic sync, and installable app
 
 ## Progressive Web App Features
@@ -1240,8 +1240,8 @@ bleach==6.0.0    # HTML sanitization to prevent XSS attacks
 - **slowapi** - Rate limiting for FastAPI (Phase 4: Security)
 - **bleach** - HTML sanitization to prevent XSS attacks (Phase 4: Security)
 - **OpenAI SDK** - For Whisper API calls to vLLM server
-- **pyannote.audio** - Speaker diarization (CPU-only PyTorch)
-- **pydub** - Audio chunking for long recordings (60s+ segments)
+- **pyannote.audio 4.0.2** - Speaker diarization with speaker-diarization-community-1 model (CPU-only PyTorch 2.8, worker-only)
+- **pydub** - Audio format conversion (worker-only)
 
 ### Frontend
 - **Vite** - Next generation frontend tooling
@@ -1263,8 +1263,9 @@ echonote/
 │   ├── Containerfile.celery-beat  # Celery Beat scheduler container build
 │   ├── .containerignore      # Backend build exclusions
 │   ├── .env.example          # Environment template with security docs - Phase 4
-│   ├── requirements.txt      # Python dependencies (full, includes slowapi + bleach)
-│   ├── requirements-beat.txt # Minimal dependencies for Beat scheduler
+│   ├── requirements-backend.txt # Lightweight backend dependencies (no audio processing)
+│   ├── requirements-worker.txt  # Full worker dependencies (with pyannote 4.0.2, pydub, ffmpeg)
+│   ├── requirements-beat.txt    # Minimal dependencies for Beat scheduler
 │   ├── __init__.py
 │   ├── main.py               # FastAPI app (lifespan, routers, config validation - Phase 4)
 │   ├── routers/              # API endpoint routers (modular)
@@ -1394,9 +1395,9 @@ EchoNote uses a distributed task queue architecture for async transcription proc
 
 **5-Container Architecture:**
 1. **Frontend** (`echonote-frontend`) - React/Vite SPA
-2. **Backend** (`echonote-backend`) - FastAPI REST API (modular routers + service layer)
+2. **Backend** (`echonote-backend`) - Lightweight FastAPI REST API (modular routers + service layer, no audio processing dependencies)
 3. **Redis** (`echonote-redis`) - Message broker (db 0) & result backend (db 1)
-4. **Celery Worker** (`echonote-celery-worker`) - Background task processor for transcriptions
+4. **Celery Worker** (`echonote-celery-worker`) - Heavy-duty background processor with all audio processing (transcription, diarization, format conversion)
 5. **Celery Beat** (`echonote-celery-beat`) - Scheduler for periodic maintenance tasks (Phase 3)
 
 **Celery Beat Scheduler (Phase 3):**
@@ -1422,7 +1423,7 @@ POST /api/transcribe
 ├─ Router validates request (transcriptions.py)
 ├─ Service processes audio (transcription_service.py)
 │   ├─ Validate file type and size
-│   ├─ Convert WebM to WAV if needed
+│   ├─ Upload audio to MinIO (stored as-is, no conversion)
 │   ├─ Extract duration
 │   └─ Save to database with status="pending"
 ├─ Service dispatches Celery task
@@ -1433,7 +1434,8 @@ POST /api/transcribe
 **3. Celery Worker Processes** (`backend/tasks.py`)
 ```python
 transcribe_audio_task(transcription_id, model, enable_diarization, ...)
-├─ Load audio from database
+├─ Download audio from MinIO
+├─ Convert WebM→WAV if needed (isolated subprocess with pydub/ffmpeg)
 ├─ Check duration: if > 60s, chunk into 60s segments
 ├─ For each chunk:
 │   ├─ Update progress: 10%, 30%, 50%, etc.
@@ -1468,7 +1470,8 @@ useTranscriptionPolling(pendingIds, enabled, onComplete, onStatusUpdate)
 - Prevents API timeouts and memory issues
 
 **Speaker Diarization:**
-- Optional pyannote.audio integration
+- Optional pyannote.audio 4.0.2 integration with speaker-diarization-community-1 model
+- CPU-only PyTorch 2.8 implementation on worker
 - Chunks aligned with speaker boundaries
 - Output shows speaker timeline: "Speaker 1 (0:00-0:15): Hello..."
 
@@ -1921,7 +1924,7 @@ podman exec echonote-celery-worker env | grep MINIO
 - Node.js 20 or higher
 - Access to a vLLM server running Whisper (or use the default endpoint)
 
-**Note:** Audio is recorded in WebM format in the browser and sent directly to the backend. The server handles WebM to WAV conversion using FFmpeg in an isolated subprocess to ensure compatibility with the Whisper API and PyTorch/pyannote diarization pipeline.
+**Note:** Audio is recorded in WebM format in the browser and uploaded to MinIO storage. The Celery worker handles WebM to WAV conversion using FFmpeg/pydub in an isolated subprocess to ensure compatibility with the Whisper API and PyTorch/pyannote diarization pipeline. The backend container is kept lightweight without any audio processing dependencies.
 
 ### 1. Clone and Setup
 
@@ -2003,12 +2006,12 @@ BACKEND_HOST=0.0.0.0
 # CORS Configuration
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
-# Speaker Diarization (Optional)
+# Speaker Diarization (Optional - pyannote.audio 4.0.2)
 # Get your token at: https://huggingface.co/settings/tokens
-# Accept license at: https://huggingface.co/pyannote/speaker-diarization-3.1
+# Accept license at: https://huggingface.co/pyannote/speaker-diarization-community-1
 # See SPEAKER_DIARIZATION.md for setup guide and troubleshooting
 HF_TOKEN=your_huggingface_token_here
-DIARIZATION_MODEL=pyannote/speaker-diarization-3.1
+DIARIZATION_MODEL=pyannote/speaker-diarization-community-1
 
 # Pagination Configuration
 # Number of transcriptions to show per page (default: 10)
@@ -2356,13 +2359,34 @@ gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 ## Troubleshooting
 
 ### Audio Format Conversion
-Audio is recorded in WebM format in the browser and sent directly to the backend. The server converts WebM to WAV using FFmpeg/pydub in an isolated subprocess.
+
+**Architecture:**
+- Audio is recorded in WebM format in the browser and uploaded to MinIO storage
+- Original format is preserved in storage (no unnecessary conversion)
+- Celery worker handles format conversion on-demand using FFmpeg/pydub in isolated subprocess
+- Backend container is lightweight with no audio processing dependencies
+
+**Features:**
+- **On-demand conversion**: Download audio in any format (wav, mp3, ogg) via `?format=` parameter
+- **No caching overhead**: Converted files are streamed directly without storage
+- **Worker processing**: All conversion happens on Celery worker, not backend
+
+**Examples:**
+```bash
+# Download original WebM
+GET /api/transcriptions/123/audio?token=xxx
+
+# Convert to WAV on download
+GET /api/transcriptions/123/audio?token=xxx&format=wav
+
+# Convert to MP3 on download
+GET /api/transcriptions/123/audio?token=xxx&format=mp3
+```
 
 If you see conversion errors:
-- Ensure the recording completed successfully (check browser console for errors)
-- Verify FFmpeg is installed on the server (required for conversion)
-- Check server logs for conversion errors
-- Try recording a shorter clip to test
+- Ensure the Celery worker is running with FFmpeg installed
+- Check worker logs for conversion errors
+- Verify the worker has access to MinIO storage
 
 ### Microphone Access
 - Ensure you've granted microphone permissions in your browser
@@ -2429,17 +2453,16 @@ For detailed speaker diarization setup, troubleshooting, and version compatibili
 
 # License not accepted
 # Error: "Cannot access gated model"
-# Solution: Visit https://huggingface.co/pyannote/speaker-diarization-3.1 and accept the license
+# Solution: Visit https://huggingface.co/pyannote/speaker-diarization-community-1 and accept the license
 
-# std::bad_alloc crash
-# Error: Application crashes with "std::bad_alloc" after matplotlib log
-# Solution: Wrong pyannote.audio version installed (4.x instead of 3.3.2)
-pip uninstall pyannote.audio matplotlib -y
-pip install -r backend/requirements.txt
+# PyTorch safe_globals error
+# Error: "Weights only load failed"
+# Solution: Ensure you're using pyannote.audio 4.0.2 with PyTorch 2.8
+# The code automatically registers required safe_globals for model loading
 
 # First-time model download
-# The first diarization will take longer (~300MB model download)
-# Subsequent requests will be faster
+# The first diarization will take longer (~300MB model download to worker)
+# Subsequent requests will be faster (cached on worker)
 ```
 
 ## Container Deployment

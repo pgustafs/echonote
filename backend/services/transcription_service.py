@@ -109,45 +109,8 @@ class TranscriptionService:
                 detail=f"Audio too long. Maximum duration: {settings.MAX_AUDIO_DURATION_SECONDS} seconds ({settings.MAX_AUDIO_DURATION_SECONDS/60:.1f} minutes)"
             )
 
-    @staticmethod
-    def convert_webm_to_wav(audio_bytes: bytes) -> tuple[bytes, Optional[float]]:
-        """
-        Convert WebM audio to WAV format.
-
-        Args:
-            audio_bytes: WebM audio binary data
-
-        Returns:
-            Tuple of (WAV audio bytes, duration in seconds)
-
-        Raises:
-            HTTPException: If conversion fails
-        """
-        try:
-            from backend.audio_converter import convert_webm_to_wav
-            import gc
-            import sys
-
-            # Convert to WAV
-            wav_bytes, duration = convert_webm_to_wav(audio_bytes)
-            wav_size_mb = len(wav_bytes) / (1024 * 1024)
-            logger.info(f"WebM converted to WAV: {len(wav_bytes)} bytes ({wav_size_mb:.2f} MB)")
-
-            # Clean up converter module to free memory
-            modules_to_remove = [m for m in sys.modules.keys() if 'pydub' in m.lower()]
-            for module_name in modules_to_remove:
-                del sys.modules[module_name]
-            del convert_webm_to_wav
-            gc.collect()
-
-            return wav_bytes, duration
-
-        except Exception as e:
-            logger.error(f"WebM to WAV conversion failed: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to convert WebM to WAV: {str(e)}"
-            )
+    # NOTE: WebM→WAV conversion has been moved to worker (tasks.py)
+    # This keeps the backend container lightweight without audio processing dependencies
 
     @staticmethod
     async def process_audio_upload(
@@ -199,23 +162,10 @@ class TranscriptionService:
         # Validate duration
         TranscriptionService.validate_audio_duration(duration_seconds)
 
-        # Convert WebM to WAV if needed
+        # Store audio as-is (conversion will happen in worker if needed)
+        # This keeps the backend lightweight - no audio processing dependencies
         actual_content_type = file.content_type
         actual_filename = file.filename
-
-        if file.content_type == "audio/webm":
-            wav_bytes, converter_duration = TranscriptionService.convert_webm_to_wav(audio_bytes)
-
-            # Use duration from converter if we didn't get it earlier
-            if duration_seconds is None and converter_duration is not None:
-                duration_seconds = converter_duration
-                duration_minutes = duration_seconds / 60
-                logger.info(f"Audio duration (from converter): {duration_seconds:.2f} seconds ({duration_minutes:.2f} minutes)")
-
-            # Replace audio bytes with WAV
-            audio_bytes = wav_bytes
-            actual_content_type = "audio/wav"
-            actual_filename = file.filename.replace('.webm', '.wav') if file.filename else "audio.wav"
 
         return audio_bytes, actual_content_type, actual_filename, duration_seconds
 
@@ -313,18 +263,24 @@ class TranscriptionService:
         Raises:
             HTTPException: If task dispatch fails
         """
-        from backend.tasks import transcribe_audio_task
+        # Import celery_app to dispatch task by name (avoids importing worker code)
+        from backend.celery_app import celery_app
 
         transcription = session.get(Transcription, transcription_id)
         if not transcription:
             raise HTTPException(status_code=404, detail="Transcription not found")
 
         try:
-            task_result = transcribe_audio_task.delay(
-                transcription_id=transcription_id,
-                model=model,
-                enable_diarization=enable_diarization,
-                num_speakers=num_speakers
+            # Use send_task to dispatch by name without importing task function
+            # This keeps backend lightweight - no worker dependencies needed
+            task_result = celery_app.send_task(
+                'backend.tasks.transcribe_audio',
+                kwargs={
+                    'transcription_id': transcription_id,
+                    'model': model,
+                    'enable_diarization': enable_diarization,
+                    'num_speakers': num_speakers
+                }
             )
 
             # Save task ID
@@ -550,10 +506,13 @@ class TranscriptionService:
         """
         Convert audio to WAV format for download.
 
+        This method dispatches conversion to the Celery worker to keep the backend
+        lightweight without audio processing dependencies.
+
         Args:
-            audio_data: Original audio binary data
+            audio_data: Original audio binary data (unused, kept for API compatibility)
             content_type: MIME type of audio
-            transcription_id: ID for logging
+            transcription_id: ID for logging and worker task
 
         Returns:
             WAV audio bytes
@@ -561,6 +520,8 @@ class TranscriptionService:
         Raises:
             HTTPException: If conversion fails
         """
+        from backend.celery_app import celery_app
+
         try:
             # Check if audio is already in WAV format
             # Check both metadata AND actual file signature (RIFF header)
@@ -578,21 +539,23 @@ class TranscriptionService:
                     logger.info(f"Audio already in WAV format for transcription {transcription_id}")
                 return audio_data
             else:
-                # Need to convert to WAV
-                from backend.audio_converter import convert_audio_to_wav
+                # Need to convert to WAV - dispatch to celery worker
+                logger.info(f"Dispatching WAV conversion to worker for transcription {transcription_id}")
 
-                # Determine format from content type
-                format_mapping = {
-                    'audio/webm': 'webm',
-                    'audio/mp3': 'mp3',
-                    'audio/mpeg': 'mp3',
-                }
-                input_format = format_mapping.get(content_type, 'wav')
+                # Dispatch synchronous celery task to worker for conversion
+                # Worker has all audio processing dependencies (pydub, ffmpeg)
+                task_result = celery_app.send_task(
+                    'backend.tasks.convert_audio_format',
+                    kwargs={
+                        'transcription_id': transcription_id,
+                        'target_format': 'wav'
+                    }
+                )
 
-                # Convert to WAV (returns tuple: wav_bytes, duration)
-                wav_bytes, _ = convert_audio_to_wav(audio_data, source_format=input_format)
+                # Wait for conversion to complete (timeout 60s)
+                wav_bytes = task_result.get(timeout=60)
 
-                logger.info(f"Converted audio from {input_format.upper()} to WAV format for transcription {transcription_id}")
+                logger.info(f"WAV conversion completed for transcription {transcription_id}")
                 return wav_bytes
         except Exception as e:
             logger.error(f"Error processing audio to WAV: {e}")

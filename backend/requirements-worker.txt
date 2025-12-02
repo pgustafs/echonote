@@ -1,0 +1,51 @@
+# Celery Worker Requirements (Full Stack - Includes Heavy Audio Processing)
+# This file is for background workers that process audio transcription and diarization.
+
+# Core dependencies (shared with backend)
+fastapi==0.115.0  # Needed for some shared code/types
+python-multipart==0.0.18
+
+# Database
+sqlmodel==0.0.22
+psycopg2-binary==2.9.10  # PostgreSQL driver for production
+alembic==1.13.1  # Database migrations
+
+# Object Storage
+minio==7.2.11  # MinIO Python client for S3-compatible storage
+
+# OpenAI client for Whisper API
+openai==1.55.3
+
+# Speaker Diarization (CPU-only PyTorch to reduce image size)
+# Install with: pip install -r requirements-worker.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu
+torchaudio==2.8.0+cpu
+torchcodec==0.7.0  # Audio codec library (requires ffmpeg system package)
+soundfile  # Audio I/O library (requires libsndfile system package)
+matplotlib>=3.10.0  # Required by pyannote.audio 4.x
+huggingface_hub>=0.28.1  # Required by pyannote.audio 4.x for token parameter
+omegaconf>=2.3.0  # Required for PyTorch 2.8 safe_globals with pyannote models
+pyannote.audio==4.0.2  # Latest version with PyTorch 2.8 compatibility and native serialization support
+
+# Audio format conversion
+pydub  # Audio conversion (requires ffmpeg system package)
+
+# Authentication and Security
+passlib[bcrypt]==1.7.4  # Password hashing with bcrypt
+PyJWT==2.9.0  # JWT token generation and validation
+bleach==6.0.0  # HTML sanitization
+
+# Environment and utilities
+python-dotenv==1.0.1
+
+# Background Task Processing
+celery>=5.5.3  # Distributed task queue
+redis>=5.0.1  # Redis client for Celery broker/backend
+flower==2.0.1  # Celery monitoring UI
+
+# Logging
+python-json-logger==2.0.7  # Structured JSON logging
+
+# AI Actions (LlamaStack)
+llama-stack-client

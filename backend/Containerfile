@@ -5,11 +5,11 @@ FROM registry.access.redhat.com/ubi10/python-312-minimal:latest AS builder
 # Set working directory
 WORKDIR /opt/app-root/src
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy requirements file (lightweight backend - no audio processing)
+COPY requirements-backend.txt .
 
 # Install dependencies (no --user flag needed for venv-based images)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-backend.txt
 
 
 # Stage 2: Runtime image
@@ -33,22 +33,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONPATH="/opt/app-root/src"
 
-# Switch to root temporarily for system package installation (if needed)
+# Switch to root temporarily for directory creation
 USER 0
 
-# Install audio processing libraries (required by pyannote.audio)
-# libsndfile: for audio file I/O via soundfile (alternative to torchcodec)
-RUN microdnf install -y libsndfile dnf dnf-plugins-core && microdnf clean all
-
-# Enable EPEL + RPM Fusion (until EL10 repo is live, EL9 works fine for UBI10)
-RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
-    dnf install -y https://download1.rpmfusion.org/free/el/rpmfusion-free-release-10.noarch.rpm
-
-# Install ffmpeg (pulls ffmpeg-libs and dependencies)
-RUN dnf install -y ffmpeg && \
-    dnf clean all && rm -rf /var/cache/dnf /var/tmp/*
-
 # Create base directories for application
+# NOTE: No audio processing libraries needed - all audio work happens in celery workers
 RUN mkdir -p /opt/app-root/src/backend /opt/app-root/src/data
 
 # Copy Python dependencies from builder stage (entire venv)

@@ -5,11 +5,11 @@ FROM registry.access.redhat.com/ubi10/python-312-minimal:latest AS builder
 # Set working directory
 WORKDIR /opt/app-root/src
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy requirements file (full stack with audio processing)
+COPY requirements-worker.txt .
 
 # Install dependencies (no --user flag needed for venv-based images)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-worker.txt
 
 
 # Stage 2: Runtime image

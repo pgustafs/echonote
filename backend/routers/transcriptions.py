@@ -21,7 +21,7 @@ import logging
 from typing import Annotated, Optional
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from sqlmodel import Session
 
@@ -352,6 +352,7 @@ def get_transcription(
 @router.get("/transcriptions/{transcription_id}/audio")
 async def get_audio(
     transcription_id: int,
+    format: Optional[str] = Query(None, description="Target audio format (wav, mp3, ogg, webm). If not specified, returns original format."),
     current_user: User = Depends(get_user_from_query_token),
     session: Session = Depends(get_session)
 ):
@@ -361,11 +362,16 @@ async def get_audio(
     This endpoint uses query parameter authentication to support HTML audio elements
     that cannot set Authorization headers.
 
+    Supports on-demand format conversion via the ?format= query parameter.
+    Conversion happens on celery worker (not backend) to keep backend lightweight.
+    Converted files are NOT cached to save storage space.
+
     Authentication: Requires token as query parameter (?token=xxx).
     Only allows access if transcription belongs to the authenticated user.
 
     Args:
         transcription_id: ID of the transcription
+        format: Optional target audio format (wav, mp3, ogg, webm). Defaults to original format.
         current_user: Authenticated user from query token (injected)
         session: Database session (injected)
 
@@ -376,36 +382,92 @@ async def get_audio(
         HTTPException 401: Token missing or invalid
         HTTPException 404: Transcription not found
         HTTPException 403: Not authorized to access this transcription
+        HTTPException 500: Format conversion failed
 
-    Example:
+    Examples:
         <audio src="/api/transcriptions/123/audio?token=YOUR_JWT_TOKEN" />
+        <audio src="/api/transcriptions/123/audio?token=YOUR_JWT_TOKEN&format=wav" />
     """
     from backend.services.minio_service import get_minio_service
+    from backend.celery_app import celery_app
 
     transcription = TranscriptionService.get_transcription_by_id(
         session, transcription_id, current_user
     )
 
-    # Get audio from MinIO or fallback to legacy database BLOB
-    if transcription.minio_object_path:
-        # New: Fetch from MinIO
+    # Determine if format conversion is needed
+    source_content_type = transcription.audio_content_type or "audio/webm"
+    format_mapping = {
+        'audio/webm': 'webm',
+        'audio/wav': 'wav',
+        'audio/wave': 'wav',
+        'audio/x-wav': 'wav',
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/ogg': 'ogg',
+    }
+    source_format = format_mapping.get(source_content_type, 'webm')
+
+    # If format conversion requested and different from source
+    if format and format.lower() != source_format:
+        logger.info(f"Format conversion requested: {source_format} -> {format}")
+
+        # Dispatch synchronous celery task to worker for conversion
+        # Worker has all audio processing dependencies (pydub, ffmpeg)
         try:
-            minio_service = get_minio_service()
-            audio_data = minio_service.download_audio(transcription.minio_object_path)
+            task_result = celery_app.send_task(
+                'backend.tasks.convert_audio_format',
+                kwargs={
+                    'transcription_id': transcription_id,
+                    'target_format': format.lower()
+                }
+            )
+
+            # Wait for conversion to complete (timeout 60s)
+            audio_data = task_result.get(timeout=60)
+
+            # Map format to MIME type
+            mime_mapping = {
+                'wav': 'audio/wav',
+                'mp3': 'audio/mpeg',
+                'ogg': 'audio/ogg',
+                'webm': 'audio/webm',
+            }
+            content_type = mime_mapping.get(format.lower(), 'audio/wav')
+
+            # Update filename extension
+            import os
+            base_name = os.path.splitext(transcription.audio_filename)[0]
+            filename = f"{base_name}.{format.lower()}"
+
         except Exception as e:
-            logger.error(f"Failed to download audio from MinIO: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve audio file")
-    elif transcription.audio_data:
-        # Legacy: Fetch from database BLOB
-        audio_data = transcription.audio_data
+            logger.error(f"Format conversion failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Format conversion failed: {str(e)}")
     else:
-        raise HTTPException(status_code=404, detail="Audio file not found")
+        # No conversion needed, return original
+        # Get audio from MinIO or fallback to legacy database BLOB
+        if transcription.minio_object_path:
+            # New: Fetch from MinIO
+            try:
+                minio_service = get_minio_service()
+                audio_data = minio_service.download_audio(transcription.minio_object_path)
+            except Exception as e:
+                logger.error(f"Failed to download audio from MinIO: {e}")
+                raise HTTPException(status_code=500, detail="Failed to retrieve audio file")
+        elif transcription.audio_data:
+            # Legacy: Fetch from database BLOB
+            audio_data = transcription.audio_data
+        else:
+            raise HTTPException(status_code=404, detail="Audio file not found")
+
+        content_type = transcription.audio_content_type
+        filename = transcription.audio_filename
 
     return Response(
         content=audio_data,
-        media_type=transcription.audio_content_type,
+        media_type=content_type,
         headers={
-            "Content-Disposition": f'inline; filename="{transcription.audio_filename}"'
+            "Content-Disposition": f'inline; filename="{filename}"'
         }
     )
 

@@ -144,3 +144,98 @@ def convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, float | None]:
         ...     f.write(wav_data)
     """
     return convert_audio_to_wav(webm_bytes, source_format="webm")
+
+
+def convert_audio_format(audio_bytes: bytes, source_format: str, target_format: str) -> tuple[bytes, float | None]:
+    """
+    Convert audio between any supported formats in isolated subprocess.
+
+    This function runs pydub/ffmpeg in a completely separate process
+    that terminates before returning, ensuring no memory conflicts
+    with the diarization pipeline.
+
+    Args:
+        audio_bytes: Audio data as bytes
+        source_format: Source audio format (webm, mp3, wav, etc.)
+        target_format: Target audio format (wav, mp3, ogg, etc.)
+
+    Returns:
+        Tuple of (converted audio data as bytes, duration in seconds or None)
+
+    Raises:
+        Exception: If conversion fails or times out (30s timeout)
+
+    Example:
+        >>> with open("audio.webm", "rb") as f:
+        ...     audio_data = f.read()
+        >>> mp3_data, duration = convert_audio_format(audio_data, "webm", "mp3")
+        >>> with open("audio.mp3", "wb") as f:
+        ...     f.write(mp3_data)
+    """
+    logger.info(f"Converting {source_format.upper()} to {target_format.upper()} in isolated subprocess")
+
+    # Create Python script to run in subprocess
+    script = f'''
+import sys
+from io import BytesIO
+from pydub import AudioSegment
+
+# Read audio from stdin
+audio_bytes = sys.stdin.buffer.read()
+
+# Convert to AudioSegment (uses ffmpeg internally)
+audio = AudioSegment.from_file(BytesIO(audio_bytes), format="{source_format}")
+
+# Log conversion details to stderr
+print(f"LOADED: duration={{len(audio)}}ms, channels={{audio.channels}}, rate={{audio.frame_rate}}Hz", file=sys.stderr)
+
+# Export as target format
+output_buffer = BytesIO()
+audio.export(output_buffer, format="{target_format}")
+
+# Write converted data to stdout
+sys.stdout.buffer.write(output_buffer.getvalue())
+'''
+
+    try:
+        # Run conversion in isolated subprocess
+        result = subprocess.run(
+            [sys.executable, '-c', script],
+            input=audio_bytes,
+            capture_output=True,
+            check=True,
+            timeout=30  # 30-second timeout for safety
+        )
+
+        # Log conversion details and extract duration
+        duration_seconds = None
+        if result.stderr:
+            stderr_output = result.stderr.decode().strip()
+            logger.info(f"Subprocess output: {stderr_output}")
+
+            # Extract duration from output
+            try:
+                import re
+                duration_match = re.search(r'duration=(\d+)ms', stderr_output)
+                if duration_match:
+                    duration_ms = int(duration_match.group(1))
+                    duration_seconds = duration_ms / 1000.0
+            except Exception as e:
+                logger.warning(f"Could not parse duration from subprocess output: {e}")
+
+        # Get converted data from subprocess stdout
+        converted_bytes = result.stdout
+        logger.info(
+            f"Converted to {target_format.upper()}: {len(converted_bytes)} bytes "
+            f"(subprocess completed and terminated)"
+        )
+
+        return converted_bytes, duration_seconds
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        logger.error(f"Subprocess conversion failed: {error_msg}")
+        raise Exception(f"{source_format.upper()} to {target_format.upper()} conversion failed: {error_msg}")
+    except subprocess.TimeoutExpired:
+        logger.error("Subprocess conversion timed out after 30 seconds")
+        raise Exception(f"{source_format.upper()} to {target_format.upper()} conversion timed out")
