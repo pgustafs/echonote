@@ -5,10 +5,10 @@ This module provides functionality to detect and separate different speakers
 in audio files using the pyannote speaker diarization pipeline.
 
 Technical Notes:
-    - Uses pyannote.audio 3.3.2 for compatibility with matplotlib <3.10
+    - Uses pyannote.audio 4.0.2 with PyTorch 2.8 native serialization support
     - Requires Hugging Face token for model access
     - Processes audio on CPU to avoid GPU dependencies
-    - Uses soundfile for audio I/O (requires libsndfile system package)
+    - Uses torchcodec and soundfile for audio I/O (requires ffmpeg and libsndfile)
 """
 
 import logging
@@ -27,27 +27,18 @@ from omegaconf.nodes import AnyNode
 
 from backend.config import settings
 
-# Fix for PyTorch 2.6+: Add safe globals for model loading
-# PyTorch 2.6+ changed weights_only default from False to True, which breaks
-# loading of pyannote models that contain OmegaConf and pyannote classes
+logger = logging.getLogger(__name__)
+
+# Fix for PyTorch 2.8: Add safe globals for pyannote model loading
+# Even though pyannote 4.0.2 claims native serialization support,
+# the model checkpoint files still require these classes to be whitelisted
 if hasattr(torch, 'serialization') and hasattr(torch.serialization, 'add_safe_globals'):
     torch.serialization.add_safe_globals([
-        # PyTorch internal classes
         torch.torch_version.TorchVersion,
-        # pyannote.audio core classes
-        Specifications,
-        Problem,
-        Resolution,
-        Introspection,
-        # OmegaConf classes (required for model configuration)
-        ListConfig,
-        DictConfig,
-        ContainerMetadata,
-        Metadata,
-        AnyNode,
+        Specifications, Problem, Resolution, Introspection,
+        ListConfig, DictConfig, ContainerMetadata, Metadata, AnyNode,
     ])
-
-logger = logging.getLogger(__name__)
+    logger.info("Registered safe globals for PyTorch 2.8 model loading")
 
 
 class DiarizationService:
@@ -94,10 +85,10 @@ class DiarizationService:
 
             try:
                 # Load pipeline from Hugging Face Hub
-                # Note: use_auth_token parameter is for pyannote.audio 3.x compatibility
+                # Note: token parameter is for pyannote.audio 4.x
                 self._pipeline = Pipeline.from_pretrained(
                     settings.DIARIZATION_MODEL,
-                    use_auth_token=settings.HF_TOKEN if settings.HF_TOKEN else None,
+                    token=settings.HF_TOKEN if settings.HF_TOKEN else None,
                 )
 
                 # Force CPU usage (no GPU required for this application)
@@ -185,11 +176,12 @@ class DiarizationService:
                 logger.info("Auto-detect mode: setting min_speakers=2, max_speakers=10")
 
             # Run diarization using file path (pyannote pipeline prefers file paths)
-            diarization = pipeline(tmp_path, **kwargs)
+            diarization_output = pipeline(tmp_path, **kwargs)
 
-            # Parse results from pyannote.audio 3.x Annotation object
+            # Parse results from pyannote.audio 4.x DiarizeOutput object
+            # In 4.x, the pipeline returns a DiarizeOutput with speaker_diarization attribute
             results = []
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
+            for turn, _, speaker in diarization_output.speaker_diarization.itertracks(yield_label=True):
                 results.append({
                     "speaker": speaker,
                     "start": turn.start,

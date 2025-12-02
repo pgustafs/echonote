@@ -16,7 +16,7 @@ Environment variables:
 - APP_PORT: Port for FastAPI server (default: 8000)
 - APP_HOST: Host for FastAPI server (default: 0.0.0.0)
 - CORS_ORIGINS: Comma-separated list of allowed CORS origins
-- DIARIZATION_MODEL: Pyannote model for speaker diarization (default: pyannote/speaker-diarization-3.1)
+- DIARIZATION_MODEL: Pyannote model for speaker diarization (default: pyannote/speaker-diarization-community-1)
 - HF_TOKEN: Hugging Face token for accessing gated models
 - DEFAULT_PAGE_SIZE: Default number of transcriptions per page (default: 10)
 - MAX_PAGE_SIZE: Maximum allowed page size (default: 100)
@@ -156,7 +156,7 @@ class Settings:
     # Speaker Diarization Configuration
     DIARIZATION_MODEL: str = os.getenv(
         "DIARIZATION_MODEL",
-        "pyannote/speaker-diarization-3.1"
+        "pyannote/speaker-diarization-community-1"  # Latest open-source model with improved accuracy
     )
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")  # Hugging Face token for gated models
 

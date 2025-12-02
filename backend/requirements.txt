@@ -19,10 +19,12 @@ openai==1.55.3
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.8.0+cpu
 torchaudio==2.8.0+cpu
+torchcodec==0.7.0  # Audio codec library (requires ffmpeg system package)
 soundfile  # Audio I/O library (requires libsndfile system package)
-matplotlib>=3.6,<3.10  # Compatible with pyannote 3.3.2, avoid 3.10 font_manager crash
-huggingface_hub<1.0  # Pin to version compatible with pyannote 3.3.2 use_auth_token
-pyannote.audio==3.3.2  # Use version before matplotlib 3.10 requirement
+matplotlib>=3.10.0  # Required by pyannote.audio 4.x
+huggingface_hub>=0.28.1  # Required by pyannote.audio 4.x for token parameter
+omegaconf>=2.3.0  # Required for PyTorch 2.8 safe_globals with pyannote models
+pyannote.audio==4.0.2  # Latest version with PyTorch 2.8 compatibility and native serialization support
 
 # Audio format conversion
 pydub  # Audio conversion (requires ffmpeg system package)
