@@ -144,12 +144,13 @@ def list_transcriptions(
     skip: int = 0,
     limit: int | None = None,
     priority: str | None = None,
+    category: str | None = None,
     search: str | None = None,
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
-    List user's transcriptions with pagination, optional priority filtering, and search.
+    List user's transcriptions with pagination, optional priority/category filtering, and search.
 
     Authentication: Requires valid JWT token.
     Only returns transcriptions belonging to the authenticated user.
@@ -158,6 +159,7 @@ def list_transcriptions(
         skip: Number of records to skip (offset for pagination)
         limit: Maximum number of records to return (defaults to DEFAULT_PAGE_SIZE, max: MAX_PAGE_SIZE)
         priority: Optional priority filter (low, medium, high)
+        category: Optional category filter (voice_memo, meeting_notes, linkedin_post, etc.)
         search: Optional search query (searches in transcription text, case-insensitive)
         current_user: Authenticated user (injected)
         session: Database session (injected)
@@ -172,6 +174,7 @@ def list_transcriptions(
         skip=skip,
         limit=limit,
         priority=priority,
+        category=category,
         search=search
     )
 
@@ -528,19 +531,19 @@ async def download_transcription(
 @router.patch("/transcriptions/{transcription_id}", response_model=TranscriptionPublic)
 def update_transcription_priority(
     transcription_id: int,
-    priority: str,
+    update_data: TranscriptionUpdate,
     current_user: User = Depends(get_current_active_user),
     session: Session = Depends(get_session)
 ):
     """
-    Update the priority of a transcription.
+    Update a transcription's priority and/or category.
 
     Authentication: Requires valid JWT token.
     Only allows update if transcription belongs to the authenticated user.
 
     Args:
         transcription_id: ID of the transcription to update
-        priority: New priority value (low, medium, high)
+        update_data: Fields to update (priority, category)
         current_user: Authenticated user (injected)
         session: Database session (injected)
 
@@ -548,12 +551,12 @@ def update_transcription_priority(
         TranscriptionPublic: Updated transcription
 
     Raises:
-        HTTPException 400: Invalid priority value
+        HTTPException 400: Invalid priority or category value
         HTTPException 404: Transcription not found
         HTTPException 403: Not authorized to update this transcription
     """
-    transcription = TranscriptionService.update_transcription_priority(
-        session, transcription_id, priority, current_user
+    transcription = TranscriptionService.update_transcription(
+        session, transcription_id, update_data, current_user
     )
 
     return TranscriptionService.to_public_schema(transcription)

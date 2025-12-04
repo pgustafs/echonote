@@ -4,9 +4,11 @@
  */
 
 import { useState } from 'react'
-import { Priority, Transcription } from '../types'
+import { Priority, Category, Transcription } from '../types'
 import { getAudioUrl } from '../api'
 import { ArrowLeft } from 'lucide-react'
+import CategorySelector from './CategorySelector'
+import { getCategoryClassName, CATEGORY_LABELS } from '../utils/categoryUtils'
 
 interface MobileDetailSliderProps {
   transcription: Transcription | null
@@ -15,6 +17,7 @@ interface MobileDetailSliderProps {
   onDelete: (id: number) => void
   onDownload: (id: number, format?: string) => void
   onPriorityChange: (id: number, priority: Priority) => void
+  onCategoryChange: (id: number, category: Category) => void
   onOpenAIActions: (id: number) => void
   onReTranscribe: (id: number) => void
   onDeleteAudio: (id: number) => void
@@ -31,6 +34,7 @@ export default function MobileDetailSlider({
   onDelete,
   onDownload,
   onPriorityChange,
+  onCategoryChange,
   onOpenAIActions,
   onReTranscribe,
   onDeleteAudio,
@@ -106,6 +110,9 @@ export default function MobileDetailSlider({
             </span>
             <span className={`badge ${getPriorityColor(transcription.priority)} uppercase tracking-wide`}>
               {transcription.priority}
+            </span>
+            <span className={getCategoryClassName(transcription.category)}>
+              {CATEGORY_LABELS[transcription.category]}
             </span>
             <span className="text-xs font-medium text-text-tertiary">
               {formatDate(transcription.created_at)}
@@ -339,6 +346,19 @@ export default function MobileDetailSlider({
               )}
             </div>
           </div>
+
+          {/* Category Selector */}
+          <CategorySelector
+            value={transcription.category}
+            onChange={(category) => {
+              if (category !== transcription.category) {
+                onCategoryChange(transcription.id, category)
+              }
+            }}
+            disabled={isUpdating}
+            isMobile={true}
+            showLabel={false}
+          />
         </div>
 
         {/* Bottom Action Bar */}

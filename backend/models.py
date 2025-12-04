@@ -23,6 +23,25 @@ class Priority(str, Enum):
     HIGH = "high"
 
 
+class Category(str, Enum):
+    """Categories for organizing transcriptions by content type"""
+    VOICE_MEMO = "voice_memo"
+    MEETING_NOTES = "meeting_notes"
+    LINKEDIN_POST = "linkedin_post"
+    EMAIL_DRAFT = "email_draft"
+    BLOG_POST = "blog_post"
+    TODO_LIST = "todo_list"
+    TWEET = "tweet"
+    YOUTUBE_DESCRIPTION = "youtube_description"
+    PRODUCT_REQUIREMENTS = "product_requirements"
+    CUSTOMER_FEEDBACK = "customer_feedback"
+    BRAINSTORM = "brainstorm"
+    INTERVIEW_NOTES = "interview_notes"
+    JOURNAL_ENTRY = "journal_entry"
+    NEWSLETTER = "newsletter"
+    DOCUMENTATION = "documentation"
+
+
 # ============================================================================
 # User Models
 # ============================================================================
@@ -211,6 +230,10 @@ class Transcription(SQLModel, table=True):
         default=Priority.MEDIUM.value,
         description="Priority level of the voice note"
     )
+    category: str = Field(
+        default=Category.VOICE_MEMO.value,
+        description="Category for organizing transcriptions by content type"
+    )
     url: Optional[str] = Field(
         default=None,
         description="Optional URL associated with the voice note"
@@ -250,6 +273,7 @@ class TranscriptionCreate(SQLModel):
     audio_content_type: str = "audio/wav"
     duration_seconds: Optional[float] = None
     priority: str = Priority.MEDIUM.value
+    category: str = Category.VOICE_MEMO.value
     url: Optional[str] = None
 
 
@@ -262,6 +286,7 @@ class TranscriptionPublic(SQLModel):
     created_at: datetime
     duration_seconds: Optional[float]
     priority: str
+    category: str
     url: Optional[str]
     task_id: Optional[str] = None
     status: str = "completed"
@@ -270,8 +295,9 @@ class TranscriptionPublic(SQLModel):
 
 
 class TranscriptionUpdate(SQLModel):
-    """Schema for updating a transcription (e.g., priority)"""
+    """Schema for updating a transcription (e.g., priority, category)"""
     priority: Optional[str] = None
+    category: Optional[str] = None
 
 
 class TranscriptionList(SQLModel):

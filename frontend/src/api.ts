@@ -2,7 +2,7 @@
  * API client functions for EchoNote backend
  */
 
-import { Priority, Transcription, TranscriptionList } from './types'
+import { Priority, Category, Transcription, TranscriptionList } from './types'
 
 // Get API URL from runtime config (injected via ConfigMap) or fallback to env var or localhost
 // This function is called on every API request to ensure config is loaded
@@ -296,9 +296,15 @@ export async function transcribeAudio(
 }
 
 /**
- * Get list of transcriptions with pagination and optional priority filter
+ * Get list of transcriptions with pagination and optional priority/category filters
  */
-export async function getTranscriptions(skip: number = 0, limit: number = 50, priority?: Priority | null, search?: string | null): Promise<TranscriptionList> {
+export async function getTranscriptions(
+  skip: number = 0,
+  limit: number = 50,
+  priority?: Priority | null,
+  search?: string | null,
+  category?: Category | null
+): Promise<TranscriptionList> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
@@ -306,6 +312,10 @@ export async function getTranscriptions(skip: number = 0, limit: number = 50, pr
 
   if (priority) {
     params.append('priority', priority)
+  }
+
+  if (category) {
+    params.append('category', category)
   }
 
   if (search && search.trim()) {
@@ -357,20 +367,37 @@ export function getAudioUrl(id: number, format?: string): string {
 }
 
 /**
- * Update transcription priority
+ * Update transcription priority (legacy - use updateTranscription instead)
  */
 export async function updateTranscriptionPriority(id: number, priority: Priority): Promise<Transcription> {
-  const params = new URLSearchParams({
-    priority: priority,
-  })
+  return updateTranscription(id, { priority })
+}
 
-  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}?${params}`, {
+/**
+ * Update transcription category
+ */
+export async function updateTranscriptionCategory(id: number, category: Category): Promise<Transcription> {
+  return updateTranscription(id, { category })
+}
+
+/**
+ * Update transcription (priority, category, or both)
+ */
+export async function updateTranscription(
+  id: number,
+  updates: { priority?: Priority; category?: Category }
+): Promise<Transcription> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/transcriptions/${id}`, {
     method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
   })
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Failed to update priority')
+    throw new Error(error.detail || 'Failed to update transcription')
   }
 
   return response.json()

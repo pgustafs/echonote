@@ -309,6 +309,7 @@ class TranscriptionService:
         skip: int = 0,
         limit: Optional[int] = None,
         priority: Optional[str] = None,
+        category: Optional[str] = None,
         search: Optional[str] = None
     ) -> tuple[list[Transcription], int]:
         """
@@ -320,6 +321,7 @@ class TranscriptionService:
             skip: Number of records to skip (offset)
             limit: Maximum number of records to return
             priority: Optional priority filter
+            category: Optional category filter
             search: Optional text search query
 
         Returns:
@@ -338,6 +340,10 @@ class TranscriptionService:
         # Add priority filter if provided
         if priority:
             statement = statement.where(Transcription.priority == priority)
+
+        # Add category filter if provided
+        if category:
+            statement = statement.where(Transcription.category == category)
 
         # Add search filter if provided (case-insensitive search in text)
         if search:
@@ -389,19 +395,19 @@ class TranscriptionService:
         return transcription
 
     @staticmethod
-    def update_transcription_priority(
+    def update_transcription(
         session: Session,
         transcription_id: int,
-        priority: str,
+        update_data: 'TranscriptionUpdate',
         user: User
     ) -> Transcription:
         """
-        Update the priority of a transcription.
+        Update a transcription's fields (priority, category, etc.).
 
         Args:
             session: Database session
             transcription_id: ID of the transcription
-            priority: New priority value
+            update_data: Fields to update
             user: User making the update
 
         Returns:
@@ -410,22 +416,36 @@ class TranscriptionService:
         Raises:
             HTTPException: If validation fails or not authorized
         """
-        # Validate priority value
-        valid_priorities = [p.value for p in Priority]
-        if priority not in valid_priorities:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid priority. Must be one of: {', '.join(valid_priorities)}"
-            )
+        from backend.models import Category
 
         transcription = TranscriptionService.get_transcription_by_id(session, transcription_id, user)
 
-        transcription.priority = priority
+        # Update priority if provided
+        if update_data.priority is not None:
+            valid_priorities = [p.value for p in Priority]
+            if update_data.priority not in valid_priorities:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid priority. Must be one of: {', '.join(valid_priorities)}"
+                )
+            transcription.priority = update_data.priority
+            logger.info(f"Updated transcription ID {transcription_id} priority to: {update_data.priority}")
+
+        # Update category if provided
+        if update_data.category is not None:
+            valid_categories = [c.value for c in Category]
+            if update_data.category not in valid_categories:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
+                )
+            transcription.category = update_data.category
+            logger.info(f"Updated transcription ID {transcription_id} category to: {update_data.category}")
+
         session.add(transcription)
         session.commit()
         session.refresh(transcription)
 
-        logger.info(f"Updated transcription ID {transcription_id} priority to: {priority}")
         return transcription
 
     @staticmethod
@@ -680,6 +700,7 @@ class TranscriptionService:
             created_at=transcription.created_at,
             duration_seconds=transcription.duration_seconds,
             priority=transcription.priority,
+            category=transcription.category,
             url=transcription.url,
             task_id=transcription.task_id,
             status=transcription.status,

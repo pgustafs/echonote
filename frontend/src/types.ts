@@ -6,6 +6,23 @@ import type React from 'react'
 
 export type Priority = 'low' | 'medium' | 'high'
 
+export type Category =
+  | 'voice_memo'
+  | 'meeting_notes'
+  | 'linkedin_post'
+  | 'email_draft'
+  | 'blog_post'
+  | 'todo_list'
+  | 'tweet'
+  | 'youtube_description'
+  | 'product_requirements'
+  | 'customer_feedback'
+  | 'brainstorm'
+  | 'interview_notes'
+  | 'journal_entry'
+  | 'newsletter'
+  | 'documentation'
+
 export interface Transcription {
   id: number
   text: string
@@ -14,6 +31,7 @@ export interface Transcription {
   created_at: string
   duration_seconds: number | null
   priority: Priority
+  category: Category
   url: string | null
   task_id?: string | null
   status?: 'pending' | 'processing' | 'completed' | 'failed'

@@ -15,7 +15,7 @@ import { useAuth } from './contexts/AuthContext'
 import { useTheme } from './contexts/ThemeContext'
 import { useOfflineRecording } from './hooks/useOfflineRecording'
 import { useTranscriptionPolling } from './hooks/useTranscriptionPolling'
-import { Priority, Transcription } from './types'
+import { Priority, Category, Transcription } from './types'
 import { MessageCircle, Sun, Moon } from 'lucide-react'
 
 function App() {
@@ -30,6 +30,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState<Category | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [defaultModel, setDefaultModel] = useState<string>('')
@@ -71,7 +72,7 @@ function App() {
     if (user && !(isMobile && currentPage > 1)) {
       loadTranscriptions()
     }
-  }, [priorityFilter, searchQuery, currentPage, user, isMobile])
+  }, [priorityFilter, categoryFilter, searchQuery, currentPage, user, isMobile])
 
   // Reload transcriptions when sync completes (pending count goes from >0 to 0)
   useEffect(() => {
@@ -102,7 +103,7 @@ function App() {
       }
       setError(null)
       const skip = (currentPage - 1) * pageSize
-      const data = await getTranscriptions(skip, pageSize, priorityFilter, searchQuery || null)
+      const data = await getTranscriptions(skip, pageSize, priorityFilter, searchQuery || null, categoryFilter)
       console.log('[App] loadTranscriptions received data:', data.transcriptions.map(t => ({
         id: t.id,
         status: t.status,
@@ -305,6 +306,11 @@ function App() {
     setCurrentPage(1) // Reset to first page when filter changes
   }
 
+  const handleCategoryFilterChange = (category: Category | null) => {
+    setCategoryFilter(category)
+    setCurrentPage(1) // Reset to first page when filter changes
+  }
+
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query)
     setCurrentPage(1) // Reset to first page when search changes
@@ -442,6 +448,8 @@ function App() {
             onSearchChange={handleSearchChange}
             priorityFilter={priorityFilter}
             onFilterChange={handleFilterChange}
+            categoryFilter={categoryFilter}
+            onCategoryFilterChange={handleCategoryFilterChange}
             totalCount={totalTranscriptions}
             isLoading={isLoading}
             availableModels={availableModels}

@@ -3,13 +3,15 @@
  */
 
 import { useState } from 'react'
-import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, executeAIAction, reTranscribeAudio, deleteAudioFile } from '../api'
-import { Priority, Transcription } from '../types'
+import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, updateTranscriptionCategory, executeAIAction, reTranscribeAudio, deleteAudioFile } from '../api'
+import { Priority, Category, Transcription } from '../types'
 import AIActionsDrawer from './AIActionsDrawer'
 import AIResultModal from './AIResultModal'
 import MobileDetailSlider from './MobileDetailSlider'
 import ReTranscribeModal, { ReTranscribeOptions } from './ReTranscribeModal'
+import CategorySelector from './CategorySelector'
 import type { AIAction, AIActionResponse } from '../types'
+import { getCategoryClassName, CATEGORY_LABELS, ALL_CATEGORIES } from '../utils/categoryUtils'
 
 interface TranscriptionListProps {
   transcriptions: Transcription[]
@@ -20,6 +22,8 @@ interface TranscriptionListProps {
   onSearchChange?: (query: string) => void
   priorityFilter?: Priority | null
   onFilterChange?: (priority: Priority | null) => void
+  categoryFilter?: Category | null
+  onCategoryFilterChange?: (category: Category | null) => void
   totalCount?: number
   isLoading?: boolean
   availableModels?: string[]
@@ -37,6 +41,8 @@ export default function TranscriptionList({
   onSearchChange,
   priorityFilter = null,
   onFilterChange,
+  categoryFilter = null,
+  onCategoryFilterChange,
   totalCount = 0,
   isLoading = false,
   availableModels = [],
@@ -113,6 +119,19 @@ export default function TranscriptionList({
     } catch (error) {
       console.error('Error updating priority:', error)
       alert('Failed to update priority')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  const handleCategoryChange = async (id: number, newCategory: Category) => {
+    setUpdatingId(id)
+    try {
+      const updated = await updateTranscriptionCategory(id, newCategory)
+      onUpdate(id, updated)
+    } catch (error) {
+      console.error('Error updating category:', error)
+      alert('Failed to update category')
     } finally {
       setUpdatingId(null)
     }
@@ -308,47 +327,82 @@ export default function TranscriptionList({
         )}
 
         {/* Filter buttons - 2025 theme */}
-        {onFilterChange && (
-          <div className={isMobile ? "flex gap-2 overflow-x-auto pb-1 scrollbar-hide" : "flex items-center gap-3"}>
-            {!isMobile && <span className="text-sm font-medium text-text-secondary">Filter:</span>}
-            <div className="flex gap-2">
-              <button
-                onClick={() => onFilterChange(null)}
-                className={isMobile
-                  ? (priorityFilter === null ? "filter-btn-mobile-active" : "filter-btn-mobile")
-                  : (priorityFilter === null ? "filter-btn-active" : "filter-btn")
-                }
-              >
-                All
-              </button>
-              <button
-                onClick={() => onFilterChange('high')}
-                className={isMobile
-                  ? (priorityFilter === 'high' ? "filter-btn-mobile-active" : "filter-btn-mobile")
-                  : (priorityFilter === 'high' ? "filter-btn-active" : "filter-btn")
-                }
-              >
-                High
-              </button>
-              <button
-                onClick={() => onFilterChange('medium')}
-                className={isMobile
-                  ? (priorityFilter === 'medium' ? "filter-btn-mobile-active" : "filter-btn-mobile")
-                  : (priorityFilter === 'medium' ? "filter-btn-active" : "filter-btn")
-                }
-              >
-                Medium
-              </button>
-              <button
-                onClick={() => onFilterChange('low')}
-                className={isMobile
-                  ? (priorityFilter === 'low' ? "filter-btn-mobile-active" : "filter-btn-mobile")
-                  : (priorityFilter === 'low' ? "filter-btn-active" : "filter-btn")
-                }
-              >
-                Low
-              </button>
-            </div>
+        {(onFilterChange || onCategoryFilterChange) && (
+          <div className={isMobile ? "space-y-3" : "space-y-3"}>
+            {/* Priority Filter */}
+            {onFilterChange && (
+              <div className={isMobile ? "flex gap-2 overflow-x-auto pb-1 scrollbar-hide" : "flex items-center gap-3"}>
+                {!isMobile && <span className="text-sm font-medium text-text-secondary w-20">Priority:</span>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onFilterChange(null)}
+                    className={isMobile
+                      ? (priorityFilter === null ? "filter-btn-mobile-active" : "filter-btn-mobile")
+                      : (priorityFilter === null ? "filter-btn-active" : "filter-btn")
+                    }
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => onFilterChange('high')}
+                    className={isMobile
+                      ? (priorityFilter === 'high' ? "filter-btn-mobile-active" : "filter-btn-mobile")
+                      : (priorityFilter === 'high' ? "filter-btn-active" : "filter-btn")
+                    }
+                  >
+                    High
+                  </button>
+                  <button
+                    onClick={() => onFilterChange('medium')}
+                    className={isMobile
+                      ? (priorityFilter === 'medium' ? "filter-btn-mobile-active" : "filter-btn-mobile")
+                      : (priorityFilter === 'medium' ? "filter-btn-active" : "filter-btn")
+                    }
+                  >
+                    Medium
+                  </button>
+                  <button
+                    onClick={() => onFilterChange('low')}
+                    className={isMobile
+                      ? (priorityFilter === 'low' ? "filter-btn-mobile-active" : "filter-btn-mobile")
+                      : (priorityFilter === 'low' ? "filter-btn-active" : "filter-btn")
+                    }
+                  >
+                    Low
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Category Filter */}
+            {onCategoryFilterChange && (
+              <div className={isMobile ? "flex items-center gap-2" : "flex items-center gap-3"}>
+                {!isMobile && <span className="text-sm font-medium text-text-secondary w-20">Category:</span>}
+                <select
+                  value={categoryFilter || ''}
+                  onChange={(e) => onCategoryFilterChange(e.target.value ? e.target.value as Category : null)}
+                  className={isMobile ? "select-field select-field-mobile text-sm py-2 px-3" : "select-field text-sm py-2 px-3"}
+                >
+                  <option value="">All Categories</option>
+                  {ALL_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {CATEGORY_LABELS[category]}
+                    </option>
+                  ))}
+                </select>
+                {categoryFilter && (
+                  <button
+                    onClick={() => onCategoryFilterChange(null)}
+                    className="text-text-secondary hover:text-text-primary transition-colors"
+                    title="Clear category filter"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -380,7 +434,7 @@ export default function TranscriptionList({
             No Transcriptions Found
           </h3>
           <p className="text-text-secondary text-base sm:text-lg">
-            {searchQuery || priorityFilter ? 'Try adjusting your search or filters' : 'Record your first voice message to get started'}
+            {searchQuery || priorityFilter || categoryFilter ? 'Try adjusting your search or filters' : 'Record your first voice message to get started'}
           </p>
         </div>
       ) : (
@@ -415,6 +469,9 @@ export default function TranscriptionList({
                     </span>
                     <span className={`badge ${getPriorityColor(transcription.priority)} uppercase tracking-wide`}>
                       {transcription.priority}
+                    </span>
+                    <span className={getCategoryClassName(transcription.category)}>
+                      {CATEGORY_LABELS[transcription.category]}
                     </span>
                     <span className="text-xs font-medium text-text-tertiary">
                       {formatDate(transcription.created_at)}
@@ -712,6 +769,15 @@ export default function TranscriptionList({
                       </div>
                     </div>
 
+                    {/* Category Selector */}
+                    <CategorySelector
+                      value={transcription.category}
+                      onChange={(category) => handleCategoryChange(transcription.id, category)}
+                      disabled={updatingId === transcription.id}
+                      isMobile={isMobile}
+                      showLabel={true}
+                    />
+
                     {/* Action Buttons */}
                     <div className="flex justify-start gap-3 pt-2 flex-wrap">
                       {/* AI Actions Button */}
@@ -841,6 +907,7 @@ export default function TranscriptionList({
           onDelete={handleDelete}
           onDownload={handleDownload}
           onPriorityChange={handlePriorityChange}
+          onCategoryChange={handleCategoryChange}
           onOpenAIActions={handleOpenAIActions}
           onReTranscribe={handleOpenReTranscribe}
           onDeleteAudio={handleDeleteAudio}
