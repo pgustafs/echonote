@@ -681,3 +681,125 @@ export async function getCurrentUser(): Promise<any> {
 
   return response.json()
 }
+
+// ============================================================================
+// Saved Content APIs
+// ============================================================================
+
+export interface SavedContent {
+  id: number
+  content_type: string
+  title: string | null
+  content: string
+  created_at: string
+  updated_at: string
+  transcription_id: number
+  ai_action_id: string | null
+}
+
+export interface SavedContentCreate {
+  content_type: string
+  title?: string | null
+  content: string
+  transcription_id: number
+  ai_action_id?: string | null
+}
+
+export interface SavedContentUpdate {
+  title?: string | null
+  content?: string
+}
+
+export interface SavedContentList {
+  saved_content: SavedContent[]
+  total: number
+  skip: number
+  limit: number
+}
+
+/**
+ * Create new saved content
+ */
+export async function createSavedContent(data: SavedContentCreate): Promise<SavedContent> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/saved-content`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Failed to save content: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get list of saved content with optional filtering
+ */
+export async function getSavedContent(
+  transcriptionId?: number,
+  contentType?: string,
+  skip: number = 0,
+  limit: number = 50
+): Promise<SavedContentList> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
+
+  if (transcriptionId) {
+    params.append('transcription_id', transcriptionId.toString())
+  }
+
+  if (contentType) {
+    params.append('content_type', contentType)
+  }
+
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/saved-content?${params}`)
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch saved content')
+  }
+
+  return response.json()
+}
+
+/**
+ * Update saved content
+ */
+export async function updateSavedContent(
+  id: number,
+  data: SavedContentUpdate
+): Promise<SavedContent> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/saved-content/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Failed to update saved content: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete saved content
+ */
+export async function deleteSavedContent(id: number): Promise<void> {
+  const response = await fetchWithAuth(`${getApiBaseUrl()}/saved-content/${id}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to delete saved content')
+  }
+}

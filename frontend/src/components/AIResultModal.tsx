@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import type { AIActionResponse, AIAction } from '../types'
-import { cleanupAISession, improveAIAction } from '../api'
+import { cleanupAISession, improveAIAction, createSavedContent } from '../api'
 
 interface AIResultModalProps {
   isOpen: boolean
@@ -18,6 +18,7 @@ interface AIResultModalProps {
   error: string | null
   onRegenerate?: () => void
   isMobile?: boolean
+  transcriptionId: number | null
 }
 
 export default function AIResultModal({
@@ -29,6 +30,7 @@ export default function AIResultModal({
   error,
   onRegenerate,
   isMobile = false,
+  transcriptionId,
 }: AIResultModalProps) {
   const [copied, setCopied] = useState(false)
   const [showImprove, setShowImprove] = useState(false)
@@ -36,6 +38,9 @@ export default function AIResultModal({
   const [isImproving, setIsImproving] = useState(false)
   const [improveError, setImproveError] = useState<string | null>(null)
   const [currentResult, setCurrentResult] = useState<AIActionResponse | null>(result)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Update current result when prop changes
   useEffect(() => {
@@ -49,6 +54,10 @@ export default function AIResultModal({
       setShowImprove(false)
       setImproveInstructions('')
       setImproveError(null)
+
+      // Reset save state
+      setSaveSuccess(false)
+      setSaveError(null)
 
       // Cleanup session if exists
       if (currentResult?.session_id) {
@@ -109,6 +118,53 @@ export default function AIResultModal({
     } finally {
       setIsImproving(false)
     }
+  }
+
+  const handleSave = async () => {
+    if (!currentResult?.message || !transcriptionId || !action) return
+
+    setIsSaving(true)
+    setSaveError(null)
+
+    try {
+      // Convert action ID to content_type
+      const contentType = getContentTypeFromAction(action.id)
+
+      // Extract title from first line or use action label
+      const titleMatch = currentResult.message.match(/^#\s+(.+)$/m)
+      const title = titleMatch ? titleMatch[1] : action.label
+
+      await createSavedContent({
+        content_type: contentType,
+        title: title,
+        content: currentResult.message,
+        transcription_id: transcriptionId,
+        ai_action_id: currentResult.action_id,
+      })
+
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      console.error('Failed to save:', err)
+      setSaveError(err instanceof Error ? err.message : 'Failed to save content')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Helper function to convert action ID to content_type
+  const getContentTypeFromAction = (actionId: string): string => {
+    // Map action IDs to content types
+    const typeMap: Record<string, string> = {
+      'create-linkedin-post': 'linkedin_post',
+      'create-email-draft': 'email_draft',
+      'create-blog-post': 'blog_post',
+      'create-tweet': 'tweet',
+      'create-youtube-description': 'youtube_description',
+      // Add more mappings as needed
+    }
+
+    return typeMap[actionId] || 'other'
   }
 
   const modalContent = (
@@ -279,6 +335,42 @@ export default function AIResultModal({
               </>
             )}
           </button>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSave}
+            className={saveSuccess ? 'btn-success w-full' : 'btn-secondary w-full'}
+            disabled={isImproving || isSaving}
+          >
+            {saveSuccess ? (
+              <>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Saved!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                  />
+                </svg>
+                <span>{isSaving ? 'Saving...' : 'Save for Later'}</span>
+              </>
+            )}
+          </button>
+
+          {saveError && (
+            <div className="text-red-500 text-sm">{saveError}</div>
+          )}
 
           {/* Improve Button - only show if session exists */}
           {currentResult.session_id && !showImprove && (

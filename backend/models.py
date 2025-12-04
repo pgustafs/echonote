@@ -300,6 +300,112 @@ class TranscriptionUpdate(SQLModel):
     category: Optional[str] = None
 
 
+# ============================================================================
+# Saved Content Models
+# ============================================================================
+
+class ContentType(str, Enum):
+    """Types of saved content generated from transcriptions"""
+    LINKEDIN_POST = "linkedin_post"
+    EMAIL_DRAFT = "email_draft"
+    BLOG_POST = "blog_post"
+    TODO_LIST = "todo_list"
+    TWEET = "tweet"
+    YOUTUBE_DESCRIPTION = "youtube_description"
+    MEETING_SUMMARY = "meeting_summary"
+    PRODUCT_REQUIREMENTS = "product_requirements"
+    CUSTOMER_FEEDBACK = "customer_feedback"
+    BRAINSTORM_NOTES = "brainstorm_notes"
+    INTERVIEW_SUMMARY = "interview_summary"
+    OTHER = "other"
+
+
+class SavedContent(SQLModel, table=True):
+    """
+    Database model for saved AI-generated content.
+
+    Stores content generated from transcriptions (e.g., LinkedIn posts, emails)
+    that users want to save, edit, and potentially publish later.
+    """
+    __tablename__ = "saved_content"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Content fields
+    content_type: str = Field(
+        index=True,
+        description="Type of content (linkedin_post, email_draft, etc.)"
+    )
+    title: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Optional title for the content"
+    )
+    content: str = Field(
+        sa_column=Column(Text),
+        description="The actual saved content text"
+    )
+
+    # Metadata
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When the content was first saved"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When the content was last modified"
+    )
+
+    # AI metadata
+    ai_action_id: Optional[str] = Field(
+        default=None,
+        description="ID of the AI action that generated this content"
+    )
+
+    # Foreign keys
+    transcription_id: int = Field(
+        foreign_key="transcriptions.id",
+        index=True,
+        description="The transcription this content was generated from"
+    )
+    user_id: int = Field(
+        foreign_key="users.id",
+        index=True,
+        description="Owner of this saved content"
+    )
+
+    # Relationships
+    transcription: Optional["Transcription"] = Relationship()
+    user: Optional[User] = Relationship()
+
+
+class SavedContentCreate(SQLModel):
+    """Schema for creating new saved content"""
+    content_type: str
+    title: Optional[str] = None
+    content: str
+    transcription_id: int
+    ai_action_id: Optional[str] = None
+
+
+class SavedContentUpdate(SQLModel):
+    """Schema for updating saved content"""
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+
+class SavedContentPublic(SQLModel):
+    """Public schema for saved content"""
+    id: int
+    content_type: str
+    title: Optional[str]
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    transcription_id: int
+    ai_action_id: Optional[str]
+
+
 class TranscriptionList(SQLModel):
     """Schema for listing transcriptions with pagination"""
     transcriptions: list[TranscriptionPublic]

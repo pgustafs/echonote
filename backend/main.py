@@ -31,7 +31,7 @@ from slowapi.errors import RateLimitExceeded
 from backend.auth_routes import router as auth_router
 from backend.config import settings
 from backend.database import create_db_and_tables
-from backend.routers import health, transcriptions, actions, admin
+from backend.routers import health, transcriptions, actions, admin, saved_content
 from backend.logging_config import setup_logging, get_logger
 from backend.middleware.audit_logger import AuditLoggerMiddleware
 from backend.middleware.rate_limiter import limiter, rate_limit_exceeded_handler
@@ -253,6 +253,9 @@ app.include_router(auth_router)
 
 # Transcription router (main API endpoints)
 app.include_router(transcriptions.router)
+
+# Saved Content router (saved AI-generated content)
+app.include_router(saved_content.router)
 
 # AI Actions router (AI-powered operations on transcriptions)
 app.include_router(actions.router)

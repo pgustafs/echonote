@@ -2,14 +2,15 @@
  * Transcription list component with expand/collapse and audio playback
  */
 
-import { useState } from 'react'
-import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, updateTranscriptionCategory, executeAIAction, reTranscribeAudio, deleteAudioFile } from '../api'
+import { useState, useEffect } from 'react'
+import { deleteTranscription, downloadTranscription, getAudioUrl, updateTranscriptionPriority, updateTranscriptionCategory, executeAIAction, reTranscribeAudio, deleteAudioFile, getSavedContent, deleteSavedContent, type SavedContent } from '../api'
 import { Priority, Category, Transcription } from '../types'
 import AIActionsDrawer from './AIActionsDrawer'
 import AIResultModal from './AIResultModal'
 import MobileDetailSlider from './MobileDetailSlider'
 import ReTranscribeModal, { ReTranscribeOptions } from './ReTranscribeModal'
 import CategorySelector from './CategorySelector'
+import SavedContentCard from './SavedContentCard'
 import type { AIAction, AIActionResponse } from '../types'
 import { getCategoryClassName, CATEGORY_LABELS, ALL_CATEGORIES } from '../utils/categoryUtils'
 
@@ -76,6 +77,46 @@ export default function TranscriptionList({
   const [aiResult, setAiResult] = useState<AIActionResponse | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+
+  // Saved content state
+  const [savedContentByTranscription, setSavedContentByTranscription] = useState<Record<number, SavedContent[]>>({})
+  const [savedContentLoading, setSavedContentLoading] = useState<Record<number, boolean>>({})
+
+  // Fetch saved content when transcription is expanded (desktop) or slider opens (mobile)
+  useEffect(() => {
+    if (expandedId && !savedContentByTranscription[expandedId] && !savedContentLoading[expandedId]) {
+      fetchSavedContent(expandedId)
+    }
+  }, [expandedId])
+
+  useEffect(() => {
+    if (mobileSelectedId && !savedContentByTranscription[mobileSelectedId] && !savedContentLoading[mobileSelectedId]) {
+      fetchSavedContent(mobileSelectedId)
+    }
+  }, [mobileSelectedId])
+
+  const fetchSavedContent = async (transcriptionId: number) => {
+    setSavedContentLoading(prev => ({ ...prev, [transcriptionId]: true }))
+    try {
+      const response = await getSavedContent(transcriptionId)
+      setSavedContentByTranscription(prev => ({ ...prev, [transcriptionId]: response.saved_content }))
+    } catch (error) {
+      console.error('Failed to fetch saved content:', error)
+    } finally {
+      setSavedContentLoading(prev => ({ ...prev, [transcriptionId]: false }))
+    }
+  }
+
+  const handleDeleteSavedContent = async (savedContentId: number, transcriptionId: number) => {
+    try {
+      await deleteSavedContent(savedContentId)
+      // Refresh saved content list
+      fetchSavedContent(transcriptionId)
+    } catch (error) {
+      console.error('Failed to delete saved content:', error)
+      alert('Failed to delete saved content. Please try again.')
+    }
+  }
 
   const toggleExpand = (id: number) => {
     if (isMobile) {
@@ -229,6 +270,11 @@ export default function TranscriptionList({
     setSelectedAction(null)
     setAiResult(null)
     setAiError(null)
+
+    // Refresh saved content for the selected transcription if it's expanded (desktop) or in mobile slider
+    if (selectedTranscriptionId && (expandedId === selectedTranscriptionId || mobileSelectedId === selectedTranscriptionId)) {
+      fetchSavedContent(selectedTranscriptionId)
+    }
   }
 
   const formatDate = (dateString: string): string => {
@@ -778,6 +824,44 @@ export default function TranscriptionList({
                       showLabel={true}
                     />
 
+                    {/* Saved Content Section */}
+                    {isExpanded && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                            />
+                          </svg>
+                          <span>Saved AI Content</span>
+                        </h4>
+                        {savedContentLoading[transcription.id] ? (
+                          <div className="flex items-center justify-center py-4">
+                            <div className="spinner w-6 h-6" />
+                            <span className="ml-2 text-text-secondary">Loading saved content...</span>
+                          </div>
+                        ) : savedContentByTranscription[transcription.id]?.length > 0 ? (
+                          <div className="space-y-3">
+                            {savedContentByTranscription[transcription.id].map((savedContent) => (
+                              <SavedContentCard
+                                key={savedContent.id}
+                                savedContent={savedContent}
+                                onDelete={(id) => handleDeleteSavedContent(id, transcription.id)}
+                                isMobile={isMobile}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-text-tertiary italic py-2">
+                            No saved content yet. Use AI Actions and click "Save for Later" to save generated content.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Action Buttons */}
                     <div className="flex justify-start gap-3 pt-2 flex-wrap">
                       {/* AI Actions Button */}
@@ -896,6 +980,7 @@ export default function TranscriptionList({
         error={aiError}
         onRegenerate={handleRegenerateAI}
         isMobile={isMobile}
+        transcriptionId={selectedTranscriptionId}
       />
 
       {/* Mobile Detail Slider */}
@@ -915,6 +1000,9 @@ export default function TranscriptionList({
           isDownloading={downloadingId === selectedTranscription?.id}
           isUpdating={updatingId === selectedTranscription?.id}
           isDeletingAudio={deletingAudioId === selectedTranscription?.id}
+          savedContent={mobileSelectedId ? savedContentByTranscription[mobileSelectedId] : undefined}
+          savedContentLoading={mobileSelectedId ? savedContentLoading[mobileSelectedId] : false}
+          onDeleteSavedContent={(id) => mobileSelectedId && handleDeleteSavedContent(id, mobileSelectedId)}
         />
       )}
 

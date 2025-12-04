@@ -5,9 +5,10 @@
 
 import { useState } from 'react'
 import { Priority, Category, Transcription } from '../types'
-import { getAudioUrl } from '../api'
+import { getAudioUrl, type SavedContent } from '../api'
 import { ArrowLeft } from 'lucide-react'
 import CategorySelector from './CategorySelector'
+import SavedContentCard from './SavedContentCard'
 import { getCategoryClassName, CATEGORY_LABELS } from '../utils/categoryUtils'
 
 interface MobileDetailSliderProps {
@@ -25,6 +26,9 @@ interface MobileDetailSliderProps {
   isDownloading: boolean
   isUpdating: boolean
   isDeletingAudio: boolean
+  savedContent?: SavedContent[]
+  savedContentLoading?: boolean
+  onDeleteSavedContent?: (id: number) => void
 }
 
 export default function MobileDetailSlider({
@@ -42,6 +46,9 @@ export default function MobileDetailSlider({
   isDownloading,
   isUpdating,
   isDeletingAudio,
+  savedContent = [],
+  savedContentLoading = false,
+  onDeleteSavedContent,
 }: MobileDetailSliderProps) {
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [audioFormat, setAudioFormat] = useState<string>('webm')
@@ -359,6 +366,42 @@ export default function MobileDetailSlider({
             isMobile={true}
             showLabel={false}
           />
+
+          {/* Saved Content Section */}
+          <div className="mt-4 px-4">
+            <h4 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                />
+              </svg>
+              <span>Saved AI Content</span>
+            </h4>
+            {savedContentLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="spinner w-6 h-6" />
+                <span className="ml-2 text-text-secondary text-sm">Loading saved content...</span>
+              </div>
+            ) : savedContent.length > 0 ? (
+              <div className="space-y-3">
+                {savedContent.map((saved) => (
+                  <SavedContentCard
+                    key={saved.id}
+                    savedContent={saved}
+                    onDelete={onDeleteSavedContent}
+                    isMobile={true}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-text-tertiary italic py-2">
+                No saved content yet. Use AI Actions and click "Save for Later" to save generated content.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Bottom Action Bar */}
